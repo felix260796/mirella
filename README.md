@@ -2,14 +2,15 @@
 
 Persönliche Web-App (PWA) für Felix: Kontaktpflege, Geburtstage, Gruppen, To-dos, Einkaufsliste, Morgen-Check, Nerv-Modus.
 
-## Stand 0.3.0 (2026-11-07): Grundgerüst + Lebensbereiche + Verwaltung
+## Stand 0.4.0 (2026-11-07): + Ausgaben per Foto
+- `supabase/migrations/0004_ausgaben.sql`: Ausgaben aus fotografierten Belegen (Claude liest Laden, Betrag, Positionen, schlägt Kategorie vor), Einkaufszettel per Foto.
 - `supabase/migrations/0003_verwaltung.sql`: Einträge je Bereich (Fahrzeuge, Verträge, Ärzte, Geräte, Reisen) mit freien Feldern, Dokumenten (privater Speicher), Verlauf/Kosten und Erinnerungen; Dokumenten-Ablage mit Ordnern.
 - `supabase/migrations/0002_lebensbereiche.sql`: Bereiche, Fakten je Bereich, Verträge mit Kündigungsfristen, Dokumente mit Ablaufdatum, Morgen-Check, CarPlay-Einstellung.
 - `supabase/migrations/0001_init.sql`: Datenbank (Einstellungen, Kontakte, Akte, Anrufe, Aufgaben/Termine, Einkauf, Vorlagen, Orts-Regeln, Push), jede Tabelle per Row Level Security geschützt.
 - `src/lib/reminders.ts`: Erinnerungslogik (Anruf-Zyklen, Zeitfenster, Feiertage BW, Nerv-Takt, Geburtstage, max. 3 Anrufe/Tag, neuer Versuch nach 2 Werktagen).
 - `tests/reminders.test.ts`: 10 Tests, alle grün (`npm test`).
 - `public/`: Logo, App-Icons, Manifest (Name, Farben Weiß/Schwarz).
-- Optik und Abläufe: siehe Prototyp v14 in `04_Prototyp`.
+- Optik und Abläufe: siehe Prototyp v15 in `04_Prototyp`.
 
 ## Regeln (Standard, alles in Einstellungen änderbar)
 | Regel | Wert |

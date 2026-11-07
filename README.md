@@ -2,7 +2,8 @@
 
 Persönliche Web-App (PWA) für Felix: Kontaktpflege, Geburtstage, Gruppen, To-dos, Einkaufsliste, Morgen-Check, Nerv-Modus.
 
-## Stand 0.5.0 (2026-11-07): + Finanzplan
+## Stand 0.6.0 (2026-11-07): + Finanzplan mit Trends
+- `supabase/migrations/0006_finanzplan_ausbau.sql`: Sparziele, Jahreskosten als monatliche Rücklage, Einkommen je Monat.
 - `supabase/migrations/0005_finanzplan.sql`: 12 Ausgaben-Kategorien mit Budget, Einkommen, Monatsübersicht; feste Kosten aus Verträgen.
 - `supabase/migrations/0004_ausgaben.sql`: Ausgaben aus fotografierten Belegen (Claude liest Laden, Betrag, Positionen, schlägt Kategorie vor), Einkaufszettel per Foto.
 - `supabase/migrations/0003_verwaltung.sql`: Einträge je Bereich (Fahrzeuge, Verträge, Ärzte, Geräte, Reisen) mit freien Feldern, Dokumenten (privater Speicher), Verlauf/Kosten und Erinnerungen; Dokumenten-Ablage mit Ordnern.
@@ -11,7 +12,7 @@ Persönliche Web-App (PWA) für Felix: Kontaktpflege, Geburtstage, Gruppen, To-d
 - `src/lib/reminders.ts`: Erinnerungslogik (Anruf-Zyklen, Zeitfenster, Feiertage BW, Nerv-Takt, Geburtstage, max. 3 Anrufe/Tag, neuer Versuch nach 2 Werktagen).
 - `tests/reminders.test.ts`: 10 Tests, alle grün (`npm test`).
 - `public/`: Logo, App-Icons, Manifest (Name, Farben Weiß/Schwarz).
-- Optik und Abläufe: siehe Prototyp v19 in `04_Prototyp`.
+- Optik und Abläufe: siehe Prototyp v21 in `04_Prototyp`.
 
 ## Regeln (Standard, alles in Einstellungen änderbar)
 | Regel | Wert |

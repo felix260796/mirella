@@ -1,9 +1,12 @@
 {
   "name": "mirella",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Mirella, die Sekretärin – persönliche Lebens-App für Felix",
   "scripts": {
-    "test": "TZ=Europe/Berlin node --experimental-strip-types --test tests/reminders.test.ts"
+    "test": "TZ=Europe/Berlin node --experimental-strip-types --test tests/reminders.test.ts tests/sync.test.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
   }
 }

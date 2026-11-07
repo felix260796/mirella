@@ -63,3 +63,10 @@ test('Höchstens 3 Anrufe pro Tag, am längsten überfällig zuerst', () => {
   assert.deepEqual(planCalls(c, d('2026-11-14T08:00')), []); // Samstag
   assert.equal(DEFAULTS.maxCallsPerDay, 3);
 });
+
+import { cancelBy, deadlineReminder } from '../src/lib/reminders.ts';
+test('Handyvertrag: Ende 31.03., 3 Monate Frist → kündigen bis 31.12., Erinnerung 30 Tage vorher', () => {
+  const by = cancelBy(d('2027-03-31T12:00'), 90);
+  assert.equal(ymd(by), '2026-12-31');
+  assert.equal(deadlineReminder(by, 30).toString(), d('2026-12-01T09:00').toString());
+});

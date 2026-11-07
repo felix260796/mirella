@@ -155,3 +155,13 @@ export function planCalls(contacts: DueContact[], day: Date, s: Settings = DEFAU
   const end = atTime(day, '23:59');
   return contacts.filter(c => c.due <= end).sort((a, b) => a.due.getTime() - b.due.getTime()).slice(0, s.maxCallsPerDay);
 }
+
+// ---------- Verträge und Dokumente ----------
+/** Letzter Tag, an dem noch gekündigt werden kann. */
+export function cancelBy(endsOn: Date, noticeDays: number): Date {
+  return addDays(endsOn, -noticeDays);
+}
+/** Erinnerung vor einer Frist (Kündigung, Ablauf Ausweis …) um 9 Uhr, nur an einem Tag mit erlaubtem Nachrichtenfenster. */
+export function deadlineReminder(deadline: Date, daysBefore: number, s: Settings = DEFAULTS): Date {
+  return nextAllowed(atTime(addDays(deadline, -daysBefore), s.birthdayTime), 'message', s);
+}

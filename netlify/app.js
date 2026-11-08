@@ -375,7 +375,7 @@ async function loadThumbs() {
     try { const b = await photoGet(id); if (b) { img.src = URL.createObjectURL(b); } } catch (_) { }
   }
 }
-function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; $("#phone").appendChild(t); setTimeout(() => t.remove(), 2400); }
+function toast(msg) { document.querySelectorAll(".toast").forEach(x => x.remove()); const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; $("#phone").appendChild(t); setTimeout(() => t.remove(), 2400); }
 
 /* ---------- Sheet / Drawer ---------- */
 let sheetCleanup = null;

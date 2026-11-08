@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos: IndexedDB "mirella" / "photos".
    Später ersetzt der Supabase-Sync (v0.7) die lokale Speicherung. */
 "use strict";
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -29,7 +29,8 @@ const eur = n => (+n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, m
 /* ---------- Daten ---------- */
 const CYCLES = ["wöchentlich", "alle 2 Wochen", "monatlich", "vierteljährlich", "halbjährlich", "jährlich", "nur Geburtstag"];
 const REPS = ["nie", "täglich", "wöchentlich", "alle 2 Wochen", "monatlich", "vierteljährlich", "jährlich"];
-const CATS = ["Lebensmittel", "Restaurant & Café", "Tanken & Auto", "Kleidung", "Drogerie & Gesundheit", "Haushalt & Wohnen", "Hobby & Sport", "Freizeit & Ausgehen", "Reisen", "Geschenke", "Technik & Abos", "Sonstiges"];
+const BASECATS = ["Lebensmittel & Supermarkt", "Getränke", "Bäcker & Metzger", "Restaurant & Café", "Tanken & Auto", "Kleidung", "Drogerie & Gesundheit", "Haushalt & Wohnen", "Hobby & Sport", "Freizeit & Ausgehen", "Reisen", "Geschenke", "Technik & Abos", "Sonstiges"];
+const catList = () => [...new Set([...BASECATS, ...((S && S.settings.cats) || []), ...((S && S.expenses.map(e => e.cat)) || [])].filter(Boolean))];
 const FOLDERS = ["Ausweise", "Wohnen", "Auto", "Gesundheit", "Verträge & Garantien", "Arbeit & Steuer", "Sonstiges"];
 const IC = {
   auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M3 16h18v3H3zM7 19v2M17 19v2"/><circle cx="7.5" cy="13.5" r="1"/><circle cx="16.5" cy="13.5" r="1"/></svg>',
@@ -58,7 +59,8 @@ const areaById = id => AREAS.find(a => a.id === id);
 function blank() {
   return {
     v: 1,
-    settings: { name: "Felix", maxCalls: 3, retryWorkdays: 2, giftLead: 14, callFrom: 8, callTo: 18, callWeekdays: true },
+    settings: { name: "Felix", maxCalls: 3, retryWorkdays: 2, giftLead: 14, callFrom: 8, callTo: 18, callWeekdays: true, cats: [], wxName: "", wxLat: null, wxLon: null },
+    briefings: [],
     people: [], todos: [], expenses: [], docs: [], notes: [], groups: ["Familie", "Freunde", "Paddeln", "Fußball München", "Stammtisch", "Arbeit"]
   };
 }
@@ -156,6 +158,7 @@ function todoMeta(t) {
   if (t.rep && t.rep !== "nie") parts.push(t.rep);
   if (t.nerv) parts.push("nervt bis erledigt");
   if (t.area) parts.push(areaById(t.area)?.n || "");
+  if (t.pid) { const p = S.people.find(x => x.id === t.pid); if (p) parts.push(fullName(p)); }
   if (t.done && t.doneAt) parts.push("erledigt " + relDate(t.doneAt));
   return parts.filter(Boolean).join(" · ");
 }
@@ -169,6 +172,13 @@ function toggleTodo(id) {
   if (t.list === "einkauf" && t.done) t.doneAt = today();
   save(); render();
 }
+
+function addShop(t) {
+  const k = t.trim().toLowerCase(); if (!k) return false;
+  if (S.todos.some(x => x.list === "einkauf" && !x.done && x.t.trim().toLowerCase() === k)) return false;
+  S.todos.push({ id: uid(), t: t.trim(), list: "einkauf", done: false, created: today() }); return true;
+}
+function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const w1 = new Date(d.getFullYear(), 0, 4, 12); return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
 
 /* ---------- Zustand ---------- */
 let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false;
@@ -193,7 +203,13 @@ function personCard(p, withCall) {
   return `<div class="card ${withCall ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(sub)}</div></span>${withCall ? `<button class="call" aria-label="${esc(fullName(p))} anrufen" data-act="call" data-id="${p.id}">${IC.call}</button>` : (st === "none" ? "" : pill(st, p))}</div>`;
 }
 function todoRow(t) {
-  return `<div class="todo ${t.done ? "done" : ""}"><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${esc(t.t)}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}</div><button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+  return `<div class="todo ${t.done ? "done" : ""}"><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${esc(t.t)}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}</div>${todoPersonBtn(t)}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+}
+function todoPersonBtn(t) {
+  const p = t.pid && S.people.find(x => x.id === t.pid); if (!p || t.done) return "";
+  if (p.tel && /schreib|nachricht|whatsapp|antwort|melden/i.test(t.t)) return `<a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none;flex:none" aria-label="${esc(p.first)} schreiben">💬</a>`;
+  if (p.tel) return `<button class="mini" data-act="call" data-id="${p.id}" style="flex:none" aria-label="${esc(p.first)} anrufen">📞</button>`;
+  return `<button class="mini" data-act="person" data-id="${p.id}" style="flex:none">${esc(p.first || "Akte")}</button>`;
 }
 const empty = t => `<div class="empty">${t}</div>`;
 
@@ -216,7 +232,10 @@ const R = {
     if (dueTodos.length) counts.push(dueTodos.length === 1 ? "1 Aufgabe" : dueTodos.length + " Aufgaben");
     if (bdays.some(([, b]) => b === t)) counts.push("ein Geburtstag");
     const summary = counts.length ? `Heute stehen ${counts.length > 1 ? counts.slice(0, -1).join(", ") + " und " + counts.slice(-1) : counts[0]} an.` : (S.people.length || S.todos.length ? "Heute ist nichts fällig. Genieß den Tag." : "Leg los: Tipp unten aufs Mikrofon und sag zum Beispiel „Milch auf die Einkaufsliste“.");
-    let h2 = `${topbar("Heute")}<div class="date">${WDL[d.getDay()]}, ${d.getDate()}. ${MN[d.getMonth()]}</div><p class="big">${greet}, ${esc(S.settings.name || "")}. ${summary}</p>`;
+    let h2 = `${topbar("Heute")}<div class="date">${WDL[d.getDay()]}, ${d.getDate()}. ${MN[d.getMonth()]} · KW ${isoWeek(t)}</div><p class="big">${greet}, ${esc(S.settings.name || "")}. ${summary}</p>`;
+    h2 += `<div id="wx">${wxHTML()}</div>`;
+    const br = latestBriefing();
+    if (br) h2 += `<div class="sec"><span class="label">Dein Briefing</span><span class="label">${esc(relDate(br.d))}${br.time ? " " + esc(br.time) : ""}</span></div>${briefCard(br)}`;
     if (!S.people.length && !S.todos.length) {
       h2 += `<div class="block"><h4>So fängst du an</h4><ul><li><b>Menschen:</b> unten auf „Menschen“ und dann auf +, oder in den Einstellungen deine Kontakte als vCard importieren.</li><li><b>Sprechen:</b> der runde Knopf unten. Beispiele: „Erinnere mich morgen um 9 an die Steuer“, „Hab mit Tim telefoniert“, „Butter und Eier auf die Einkaufsliste“.</li><li><b>Foto:</b> die Kamera oben rechts, für Belege, Dokumente oder Einkaufszettel.</li><li><b>Wappen</b> oben rechts öffnet alle Bereiche und die Einstellungen.</li></ul></div>`;
     }
@@ -246,13 +265,13 @@ const R = {
     return `${subtop("Menschen", "go\" data-v=\"menschen", `<button class="mini" data-act="editperson" data-id="${p.id}">Bearbeiten</button>`)}
     <div class="hero"><span class="av">${esc(initials(p))}</span><h3>${esc(fullName(p))}</h3><p>${esc([p.group, p.cyc].filter(Boolean).join(" · "))}${due ? " · nächster Anruf " + esc(relDate(due)) : ""}</p>
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
-    <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
+    <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${nb ? `<div class="block"><h4>Geburtstag</h4><div class="catrow"><span>${esc(fmtDate(nb))}${ageAt(p, nb) ? ", wird " + ageAt(p, nb) : ""}</span><span>in ${diffDays(today(), nb)} Tagen</span></div>${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
     ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
     ${list("Geschenkideen", "gifts", "Noch keine Ideen", "z. B. Kochkurs")}
     <div class="block"><h4>Anrufverlauf</h4>${calls.length ? calls.slice(0, 12).map(c => `<div class="listrow"><span class="grow">${esc(fmtDate(c.d))}<small>${c.ok ? "erreicht" : "nicht erreicht"}</small></span><button class="rowdel" data-act="delcall" data-id="${c.id}" aria-label="löschen">✕</button></div>`).join("") : '<div class="swipehint" style="text-align:left;margin:0">Noch kein Anruf eingetragen</div>'}</div>
-    ${p.addr ? `<div class="block"><h4>Adresse</h4><div class="swipehint" style="text-align:left;margin:0;color:var(--ink)">${esc(p.addr)}</div></div>` : ""}`;
+    ${p.addr || p.email ? `<div class="block"><h4>Kontakt</h4>${p.email ? `<div class="listrow"><span class="grow">${esc(p.email)}<small>E-Mail</small></span></div>` : ""}${p.addr ? `<div class="listrow"><span class="grow">${esc(p.addr)}<small>Adresse</small></span><a class="mini" href="https://maps.apple.com/?q=${encodeURIComponent(p.addr)}" style="text-decoration:none">Karte</a></div>` : ""}</div>` : ""}`;
   },
   todos() {
     const isShop = todoList === "einkauf";
@@ -265,22 +284,24 @@ const R = {
     ${done.length ? `<div class="sec"><button class="mini" data-act="showdone">${showDone ? "Erledigte ausblenden" : "Erledigte zeigen (" + done.length + ")"}</button>${isShop ? `<button class="mini" data-act="cleardone">Erledigte löschen</button>` : ""}</div>${showDone ? done.slice(0, 50).map(todoRow).join("") : ""}` : ""}`;
   },
   kalender() {
-    const nav = `<div class="mnav"><button class="iconbtn" data-act="mstep" data-n="-1" aria-label="Vorheriger Monat">‹</button><p class="big" style="margin:0;font-size:24px">${MN[calM]} ${calY}</p><button class="iconbtn" data-act="mstep" data-n="1" aria-label="Nächster Monat">›</button></div>`;
+    const nav = `<div class="mnav"><button class="iconbtn" data-act="mstep" data-n="-1" aria-label="Vorheriger Monat">‹</button><p class="big" style="margin:0;font-size:24px;text-align:center">${MN[calM]} ${calY}<small style="display:block;font-family:var(--f-mono);font-size:11px;color:var(--ink-3);font-weight:400">KW ${isoWeek(iso(new Date(calY, calM, 1, 12)))} bis ${isoWeek(iso(new Date(calY, calM + 1, 0, 12)))}</small></p><button class="iconbtn" data-act="mstep" data-n="1" aria-label="Nächster Monat">›</button></div>`;
     const seg = `<div class="seg"><button data-act="calview" data-cv="monat" aria-pressed="${calView === "monat"}">Monat</button><button data-act="calview" data-cv="liste" aria-pressed="${calView === "liste"}">Nächste 60 Tage</button></div>`;
     let body = "";
     if (calView === "monat") {
       const first = new Date(calY, calM, 1), off = (first.getDay() + 6) % 7, n = new Date(calY, calM + 1, 0).getDate();
       const ev = eventsRange(iso(new Date(calY, calM, 1, 12)), iso(new Date(calY, calM, n, 12)));
-      body = '<div class="mg">' + ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(x => `<div class="mh">${x}</div>`).join("");
+      body = '<div class="mg kw">' + ["KW", "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(x => `<div class="mh">${x}</div>`).join("");
+      if (off) body += `<div class="kwc">${isoWeek(iso(new Date(calY, calM, 1, 12)))}</div>`;
       for (let i = 0; i < off; i++) body += "<div></div>";
-      for (let d = 1; d <= n; d++) { const k = iso(new Date(calY, calM, d, 12)), e = ev[k] || []; body += `<button class="mc${k === today() ? " today" : ""}${k === selDate ? " sel" : ""}" data-act="selday" data-d="${k}" aria-label="${d}. ${MN[calM]}"><span>${d}</span><span class="dots">${e.slice(0, 3).map(() => "<i></i>").join("")}</span></button>`; }
+      for (let d = 1; d <= n; d++) { const k = iso(new Date(calY, calM, d, 12)), e = ev[k] || []; if ((off + d - 1) % 7 === 0) body += `<div class="kwc">${isoWeek(k)}</div>`; body += `<button class="mc${k === today() ? " today" : ""}${k === selDate ? " sel" : ""}" data-act="selday" data-d="${k}" aria-label="${d}. ${MN[calM]}"><span>${d}</span><span class="dots">${e.slice(0, 3).map(() => "<i></i>").join("")}</span></button>`; }
       body += "</div>";
       const sd = eventsRange(selDate, selDate)[selDate] || [], dd = D(selDate);
-      body += `<div class="sec"><span class="label">${WDL[dd.getDay()]}, ${dd.getDate()}. ${MN[dd.getMonth()]}</span><button class="mini" data-act="newtodo" data-d="${selDate}">+ Eintrag</button></div>` + (sd.length ? sd.map(evRow).join("") : '<div class="ev" style="color:var(--ink-3)">Nichts geplant</div>');
+      body += `<div class="sec"><span class="label">${WDL[dd.getDay()]}, ${dd.getDate()}. ${MN[dd.getMonth()]} · KW ${isoWeek(selDate)}</span><button class="mini" data-act="newtodo" data-d="${selDate}">+ Eintrag</button></div>` + (sd.length ? sd.map(evRow).join("") : '<div class="ev" style="color:var(--ink-3)">Nichts geplant</div>');
     } else {
       const from = today(), to = addDays(from, 60), ev = eventsRange(from, to);
       const keys = Object.keys(ev).sort();
-      body = keys.length ? keys.map(k => { const d = D(k); return `<div class="cal-day"><div class="d">${WD[d.getDay()]}<b>${d.getDate()}</b>${MN[d.getMonth()].slice(0, 3)}</div><div>${ev[k].map(evRow).join("")}</div></div>`; }).join("") : empty("In den nächsten 60 Tagen steht nichts an.");
+      let lastW = null;
+      body = keys.length ? keys.map(k => { const d = D(k), w = isoWeek(k), wh = w !== lastW ? `<div class="sec"><span class="label">Kalenderwoche ${w}</span></div>` : ""; lastW = w; return wh + `<div class="cal-day"><div class="d">${WD[d.getDay()]}<b>${d.getDate()}</b>${MN[d.getMonth()].slice(0, 3)}</div><div>${ev[k].map(evRow).join("")}</div></div>`; }).join("") : empty("In den nächsten 60 Tagen steht nichts an.");
     }
     return topbar("Kalender") + nav + seg + body + '<p class="swipehint" style="margin-top:14px">Wischen oder Pfeile: anderer Monat · Plus: neuer Eintrag</p>';
   },
@@ -302,6 +323,17 @@ const R = {
     ${notes.map(n => `<div class="listrow"><span class="grow">${esc(n.t)}<small>${esc(fmtDate(n.d))}</small></span><button class="rowdel" data-act="delnote" data-id="${n.id}" aria-label="löschen">✕</button></div>`).join("")}
     ${A.id !== "doku" ? `<div class="sec"><span class="label">Fotos und Dokumente</span><span class="label">${docs.length}</span></div>${docs.length ? docs.map(docRow).join("") : '<div class="swipehint" style="text-align:left">Noch nichts abgelegt. Oben auf die Kamera.</div>'}` : ""}`;
   },
+  briefings() {
+    const list = S.briefings.slice().sort((a, b) => (b.d + (b.time || "")).localeCompare(a.d + (a.time || "")));
+    const tw = isoWeek(today()), ty = +today().slice(0, 4), lw = isoWeek(addDays(today(), -7));
+    const grp = b => { const w = isoWeek(b.d); if (w === tw && diffDays(b.d, today()) < 7) return "Diese Woche (KW " + w + ")"; if (w === lw && diffDays(b.d, today()) < 14) return "Letzte Woche (KW " + w + ")"; return "KW " + w + " · " + b.d.slice(0, 4); };
+    let last = null, body = "";
+    for (const b of list) { const g = grp(b); if (g !== last) { body += `<div class="sec"><span class="label">${esc(g)}</span></div>`; last = g; } body += briefCard(b, true); }
+    return `${subtop("Alle Bereiche", "drawer")}<p class="big" style="margin:0 0 4px">Briefings</p>
+    <button class="btn pri" data-act="addbrief" style="width:100%;margin:8px 0">+ Briefing hinzufügen (PDF)</button>
+    <p class="hint">So kommt das Briefing rein: in Gmail das PDF öffnen › Teilen › „In Dateien sichern“, dann hier auf „Briefing hinzufügen“. Mehrere auf einmal gehen auch. Automatisch aus Gmail holen kann Mirella erst mit dem Server.</p>
+    ${body || empty("Noch keine Briefings abgelegt.")}`;
+  },
   einstellungen() {
     const s = S.settings;
     const sel = (k, label, hint, opts) => `<div class="set"><span>${label}<small>${hint}</small></span><select data-set="${k}">${opts.map(([v, l]) => `<option value="${v}"${String(s[k]) === String(v) ? " selected" : ""}>${l}</option>`).join("")}</select></div>`;
@@ -310,7 +342,14 @@ const R = {
     ${sel("maxCalls", "Anrufe pro Tag", "höchstens so viele auf „Heute“", [[2, "2"], [3, "3"], [5, "5"], [99, "kein Limit"]])}
     ${sel("retryWorkdays", "Nicht erreicht", "neuer Versuch nach", [[1, "1 Werktag"], [2, "2 Werktagen"], [5, "1 Woche"]])}
     ${sel("giftLead", "Geburtstage", "so früh auf „Heute“ zeigen", [[7, "7 Tage vorher"], [14, "14 Tage vorher"], [21, "21 Tage vorher"]])}
+    <div class="sec"><span class="label">Wetter</span></div>
+    <div class="set"><span>Wetter-Ort<small>${s.wxName ? esc(s.wxName) : "aktueller Standort"}</small></span><button class="mini" data-act="wxhere">Standort nutzen</button></div>
+    <form class="shoprow" data-form="wxplace" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Oder Ort eintippen, z. B. Remseck" aria-label="Wetter-Ort"><button class="btn pri" style="flex:none">OK</button></form>
+    <div class="sec"><span class="label">Ausgaben-Kategorien</span></div>
+    <p class="hint" style="margin-top:0">${catList().map(esc).join(" · ")}</p>
+    <form class="shoprow" data-form="cat" style="margin-bottom:8px"><input class="search" style="margin:0" placeholder="Eigene Kategorie, z. B. Haustier" aria-label="Neue Kategorie"><button class="btn pri" style="flex:none">+</button></form>
     <div class="sec"><span class="label">Kontakte</span></div>
+    <button class="btn" data-act="dupscan" style="width:100%;margin-bottom:8px">Doppelte Kontakte suchen</button>
     <button class="btn" data-act="importvcf" style="width:100%">Kontakte importieren (vCard .vcf)</button>
     <p class="hint">Am PC auf icloud.com › Kontakte alle markieren und „vCard exportieren“, Datei aufs iPhone (z. B. per AirDrop oder Dateien-App) und hier auswählen. Namen, Telefonnummern und Geburtstage werden übernommen, Doppelte übersprungen.</p>
     <div class="sec"><span class="label">Datensicherung</span></div>
@@ -323,6 +362,90 @@ const R = {
     <p class="swipehint">Mirella ${VERSION} · ${S.people.length} Kontakte · ${S.todos.length} Einträge · ${S.docs.length} Dokumente</p>`;
   }
 };
+function latestBriefing() { return S.briefings.slice().sort((a, b) => (b.d + (b.time || "")).localeCompare(a.d + (a.time || "")))[0] || null; }
+function briefCard(b, del) {
+  return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : "Morning Briefing")}</div><div class="s">${esc(fmtDate(b.d))}${b.time ? " · " + esc(b.time) : ""} · ${esc(b.name)}</div></span>${b.read ? (del ? `<button class="rowdel" data-act="delbrief" data-id="${b.id}" aria-label="löschen">✕</button>` : '<span class="pill">PDF</span>') : '<span class="pill acc">neu</span>'}</div>`;
+}
+async function addBriefings(files) {
+  let n = 0;
+  for (const f of files) {
+    const m = f.name.match(/(\d{4})-(\d{2})-(\d{2})/) || f.name.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    let d = m ? (m[1].length === 4 ? `${m[1]}-${m[2]}-${m[3]}` : `${m[3]}-${m[2]}-${m[1]}`) : iso(new Date(f.lastModified || Date.now()));
+    const lm = new Date(f.lastModified || Date.now());
+    const kind = /nachmittag|abend|16/i.test(f.name) ? "nachmittag" : /morgen|morning|06/i.test(f.name) ? "morgen" : (lm.getHours() >= 12 ? "nachmittag" : "morgen");
+    const time = kind === "nachmittag" ? "16:00" : "06:00";
+    const id = "br_" + uid();
+    try { await photoPut(id, f); } catch (_) { toast("Konnte " + f.name + " nicht speichern"); continue; }
+    S.briefings.push({ id, d, time, kind, name: f.name.replace(/\.pdf$/i, ""), type: f.type || "application/pdf", read: false }); n++;
+  }
+  save(); view = "briefings"; render(); toast(n === 1 ? "Briefing abgelegt" : n + " Briefings abgelegt");
+}
+async function openBrief(id) {
+  const b = S.briefings.find(x => x.id === id); if (!b) return;
+  const blob = await photoGet(id).catch(() => null); if (!blob) { toast("Datei nicht gefunden"); return; }
+  b.read = true; save();
+  const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: b.type }));
+  if ((b.type || "").startsWith("image/")) { const o = document.createElement("div"); o.className = "imgfull"; o.innerHTML = `<img src="${url}" alt=""><button aria-label="Schließen">✕</button>`; o.onclick = () => o.remove(); document.body.appendChild(o); }
+  else {
+    const o = document.createElement("div"); o.className = "pdfview";
+    o.innerHTML = `<div class="pdfbar"><b>${esc(b.name)}</b><a class="mini" href="${url}" target="_blank" rel="noopener" style="text-decoration:none">In Safari öffnen</a><button class="iconbtn" aria-label="Schließen">✕</button></div><iframe src="${url}" title="${esc(b.name)}"></iframe>`;
+    o.querySelector("button").onclick = () => { o.remove(); render(true); };
+    document.body.appendChild(o);
+  }
+}
+
+/* ---------- Wetter (Open-Meteo, ohne Schlüssel) ---------- */
+const WXC = c => c === 0 ? ["☀️", "klar"] : c <= 2 ? ["🌤️", "leicht bewölkt"] : c === 3 ? ["☁️", "bewölkt"] : c <= 48 ? ["🌫️", "Nebel"] : c <= 57 ? ["🌦️", "Nieselregen"] : c <= 67 ? ["🌧️", "Regen"] : c <= 77 ? ["🌨️", "Schnee"] : c <= 82 ? ["🌧️", "Schauer"] : c <= 86 ? ["🌨️", "Schneeschauer"] : ["⛈️", "Gewitter"];
+let WX = null;
+try { WX = JSON.parse(localStorage.getItem("mirella.wx") || "null"); } catch (_) { }
+function wxHTML() {
+  if (!WX || !WX.cur) return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:28px">🌡️</span><div><span style="font-size:14px">Wetter wird geladen …</span><small>Falls nichts kommt: Einstellungen › Wetter-Ort festlegen.</small></div></div></div>`;
+  const [ic, txt] = WXC(WX.cur.weather_code), dl = WX.daily, hint = [];
+  const hr = WX.hourly || {}, nowH = new Date().getHours();
+  let rainAt = null; (hr.time || []).forEach((t, i) => { const h = +t.slice(11, 13); if (rainAt === null && t.slice(0, 10) === today() && h >= nowH && hr.precipitation_probability[i] >= 50) rainAt = h; });
+  if (rainAt !== null) hint.push(rainAt <= nowH ? "Gerade Regen: Schirm mitnehmen." : `Ab ${rainAt} Uhr Regen: Schirm mitnehmen.`);
+  if (dl && dl.temperature_2m_max[0] < 8) hint.push("Kalt: warme Jacke.");
+  if (dl && dl.temperature_2m_min[0] <= 0) hint.push("Frost möglich: Scheibe kratzen einplanen.");
+  return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:30px">${ic}</span><div><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><small>${esc(txt)} in ${esc(WX.place || "deiner Nähe")} · heute ${Math.round(dl.temperature_2m_min[0])}° bis ${Math.round(dl.temperature_2m_max[0])}°, Regen ${dl.precipitation_probability_max[0] ?? 0} %</small></div></div>${hint.length ? `<div class="chk" style="display:block;color:var(--ink-2);font-size:13.5px">${esc(hint.join(" "))}</div>` : ""}</div>`;
+}
+async function wxCoords() {
+  if (S.settings.wxLat != null) return { lat: S.settings.wxLat, lon: S.settings.wxLon, place: S.settings.wxName };
+  let c = null; try { c = JSON.parse(localStorage.getItem("mirella.geo") || "null"); } catch (_) { }
+  if (c && Date.now() - c.t < 6 * 3600e3) return c;
+  if (!navigator.geolocation) return null;
+  return new Promise(res => navigator.geolocation.getCurrentPosition(pos => {
+    const g = { lat: +pos.coords.latitude.toFixed(3), lon: +pos.coords.longitude.toFixed(3), place: "deiner Nähe", t: Date.now() };
+    try { localStorage.setItem("mirella.geo", JSON.stringify(g)); } catch (_) { } res(g);
+  }, () => res(null), { timeout: 8000, maximumAge: 3600e3 }));
+}
+async function loadWeather(force) {
+  if (!force && WX && Date.now() - WX.t < 30 * 60e3) return;
+  const c = await wxCoords(); if (!c) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<div class="hint">Für das Wetter: Standort erlauben oder in den Einstellungen einen Ort eintragen.</div>`; return; }
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&hourly=precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Europe%2FBerlin&forecast_days=1`);
+    const j = await r.json(); if (!j.current) throw new Error();
+    WX = { t: Date.now(), place: c.place, cur: j.current, daily: j.daily, hourly: j.hourly };
+    try { localStorage.setItem("mirella.wx", JSON.stringify(WX)); } catch (_) { }
+    const el = $("#wx"); if (el) el.innerHTML = wxHTML();
+  } catch (_) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<div class="hint">Wetter gerade nicht erreichbar.</div>`; }
+}
+async function setWxPlace(q) {
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=de&countryCode=DE`);
+    const j = await r.json(); const g = j.results && j.results[0];
+    if (!g) { toast("Ort nicht gefunden"); return; }
+    S.settings.wxLat = g.latitude; S.settings.wxLon = g.longitude; S.settings.wxName = g.name; save(); WX = null; render(true); loadWeather(true); toast("Wetter-Ort: " + g.name);
+  } catch (_) { toast("Ortssuche gerade nicht erreichbar"); }
+}
+
+/* iPhone-Kalender-Wecker (.ics) als Ersatz für Push */
+function icsFor(t) {
+  const st = (t.date + "T" + (t.time || "09:00")).replace(/[-:]/g, "") + "00";
+  const end = new Date(D(t.date).setHours(+(t.time || "09:00").slice(0, 2), +(t.time || "09:00").slice(3, 5) + 15)); const en = `${iso(end).replace(/-/g, "")}T${pad(end.getHours())}${pad(end.getMinutes())}00`;
+  const e = s => s.replace(/[\\;,]/g, m => "\\" + m).replace(/\n/g, " ");
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mirella//DE", "BEGIN:VEVENT", "UID:" + t.id + "@mirella", "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", "DTSTART;TZID=Europe/Berlin:" + st, "DTEND;TZID=Europe/Berlin:" + en, "SUMMARY:" + e("Mirella: " + t.t), "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + e(t.t), "TRIGGER:-PT0M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+}
+function icsOpen(t) { if (!t.date) { toast("Erst ein Datum eintragen"); return; } location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(icsFor(t)); }
 function waNum(tel) { let n = tel.replace(/[^\d+]/g, ""); if (n.startsWith("+")) return n.slice(1); if (n.startsWith("00")) return n.slice(2); if (n.startsWith("0")) return "49" + n.slice(1); return n; }
 function notePh(id) { return { auto: "z. B. getankt, 58.900 km, 72 €", geld: "z. B. Handyvertrag gekündigt zum 31.3.", gesund: "z. B. Zahnarzt: alles gut", haus: "z. B. Zählerstand Strom 19.310", frei: "z. B. Skiurlaub gebucht, 13.–20.2.", arbeit: "z. B. Jahresgespräch im Januar", sport: "z. B. Paddeln: neues Paddel gekauft", doku: "z. B. Pass beantragt" }[id] || "Notiz"; }
 function docRow(d) { return `<div class="listrow"><button data-act="viewphoto" data-id="${d.photo || ""}" style="border:0;padding:0;background:none" aria-label="Foto ansehen"><img class="thumbimg" data-thumb="${d.photo || ""}" alt=""></button><span class="grow">${esc(d.name)}<small>${esc([d.folder, d.until ? "gültig bis " + fmtDate(d.until) : "", fmtDate(d.created)].filter(Boolean).join(" · "))}</small></span><button class="rowdel" data-act="deldoc" data-id="${d.id}" aria-label="löschen">✕</button></div>`; }
@@ -367,6 +490,7 @@ function render(keepScroll) {
   const tabView = view === "akte" ? "menschen" : view;
   $$(".tab").forEach(b => b.dataset.v === tabView ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   $("#plus").hidden = !["menschen", "todos", "kalender", "bereich"].includes(view);
+  if (view === "heute") loadWeather();
   loadThumbs();
 }
 async function loadThumbs() {
@@ -394,7 +518,8 @@ function closeSheet() {
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
 }
 function drawerHTML() {
-  return AREAS.map(A => {
+  const nb = S.briefings.filter(b => !b.read).length;
+  return `<button class="drow" data-act="go" data-v="briefings">${IC.doku}<span class="dt"><b>Briefings</b><small>${S.briefings.length ? "Diese Woche: " + S.briefings.filter(b => isoWeek(b.d) === isoWeek(today()) && b.d.slice(0, 4) === today().slice(0, 4)).length + " · neuestes " + relDate(latestBriefing().d) : "Noch keine Briefings"}</small></span>${nb ? `<span class="pill acc">${nb}</span>` : ""}<span class="chev">›</span></button>` + AREAS.map(A => {
     const open = S.todos.filter(t => t.area === A.id && !t.done && t.list === "todo");
     const late = open.some(t => t.date && t.date < today());
     const sub = A.id === "doku" ? `${S.docs.length} Dokumente` : A.id === "geld" ? `${eur(S.expenses.filter(e => e.d.startsWith(today().slice(0, 7))).reduce((a, e) => a + +e.amount, 0))} diesen Monat` : open.length ? open[0].t : "Notizen, Erinnerungen, Fotos";
@@ -415,6 +540,7 @@ function todoForm(t, preset = {}) {
   <div class="fgrid"><div class="fld"><label for="a-rep">Wiederholen</label><select id="a-rep">${REPS.map(r => `<option${r === (v.rep || "nie") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
   <div class="fld"><label for="a-area">Bereich</label><select id="a-area"><option value="">kein Bereich</option>${AREAS.map(a => `<option value="${a.id}"${a.id === v.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div></div>
   <label class="tgl"><input type="checkbox" id="a-nerv"${v.nerv ? " checked" : ""}> Nerv-Modus: bleibt oben, bis es erledigt ist</label>
+  ${t && t.date ? `<button class="btn" data-act="ics" data-id="${t.id}" style="width:100%;margin-top:8px">⏰ Zusätzlich als Wecker in den iPhone-Kalender</button>` : ""}
   <div class="row2">${t ? `<button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-close="sheet">Abbrechen</button><button class="btn pri" data-act="savetodo" data-id="${t ? t.id : ""}">Speichern</button></div>`,
     () => { $("#a-trig").onchange = e => { $("#f-time").hidden = e.target.value === "verlassen"; }; if (!t) $("#a-what").focus(); });
 }
@@ -428,24 +554,73 @@ function saveTodo(id) {
   save(); closeSheet(); render(true); toast("Gespeichert: " + w);
 }
 function personForm(p) {
-  const v = p || { first: "", last: "", tel: "", cyc: "monatlich", group: "Freunde", bday: "", gift: false, addr: "", nick: "" };
+  const v = p || { first: "", last: "", tel: "", email: "", cyc: "monatlich", group: "Freunde", bday: "", gift: false, addr: "", nick: "" };
   openSheet(`<p class="stitle">${p ? "Kontakt bearbeiten" : "Neuer Kontakt"}</p>
   <div class="fgrid"><div class="fld"><label for="c-first">Vorname</label><input id="c-first" value="${esc(v.first)}" autocomplete="off"></div><div class="fld"><label for="c-last">Nachname</label><input id="c-last" value="${esc(v.last)}" autocomplete="off"></div></div>
   <div class="fld"><label for="c-tel">Telefon</label><input id="c-tel" type="tel" value="${esc(v.tel)}" placeholder="0151 …"></div>
+  <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"></div>
   <div class="fgrid"><div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option${c === v.cyc ? " selected" : ""}>${c}</option>`).join("")}</select></div>
   <div class="fld"><label for="c-grp">Gruppe</label><input id="c-grp" list="grps" value="${esc(v.group)}"><datalist id="grps">${S.groups.map(g => `<option value="${esc(g)}">`).join("")}</datalist></div></div>
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" type="date" value="${esc(v.bday && v.bday.length === 10 ? v.bday : "")}"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
   <label class="tgl"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
-  <div class="fld" style="margin-top:8px"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}"></div>
+  <div class="fld" style="margin-top:8px;position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
+  <div id="dup-warn"></div>
   ${p ? "" : `<div class="fld"><label for="c-last-call">Zuletzt angerufen (wenn bekannt)</label><input id="c-last-call" type="date"></div>`}
   <div class="row2">${p ? `<button class="btn danger" data-act="delperson" data-id="${p.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-close="sheet">Abbrechen</button><button class="btn pri" data-act="saveperson" data-id="${p ? p.id : ""}">Speichern</button></div>`,
-    () => { if (!p) $("#c-first").focus(); });
+    () => { if (!p) $("#c-first").focus(); addrSuggest($("#c-addr"), $("#addr-sug")); });
+}
+let addrTimer = null;
+function addrSuggest(inp, box) {
+  inp.addEventListener("input", () => {
+    clearTimeout(addrTimer); const q = inp.value.trim();
+    if (q.length < 4) { box.hidden = true; return; }
+    addrTimer = setTimeout(async () => {
+      try {
+        const lat = S.settings.wxLat || 48.8, lon = S.settings.wxLon || 9.2;
+        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=de&limit=5&lat=${lat}&lon=${lon}`);
+        const j = await r.json();
+        const list = [...new Set((j.features || []).map(f => fmtAddr(f.properties)).filter(Boolean))];
+        if (!list.length || inp.value.trim() !== q) { box.hidden = true; return; }
+        box.innerHTML = list.map(a => `<button type="button" data-addr="${esc(a)}">${esc(a)}</button>`).join(""); box.hidden = false;
+      } catch (_) { box.hidden = true; }
+    }, 350);
+  });
+  box.addEventListener("click", e => { const b = e.target.closest("[data-addr]"); if (!b) return; inp.value = b.dataset.addr; box.hidden = true; });
+}
+function fmtAddr(a) {
+  if (!a) return "";
+  const street = a.street ? a.street + (a.housenumber ? " " + a.housenumber : "") : (a.name || "");
+  const town = [a.postcode, a.city || a.town || a.village || a.district].filter(Boolean).join(" ");
+  const out = [street, town].filter(Boolean).join(", ");
+  return a.country && a.country !== "Deutschland" ? out + ", " + a.country : out;
+}
+const normName = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss").replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+const telKey = t => { const d = (t || "").replace(/\D/g, "").replace(/^(0049|49)/, "0"); return d.length >= 7 ? d.slice(-9) : ""; };
+function findDups(d, exceptId) {
+  const n1 = normName(d.first + " " + d.last), n2 = normName(d.last + " " + d.first), tk = telKey(d.tel), em = (d.email || "").trim().toLowerCase();
+  return S.people.filter(p => p.id !== exceptId && (
+    (n1.length > 2 && (normName(fullName(p)) === n1 || normName(fullName(p)) === n2)) ||
+    (tk && telKey(p.tel) === tk) || (em && (p.email || "").toLowerCase() === em)));
+}
+function mergeInto(t, src) {
+  for (const k of ["first", "last", "tel", "email", "addr", "bday", "nick", "group"]) if (!t[k] && src[k]) t[k] = src[k];
+  if ((!t.cyc || t.cyc === "nur Geburtstag") && src.cyc) t.cyc = src.cyc;
+  t.gift = t.gift || !!src.gift;
+  for (const k of ["calls", "notes", "ask", "gifts"]) t[k] = [...(t[k] || []), ...(src[k] || [])];
+  if (src.id) S.todos.forEach(x => { if (x.pid === src.id) x.pid = t.id; });
 }
 function savePerson(id) {
   const first = $("#c-first").value.trim(), last = $("#c-last").value.trim();
   if (!first && !last) { toast("Bitte einen Namen eintragen"); $("#c-first").focus(); return; }
-  const data = { first, last, tel: $("#c-tel").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: $("#c-bday").value, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim() };
+  const data = { first, last, tel: $("#c-tel").value.trim(), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: $("#c-bday").value, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim() };
   if (data.group && !S.groups.includes(data.group)) S.groups.push(data.group);
+  const dups = findDups(data, id);
+  if (dups.length && !savePerson.force) {
+    $("#dup-warn").innerHTML = `<div class="hint" style="border:1px solid var(--late)"><b>Gibt es schon?</b> ${dups.map(d => esc(fullName(d)) + (d.tel ? " · " + esc(d.tel) : "")).join(", ")}<div class="row2" style="margin-top:8px;flex-wrap:wrap"><button class="btn" data-act="dupmerge" data-id="${dups[0].id}" data-self="${id || ""}">Zusammenführen</button><button class="btn" data-act="dupforce" data-id="${id || ""}">Trotzdem speichern</button></div></div>`;
+    $("#dup-warn").scrollIntoView({ block: "center" }); return;
+  }
+  savePerson.force = false;
+  savePerson.last = data;
   if (id) Object.assign(S.people.find(x => x.id === id), data);
   else {
     const p = Object.assign({ id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [] }, data);
@@ -467,7 +642,7 @@ function expenseForm(pre = {}) {
   openSheet(`<p class="stitle">Neue Ausgabe</p>
   <div class="fgrid"><div class="fld"><label for="e-amt">Betrag in €</label><input id="e-amt" inputmode="decimal" value="${esc(pre.amount || "")}" placeholder="0,00"></div><div class="fld"><label for="e-date">Datum</label><input id="e-date" type="date" value="${today()}"></div></div>
   <div class="fld"><label for="e-shop">Wo / wofür</label><input id="e-shop" value="${esc(pre.shop || "")}" placeholder="z. B. REWE"></div>
-  <div class="fld"><label for="e-cat">Kategorie</label><select id="e-cat">${CATS.map(c => `<option${c === (pre.cat || "Lebensmittel") ? " selected" : ""}>${c}</option>`).join("")}</select></div>
+  <div class="fld"><label for="e-cat">Kategorie</label><select id="e-cat">${catList().map(c => `<option${c === (pre.cat || "Lebensmittel & Supermarkt") ? " selected" : ""}>${c}</option>`).join("")}</select></div>
   <div class="row2"><button class="btn" data-close="sheet">Abbrechen</button><button class="btn pri" data-act="saveexp">Speichern</button></div>`, () => $("#e-amt").focus());
 }
 const parseAmount = s => { const n = parseFloat(String(s).replace(/\s|€/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".")); return isNaN(n) ? null : Math.round(n * 100) / 100; };
@@ -496,7 +671,7 @@ function photoForm() {
   photoCtx.kind = k;
   const kinds = [["beleg", "Beleg / Rechnung"], ["dokument", "Dokument"], ["zettel", "Einkaufszettel"], ["bereich", "Für einen Bereich"]];
   let f = "";
-  if (k === "beleg") f = `<div class="fgrid"><div class="fld"><label for="e-amt">Betrag in €</label><input id="e-amt" inputmode="decimal" placeholder="0,00"></div><div class="fld"><label for="e-date">Datum</label><input id="e-date" type="date" value="${today()}"></div></div><div class="fld"><label for="e-shop">Laden</label><input id="e-shop" placeholder="z. B. REWE"></div><div class="fld"><label for="e-cat">Kategorie</label><select id="e-cat">${CATS.map(c => `<option>${c}</option>`).join("")}</select></div>`;
+  if (k === "beleg") f = `<div class="fgrid"><div class="fld"><label for="e-amt">Betrag in €</label><input id="e-amt" inputmode="decimal" placeholder="0,00"></div><div class="fld"><label for="e-date">Datum</label><input id="e-date" type="date" value="${today()}"></div></div><div class="fld"><label for="e-shop">Laden</label><input id="e-shop" placeholder="z. B. REWE"></div><div class="fld"><label for="e-cat">Kategorie</label><select id="e-cat">${catList().map(c => `<option>${c}</option>`).join("")}</select></div>`;
   if (k === "dokument") f = `<div class="fld"><label for="d-name">Name</label><input id="d-name" placeholder="z. B. Reisepass"></div><div class="fgrid"><div class="fld"><label for="d-folder">Ordner</label><select id="d-folder">${FOLDERS.map(x => `<option>${x}</option>`).join("")}</select></div><div class="fld"><label for="d-until">Gültig bis (freiwillig)</label><input id="d-until" type="date"></div></div>`;
   if (k === "zettel") f = `<div class="fld"><label for="z-items">Was steht drauf? Eine Zeile pro Artikel</label><textarea id="z-items" placeholder="Butter&#10;Brot&#10;Zwiebeln"></textarea></div><p class="hint">Tipp: Auf dem iPhone kannst du im Textfeld auf „Text scannen“ tippen (Feld gedrückt halten), dann liest das iPhone den Zettel selbst ab.</p>`;
   if (k === "bereich") f = `<div class="fld"><label for="b-area">Bereich</label><select id="b-area">${AREAS.filter(a => a.id !== "doku").map(a => `<option value="${a.id}"${a.id === photoCtx.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div><div class="fld"><label for="b-name">Was ist das?</label><input id="b-name" placeholder="z. B. Werkstattrechnung, Fahrzeugschein"></div><div class="fld"><label for="b-until">Gültig bis / Frist (freiwillig)</label><input id="b-until" type="date"></div>`;
@@ -511,7 +686,7 @@ async function photoSave() {
   if (k === "zettel") {
     const items = $("#z-items").value.split(/\n|,/).map(x => x.trim()).filter(Boolean);
     if (!items.length) { toast("Bitte mindestens einen Artikel eintragen"); return; }
-    items.forEach(t => S.todos.push({ id: uid(), t, list: "einkauf", done: false, created: today() }));
+    items.forEach(t => addShop(t));
     save(); closeSheet(); todoList = "einkauf"; view = "todos"; render(); toast(items.length + " auf die Einkaufsliste"); return;
   }
   const pid = "ph_" + uid();
@@ -592,6 +767,10 @@ function parseWhen(s) {
   let m;
   if ((m = cut(/\b(bevor ich (los|aus dem haus|raus)ge?he?|wenn ich (los|aus dem haus|raus)gehe|beim (losgehen|rausgehen))\b/i))) trig = "verlassen";
   if ((m = cut(/\bum (\d{1,2})(?:[:.](\d{2}))?\s*(uhr)?(\s*(\d{1,2}))?\b/i))) { let h = +m[1], mi = m[2] ? +m[2] : (m[5] && m[3] ? +m[5] : 0); if (h <= 23 && mi < 60) time = `${pad(h)}:${pad(mi)}`; }
+  const rel = mins => { const n = new Date(Date.now() + mins * 60000); n.setMinutes(Math.ceil(n.getMinutes() / 15) * 15, 0, 0); return n; };
+  if (!time && (m = cut(/\b(nachher|später|spaeter|in ein paar stunden)\b/i))) { let n = rel(120); if (n.getHours() >= 21 || n.getDate() !== new Date().getDate()) { n = new Date(); n.setDate(n.getDate() + 1); n.setHours(9, 0, 0, 0); } date = iso(n); time = `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
+  if (!time && (m = cut(/\bgleich\b/i))) { const n = rel(30); date = iso(n); time = `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
+  if (!time && (m = cut(/\bin\s+(?:einer\s+)?(\d+|[a-zäöüß]+)?\s*(halben\s+stunde|minute|minuten|stunde|stunden)\b/i))) { const u = m[2].toLowerCase(); const k = u.startsWith("halb") ? 30 : (/^\d+$/.test(m[1] || "") ? +m[1] : (NUMW[(m[1] || "eine").toLowerCase()] || 1)) * (u.startsWith("min") ? 1 : 60); const n = new Date(Date.now() + k * 60000); date = iso(n); time = `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
   if ((m = cut(/\bheute\s+(abend|nachmittag|mittag|morgen|früh)\b/i))) { date = today(); if (!time) time = { abend: "19:00", nachmittag: "15:00", mittag: "12:00", morgen: "08:00", "früh": "08:00" }[m[1].toLowerCase()]; }
   if (!date && (m = cut(/\bübermorgen\b/i))) date = addDays(today(), 2);
   if (!date && (m = cut(/\bmorgen\s+(früh|abend|nachmittag|mittag)\b/i))) { date = addDays(today(), 1); if (!time) time = { abend: "19:00", nachmittag: "15:00", mittag: "12:00", "früh": "08:00" }[m[1].toLowerCase()]; }
@@ -616,22 +795,24 @@ function mkDate(d, mo, y) {
 }
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 function cleanTask(s) {
-  return cap(s.replace(/^\s*(und|also|bitte|ok(ay)?|mirella)[,\s]+/i, "")
+  return cap(s.replace(/^\s*(und|also|bitte|ok(ay)?|mirella|hey|hallo|du)[,\s]+/i, "").replace(/^\s*(hey|hallo)\s+mirella[,\s]+/i, "")
     .replace(/\b(erinnere?|erinner)\s+mich\s*(bitte\s*)?(noch\s*)?(dran|daran)?\s*,?\s*(an\s+(den|die|das)?\s*|dass\s+|zu\s+)?/i, "")
     .replace(/^\s*(ich\s+)?(muss|sollte|will|möchte)\s+(noch\s+)?/i, "")
     .replace(/^\s*(nicht\s+vergessen|neue\s+aufgabe|aufgabe|to-?do)[:,]?\s*/i, "")
     .replace(/\s+(muss|sollte)\s+ich(\s+noch)?\b/i, "")
-    .replace(/\b(bitte|noch)\b\s*$/i, "")
+    .replace(/\b(bitte|noch)\b\s*$/i, "").replace(/^(dass ich|ich soll)\s+/i, "").replace(/^(dem|den|der|die|das)\s+/i, "").replace(/\b(ab|an|auf|aus|ein|mit|nach|vor|zurück|weg|zu|los|vorbei|hin|her|ran|raus|rein|um)zu([a-zäöüß]+en)$/i, "$1$2")
     .replace(/\s+([,.!?])/g, "$1").replace(/^[\s,.:;-]+|[\s,.:;-]+$/g, "").replace(/\s+/g, " "));
 }
-function splitItems(s) { return s.split(/\s*,\s*|\s+und\s+|\s+sowie\s+/i).map(x => cap(x.replace(/^(noch|bitte|etwas|ein|eine|einen)\s+/i, "").replace(/[.!?]+$/, "").trim())).filter(x => x && x.length < 60); }
+function splitItems(s) { return s.split(/\s*,\s*|\s+und\s+|\s+sowie\s+/i).map(x => cap(x.replace(/^(noch|bitte|etwas|ein|eine|einen|zwei|drei|vier|fünf|die|den|das)\s+/i, "").replace(/\s+(drauf|darauf|hinzu|setzen|schreiben)$/i, "").replace(/[.!?]+$/, "").trim())).filter(x => x && x.length < 60); }
 function guessCat(s) {
   const t = s.toLowerCase();
   if (/tank|aral|shell|esso|jet|benzin|diesel|werkstatt|auto|parken/.test(t)) return "Tanken & Auto";
   if (/restaurant|essen gegangen|pizza|café|cafe|kaffee getrunken|bar|döner|mittagessen/.test(t)) return "Restaurant & Café";
   if (/dm|rossmann|apotheke|drogerie/.test(t)) return "Drogerie & Gesundheit";
-  if (/rewe|edeka|aldi|lidl|kaufland|netto|penny|einkauf|lebensmittel|supermarkt/.test(t)) return "Lebensmittel";
-  if (/kino|konzert|ausgehen|bier/.test(t)) return "Freizeit & Ausgehen";
+  if (/getränk|getraenk|kasten|wasser|bier|wein|saft|cola/.test(t)) return "Getränke";
+  if (/bäcker|baecker|metzger|brezel|brötchen|semmel|wurst/.test(t)) return "Bäcker & Metzger";
+  if (/rewe|edeka|aldi|lidl|kaufland|netto|penny|einkauf|lebensmittel|supermarkt/.test(t)) return "Lebensmittel & Supermarkt";
+  if (/kino|konzert|ausgehen/.test(t)) return "Freizeit & Ausgehen";
   if (/geschenk/.test(t)) return "Geschenke";
   if (/klamotten|kleidung|schuhe|hose|jacke|zalando/.test(t)) return "Kleidung";
   if (/obi|baumarkt|ikea|haushalt|möbel/.test(t)) return "Haushalt & Wohnen";
@@ -651,14 +832,16 @@ function understand(text) {
     if (p) lastP = p;
     let m;
     // Einkauf
-    if ((m = low.match(/^(?:bitte\s+)?(?:setz(?:e)?|schreib(?:e)?|pack(?:e)?|tu|füg(?:e)?)?\s*(.+?)\s+(?:auf|in|zu)\s+(?:die|der|meine|meiner|unsere)?\s*einkaufsliste\b/i)) || (m = low.match(/einkaufsliste[:,]?\s+(?:noch\s+)?(.+)$/i)) || (m = low.match(/^(?:wir brauchen|ich brauche|einkaufen|kaufen|besorgen)[:,]?\s+(?:noch\s+)?(.+)$/i))) {
-      const list = splitItems(m[1].replace(/\b(setz(e)?|schreib(e)?|bitte|noch)\b/gi, " ").replace(/\s+/g, " ").trim());
-      list.forEach(t => items.push({ type: "shop", t }));
-      if (list.length) continue;
+    if (/einkaufsliste|einkaufszettel|^(wir brauchen|ich brauche|einkaufen|kaufen|besorgen)\b/.test(low)) {
+      const VERB = /\b(setz(e|en)?|schreib(e|en)?|pack(e|en)?|tu|füg(e|en)?|hinzu|drauf|darauf|bitte|noch|mir|mal|auch|kannst du|könntest du|würdest du)\b/gi;
+      const pats = [/(?:auf|in|zu)\s+(?:die|der|den|meine|meiner|meinen|unsere|unserer)?\s*einkauf(?:sliste|szettel)\s*[:,]?\s*(.+)$/i, /^(.+?)\s+(?:auf|in|zu)\s+(?:die|der|den|meine|meiner|meinen|unsere|unserer)?\s*einkauf(?:sliste|szettel)\b/i, /einkauf(?:sliste|szettel)\s*[:,]?\s+(.+)$/i, /^(?:wir brauchen|ich brauche|einkaufen|kaufen|besorgen)[:,]?\s+(.+)$/i];
+      let list = [];
+      for (const re of pats) { const mm = low.match(re); if (!mm) continue; list = splitItems(mm[1].replace(VERB, " ").replace(/\b(setzen|schreiben|packen|hinzufügen)\s*$/i, " ").replace(/\s+/g, " ").trim()); if (list.length) break; }
+      if (list.length) { list.forEach(t => items.push({ type: "shop", t })); continue; }
     }
     // Ausgabe
     if ((m = low.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:euro|eur|€)/i)) && /(ausgegeben|bezahlt|gezahlt|gekostet|getankt|gekauft|eingekauft|für)/.test(low)) {
-      const shop = (low.match(/\bbei\s+([a-zäöüß][\wäöüß-]*)/i) || [])[1] || "";
+      const shop = (low.match(/\bbeim?\s+(?:der\s+|dem\s+)?([a-zäöüß][\wäöüß-]*)/i) || [])[1] || "";
       items.push({ type: "expense", amount: parseAmount(m[1]), shop: cap(shop), cat: guessCat(low), t: cap(s.replace(/[.!?]+$/, "")) });
       continue;
     }
@@ -676,10 +859,10 @@ function understand(text) {
     if (pp && !/(erinner|nicht vergessen|\bmuss\b|\bsollte\b|aufgabe|to-?do|anrufen|schreiben|gratulieren|besorgen|kaufen|zurückrufen|melden)/.test(low)) { items.push({ type: "note", pid: pp.id, t: cap(s.replace(/^notiz\s*(zu|für|bei)?\s*:?\s*/i, "").replace(/[.!?]+$/, "")) }); continue; }
     // Aufgabe / Erinnerung
     const w = parseWhen(s);
-    const isTask = /(erinner|nicht vergessen|muss|sollte|aufgabe|to-?do|termin|anrufen|schreiben|kaufen|bezahlen|kündigen|buchen|abholen|bringen)/.test(low) || w.date || w.trig;
+    const isTask = /(erinner|nicht vergessen|muss|sollte|aufgabe|to-?do|termin|anrufen|schreiben|kaufen|bezahlen|kündigen|buchen|abholen|bringen|melden|antworten|zurück)/.test(low) || w.date || w.trig;
     if (isTask) {
       const t = cleanTask(w.rest);
-      if (t) { items.push({ type: "todo", t, date: w.date, time: w.time, trig: w.trig }); continue; }
+      if (t) { items.push({ type: "todo", t, date: w.date, time: w.time, trig: w.trig, pid: pp ? pp.id : "" }); continue; }
     }
     // Notiz zu Person
     if (pp) { items.push({ type: "note", pid: pp.id, t: cap(s.replace(/[.!?]+$/, "")) }); continue; }
@@ -705,7 +888,7 @@ function reviewRender(txt) {
     ${it.type === "note" || it.type === "call" ? `<select data-pf="pid" style="width:100%;margin-bottom:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px">${pOpts(it.pid)}</select>` : ""}
     ${it.type === "call" ? `<select data-pf="ok" style="width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px"><option value="1"${it.ok !== false ? " selected" : ""}>erreicht</option><option value="0"${it.ok === false ? " selected" : ""}>nicht erreicht</option></select>` : `<input data-pf="t" value="${esc(it.t || "")}" aria-label="Text">`}
     ${it.type === "todo" ? `<div class="pg"><input type="date" data-pf="date" value="${esc(it.date || "")}" aria-label="Datum"><input type="time" data-pf="time" value="${esc(it.time || "")}" aria-label="Uhrzeit"></div>${it.trig === "verlassen" ? '<div class="swipehint" style="text-align:left;margin:0">bevor du losgehst</div>' : ""}` : ""}
-    ${it.type === "expense" ? `<div class="pg"><input data-pf="amount" inputmode="decimal" value="${it.amount != null ? String(it.amount).replace(".", ",") : ""}" placeholder="Betrag €" aria-label="Betrag"><select data-pf="cat" style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:14px;margin-bottom:6px">${CATS.map(c => `<option${c === it.cat ? " selected" : ""}>${c}</option>`).join("")}</select></div>` : ""}
+    ${it.type === "expense" ? `<div class="pg"><input data-pf="amount" inputmode="decimal" value="${it.amount != null ? String(it.amount).replace(".", ",") : ""}" placeholder="Betrag €" aria-label="Betrag"><select data-pf="cat" style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:14px;margin-bottom:6px">${catList().map(c => `<option${c === it.cat ? " selected" : ""}>${c}</option>`).join("")}</select></div>` : ""}
   </div>`).join("") || empty("Alles weggelassen.")}</div>
   <div class="row2"><button class="btn" data-act="vback" style="flex:none">‹ Zurück</button><button class="btn" data-close="sheet">Abbrechen</button><button class="btn pri" data-act="vsave"${pending.length ? "" : " disabled"}>Speichern</button></div>`);
   sheetCleanup = null;
@@ -720,8 +903,8 @@ function voiceSave() {
   $$("#pitems .pitem").forEach(b => readItem(b, pending[+b.dataset.i]));
   let n = 0; const miss = [];
   for (const it of pending) {
-    if (it.type === "shop" && it.t) { S.todos.push({ id: uid(), t: it.t, list: "einkauf", done: false, created: today() }); n++; }
-    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, list: "todo", done: false, created: today(), date: it.trig === "verlassen" ? "" : it.date || "", time: it.time || "", trig: it.trig || "zeit", rep: "nie", area: "", nerv: false }); n++; }
+    if (it.type === "shop" && it.t) { if (addShop(it.t)) n++; }
+    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, pid: it.pid || "", list: "todo", done: false, created: today(), date: it.trig === "verlassen" ? "" : it.date || "", time: it.time || "", trig: it.trig || "zeit", rep: "nie", area: "", nerv: false }); n++; }
     else if (it.type === "note" || it.type === "call") {
       const p = S.people.find(x => x.id === it.pid); if (!p) { miss.push(it); continue; }
       if (it.type === "note" && it.t) { p.notes = p.notes || []; p.notes.unshift({ id: uid(), t: it.t, d: today() }); n++; }
@@ -756,7 +939,10 @@ function parseVCF(text) {
     if (/^--\d{2}-\d{2}$/.test(bday)) bday = "1604" + bday.slice(1);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(bday)) bday = "";
     const nick = dec(get(/^(item\d+\.)?NICKNAME/i));
-    if (first || last) out.push({ first: dec(first), last: dec(last), tel, bday, nick });
+    const email = get(/^(item\d+\.)?EMAIL/i).replace(/^mailto:/i, "");
+    const adr = get(/^(item\d+\.)?ADR/i).split(";").map(dec);
+    const addr = adr.length > 2 ? [adr[2], [adr[5], adr[3]].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "";
+    if (first || last) out.push({ first: dec(first), last: dec(last), tel, bday, nick, email, addr });
   }
   return out;
 }
@@ -780,6 +966,24 @@ async function importData(file) {
 
 /* ---------- Klicks ---------- */
 const ACT = {
+  ics: el => icsOpen(S.todos.find(x => x.id === el.dataset.id)),
+  openbrief: (el, e) => { if (e.target.closest('[data-act="delbrief"]')) return; openBrief(el.dataset.id); },
+  delbrief: async (el, e) => { e.stopPropagation(); if (!confirm("Briefing löschen?")) return; await photoDel(el.dataset.id); S.briefings = S.briefings.filter(b => b.id !== el.dataset.id); save(); render(true); },
+  addbrief: () => { const f = $("#f-brief"); f.value = ""; f.click(); },
+  wxhere: () => { S.settings.wxLat = null; S.settings.wxLon = null; S.settings.wxName = ""; save(); try { localStorage.removeItem("mirella.geo"); } catch (_) { } WX = null; render(true); loadWeather(true); toast("Wetter nach Standort"); },
+  dupforce: el => { savePerson.force = true; savePerson(el.dataset.id); },
+  dupmerge: el => {
+    const t = S.people.find(x => x.id === el.dataset.id), selfId = el.dataset.self;
+    const f = $("#c-first"); const data = { first: f.value.trim(), last: $("#c-last").value.trim(), tel: $("#c-tel").value.trim(), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: $("#c-bday").value, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim() };
+    if (selfId) { const me = S.people.find(x => x.id === selfId); Object.assign(me, data); mergeInto(t, me); S.people = S.people.filter(x => x !== me); } else mergeInto(t, data);
+    save(); closeSheet(); cur = t.id; view = "akte"; render(); toast("Zusammengeführt: " + fullName(t));
+  },
+  dupscan: () => {
+    const pairs = [], seen = new Set();
+    for (const p of S.people) { if (seen.has(p.id)) continue; for (const d of findDups(p, p.id)) { if (seen.has(d.id)) continue; pairs.push([p, d]); } seen.add(p.id); }
+    openSheet(`<p class="stitle">Doppelte Kontakte</p>${pairs.length ? pairs.map(([a, b]) => `<div class="pitem"><div><b>${esc(fullName(a))}</b>${a.tel ? " · " + esc(a.tel) : ""}</div><div><b>${esc(fullName(b))}</b>${b.tel ? " · " + esc(b.tel) : ""}</div><div class="row2" style="margin-top:8px"><button class="btn pri" data-act="dodupmerge" data-a="${a.id}" data-b="${b.id}">Zusammenführen</button></div></div>`).join("") : empty("Keine doppelten Kontakte gefunden.")}<div class="row2"><button class="btn" data-close="sheet">Schließen</button></div>`);
+  },
+  dodupmerge: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b) return; mergeInto(a, b); S.people = S.people.filter(x => x !== b); save(); toast("Zusammengeführt: " + fullName(a)); ACT.dupscan(); },
   go: el => { closeAll(); view = el.dataset.v; render(); },
   drawer: () => openDrawer(),
   photo: el => photoStart(el.dataset.kind, el.dataset.area || (view === "bereich" ? area : null)),
@@ -855,17 +1059,18 @@ document.addEventListener("change", e => {
   if (el.matches('input[type=checkbox][data-act="toggle"]')) { toggleTodo(el.dataset.id); return; }
   if (el.dataset.set) { const k = el.dataset.set; S.settings[k] = el.tagName === "SELECT" ? +el.value : el.value.trim(); save(); toast("Gespeichert"); return; }
   if (el.id === "f-cam" || el.id === "f-lib") { photoChosen(el.files[0]); return; }
+  if (el.id === "f-brief") { el.files.length && addBriefings([...el.files]); return; }
   if (el.id === "f-import") { el.files[0] && importData(el.files[0]); return; }
   if (el.id === "f-vcf") {
     const f = el.files[0]; if (!f) return;
     f.text().then(txt => {
       const list = parseVCF(txt); let added = 0, skipped = 0;
       for (const c of list) {
-        const key = (c.first + " " + c.last).trim().toLowerCase();
-        if (S.people.some(p => fullName(p).toLowerCase() === key)) { skipped++; continue; }
+        const d0 = findDups(c, null)[0];
+        if (d0) { mergeInto(d0, c); skipped++; continue; }
         S.people.push({ id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [], cyc: "nur Geburtstag", group: "", gift: false, addr: "", ...c }); added++;
       }
-      save(); view = "menschen"; render(); toast(`${added} Kontakte übernommen${skipped ? ", " + skipped + " schon da" : ""}. Anruf-Rhythmus je Person unter „Bearbeiten“.`);
+      save(); view = "menschen"; render(); toast(`${added} Kontakte übernommen${skipped ? ", " + skipped + " schon vorhanden (ergänzt)" : ""}. Anruf-Rhythmus je Person unter „Bearbeiten“.`);
     }).catch(() => toast("Datei konnte nicht gelesen werden"));
   }
 });
@@ -876,12 +1081,14 @@ document.addEventListener("submit", e => {
   const f = e.target; e.preventDefault();
   const inp = f.querySelector("input"), v = inp ? inp.value.trim() : "";
   if (!v) return;
-  if (f.dataset.form === "shop") { splitItems(v).forEach(t => S.todos.push({ id: uid(), t, list: "einkauf", done: false, created: today() })); save(); render(true); const i = $("#shopin"); i && i.focus(); return; }
+  if (f.dataset.form === "shop") { const dup = splitItems(v).filter(t => !addShop(t)); if (dup.length) toast("Schon auf der Liste: " + dup.join(", ")); save(); render(true); const i = $("#shopin"); i && i.focus(); return; }
   if (f.dataset.form === "akte") { const p = S.people.find(x => x.id === cur), k = f.dataset.k; p[k] = p[k] || []; p[k].unshift({ id: uid(), t: v, d: today() }); save(); render(true); toast("Hinzugefügt"); return; }
+  if (f.dataset.form === "wxplace") { setWxPlace(v); return; }
+  if (f.dataset.form === "cat") { S.settings.cats = [...new Set([...(S.settings.cats || []), v])]; save(); render(true); toast("Kategorie hinzugefügt: " + v); return; }
   if (f.dataset.form === "note") { S.notes.push({ id: uid(), area, t: v, d: today() }); save(); render(true); toast("Notiz gespeichert"); }
 });
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") { closeAll(); return; }
+  if (e.key === "Escape") { document.querySelectorAll(".pdfview,.imgfull").forEach(x => x.remove()); closeAll(); return; }
   if ((e.key === "Enter" || e.key === " ") && e.target.matches("[role=button][data-act]")) { e.preventDefault(); e.target.click(); }
 });
 function shiftMonth(k) { calM += k; if (calM < 0) { calM = 11; calY--; } if (calM > 11) { calM = 0; calY++; } selDate = iso(new Date(calY, calM, 1, 12)); if (today().startsWith(`${calY}-${pad(calM + 1)}`)) selDate = today(); render(); }
@@ -892,10 +1099,11 @@ $("#screen").addEventListener("touchend", e => { if (tx === null) return; const 
 let sy = null;
 $("#sheet").addEventListener("touchstart", e => { sy = $("#sheet").scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
 $("#sheet").addEventListener("touchend", e => { if (sy !== null && e.changedTouches[0].clientY - sy > 120 && !e.target.closest("textarea,input,select")) closeSheet(); sy = null; });
-document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#sheet").classList.contains("open")) render(true); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#sheet").classList.contains("open") && !document.querySelector(".pdfview")) { render(true); loadWeather(); } });
 
 /* ---------- Start ---------- */
 load();
 render();
+loadWeather();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => { });

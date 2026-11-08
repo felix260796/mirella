@@ -252,3 +252,13 @@ body{background:var(--phone);padding:0!important;overflow:hidden;-webkit-tap-hig
 .imgfull img{max-width:100%;max-height:85vh;border-radius:8px}
 .imgfull button{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;width:40px;height:40px;border-radius:50%;border:0;background:#fff;font-size:18px}
 @media (min-width:700px){body{background:var(--page)}.phone{max-width:760px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line)}}
+/* v0.9 */
+.mg.kw{grid-template-columns:24px repeat(7,minmax(0,1fr))}
+.kwc{font-family:var(--f-mono);font-size:10px;color:var(--ink-3);display:grid;place-items:center}
+.sug{position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(20,20,22,.14);overflow:hidden}
+.sug button{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:10px 12px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer}
+.sug button:first-child{border-top:0}
+.pdfview{position:fixed;inset:0;z-index:70;background:var(--surface);display:flex;flex-direction:column}
+.pdfbar{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 14px 8px;border-bottom:1px solid var(--line)}
+.pdfbar b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.pdfview iframe{flex:1;border:0;width:100%}

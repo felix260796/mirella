@@ -232,6 +232,20 @@ h2{font-family:var(--f-display);font-weight:600;font-size:22px;margin:0 0 12px}
 .push .acts span{font-size:12px;background:var(--surface-2);border-radius:8px;padding:4px 8px}
 .push .why{grid-column:1/-1;font-family:var(--f-mono);font-size:10.5px;color:var(--ink-3);letter-spacing:.03em}
 </style>
+<style id="nur-handy">
+/* Nur-Handy-Ansicht: ohne Erklärspalte, Rahmen und Push-Beispiele */
+html,body{height:100%;margin:0}
+body{background:var(--phone);padding:0!important;overflow:hidden}
+.wrap{display:block!important;max-width:none!important;margin:0!important;height:100%}
+.wrap>section{display:none!important}
+.phone{width:100%!important;max-width:none!important;height:100vh!important;height:100dvh!important;border:0!important;border-radius:0!important;box-shadow:none!important;margin:0!important}
+.status{display:none!important}
+.screen{padding-top:max(12px,env(safe-area-inset-top,0px))!important;padding-left:max(18px,env(safe-area-inset-left,0px))!important;padding-right:max(18px,env(safe-area-inset-right,0px))!important}
+.tabbar{padding-bottom:max(22px,calc(env(safe-area-inset-bottom,0px) + 8px))!important}
+.drawer{padding-top:env(safe-area-inset-top,0px)}
+@media (min-width:600px){body{background:var(--page)}.phone{max-width:820px!important;margin:0 auto!important;border-left:1px solid var(--line)!important;border-right:1px solid var(--line)!important}}
+</style>
+
 
 <div class="wrap">
   <section>

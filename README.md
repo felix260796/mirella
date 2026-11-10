@@ -1,5 +1,12 @@
 # Mirella, die Sekretärin
 
+## Stand 0.9.1 (2026-11-10): Arbeitsversion läuft auf Netlify
+- `netlify/` ist die lauffähige App (reine Web-App ohne Build: `index.html`, `app.js`, `style.css`, `sw.js`, Manifest, Icons). Upload: Ordner `netlify` per Netlify Drop bzw. später als Publish-Verzeichnis.
+- Daten liegen bis zum Supabase-Sync nur auf dem Gerät (localStorage, Fotos/PDFs in IndexedDB); Sicherung als JSON in den Einstellungen.
+- Funktionen: Heute (Wetter, Briefing, Anrufe, Geburtstage, Aufgaben), Menschen (Akte, nächster Anruf, Duplikate, vCard-Import, Adressvorschläge), To-dos und Einkaufsliste, Kalender mit KW, Bereiche, Finanzen, Dokumente, Briefings, Spracheingabe, Kamera.
+- Fehlt noch (braucht Server): Push-Benachrichtigungen, Abgleich zwischen Geräten, Briefings automatisch aus Gmail, KI-Belegerkennung.
+- `prototyp/`: Klick-Prototyp v32. `src/`, `supabase/`, `tests/`: Server-Grundlage aus v0.1–v0.7.
+
 Persönliche Web-App (PWA) für Felix: Kontaktpflege, Geburtstage, Gruppen, To-dos, Einkaufsliste, Morgen-Check, Nerv-Modus.
 
 ## Stand 0.7.0 (2026-11-07): + Geräte-Sync, Profile Privat/Geschäft, mehrere Personen

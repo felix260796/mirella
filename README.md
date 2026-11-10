@@ -1,5 +1,15 @@
 # Mirella, die Sekretärin
 
+## Stand 0.16 (2026-11-10): Runde 6
+
+- Heute: Telefon-Symbol beim Anruf wählt sofort die Nummer (danach fragt Mirella, wie es lief).
+- Einkaufsmodus: Warengruppen groß und fett mit Linie, mehr Abstand zwischen den Gruppen.
+- Kontakt: „Bearbeiten“ sitzt jetzt oben rechts in der Akte statt neben „Mirella“; Profilbild per Antippen aufs Bild (quadratisch zugeschnitten, gleicht mit ab); „Wird 30 Jahre alt“ bei runden Geburtstagen und 18 in Rot.
+- Neue Aufgabe: Datum und Uhrzeit so hoch wie alle anderen Felder.
+- To-dos: Nerv-Modus direkt in den To-do-Einstellungen (Titel „To-dos“ antippen).
+- Farbe (eigene Datei app/farbe.css, eigener Commit): aktiver Reiter unten farbig, Einstellungs-Symbole auf farbigen Kreisen, Initialen zart blau, Wetter himmelblau, Geburtstags-Kacheln warm, Einkaufsmodus grün. Rückgängig: farbe.css-Zeile aus index.html nehmen.
+- Gezeichnete Symbole statt Emojis: Einstellungen-Rädchen im Menü und in den Bereichen, Einstellungs-Liste (Heute, Kontakte, To-dos, Kalender wie unten in der Leiste; Nerv-Modus, Konto, Datensicherung, Über Mirella).
+
 ## Stand 0.15 (2026-11-10): eine Schrift, ruhigere Akte, Einkaufsmodus
 
 - Schrift: überall dieselbe, ruhige Systemschrift (auf dem iPhone San Francisco, am PC Segoe UI); keine Zierschrift mehr, nichts wird mehr künstlich fett und unscharf.

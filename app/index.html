@@ -13,6 +13,7 @@
 <link rel="icon" type="image/svg+xml" href="./logo-final.svg">
 <title>Mirella</title>
 <link rel="stylesheet" href="./style.css?v=16">
+<link rel="stylesheet" href="./farbe.css?v=16">
 </head>
 <body>
 <div class="phone" id="phone">
@@ -29,7 +30,7 @@
   <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Alle Bereiche">
     <div class="dhead"><div><div class="label">Mirella kümmert sich um</div><p class="big" style="margin:2px 0 0;font-size:24px">Alle Bereiche</p></div><button class="iconbtn" data-close="drawer" aria-label="Menü schließen">✕</button></div>
     <div class="dbody" id="dbody"></div>
-    <div class="dfoot"><button class="btn" data-act="go" data-v="einstellungen">⚙ Einstellungen</button></div>
+    <div class="dfoot"><button class="btn setbtn" data-act="go" data-v="einstellungen"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Einstellungen</button></div>
   </aside>
   <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-hidden="true"><button class="x" data-close="sheet" aria-label="Schließen">✕</button><div id="sheetbody"></div></div>
 </div>
@@ -39,6 +40,7 @@
 <input type="file" id="f-brief" accept="application/pdf,.pdf,image/*" multiple hidden>
 <input type="file" id="f-doc" accept="application/pdf,.pdf,image/*" hidden>
 <input type="file" id="f-shopimg" accept="image/*" hidden>
+<input type="file" id="f-avatar" accept="image/*" hidden>
 <input type="file" id="f-vcf" accept=".vcf,text/vcard,text/x-vcard" hidden>
 <script src="./logik.js?v=16"></script>
 <script src="./app.js?v=16"></script>

@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.15.1";
+const VERSION = "0.16";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -56,7 +56,17 @@ const IC = {
   wecker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M4 4.5l3-2M20 4.5l-3-2"/></svg>',
   such: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>',
   cam: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
-  call: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>'
+  call: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2A5 5 0 0 1 21 19"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 12l3 3 5-6"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.4 10 4.25 4.25 0 0 0 7 18.5z"/><path d="M9.5 14.5l2 2 3.5-4"/></svg>',
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.2"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
 };
 /* Reihenfolge = Wichtigkeit im Alltag; Dokumente, Reisen und Briefings bewusst hinten */
 const AREAS = [
@@ -145,6 +155,8 @@ const dataURLToBlob = async u => (await fetch(u)).blob();
 
 /* ---------- Menschen ---------- */
 const fullName = p => [p.first, p.last].filter(Boolean).join(" ") || "Ohne Namen";
+/* Profilbild oder Initialen */
+const avHTML = (p, cls = "") => `<span class="av${cls}">${p.pic ? `<img class="avimg" data-thumb="${esc(p.pic)}" alt="">` : esc(initials(p))}</span>`;
 const initials = p => ((p.first || "")[0] || "" + "") .toUpperCase() + ((p.last || "")[0] || "").toUpperCase() || "?";
 function lastCall(p, okOnly = true) { const c = (p.calls || []).filter(x => !okOnly || x.ok).sort((a, b) => a.d < b.d ? 1 : -1)[0]; return c ? c.d : null; }
 /* Fehlversuche in Folge (neueste zuerst, bis zum letzten Erreichen) */
@@ -267,8 +279,8 @@ function pill(st, p) {
 function personCard(p, withCall) {
   const st = callState(p), due = nextDue(p);
   const sub = st === "none" ? (p.group || "") : `${cycLabel(p.cyc)} · zuletzt ${agoText(lastCall(p))}`;
-  const callBtn = p.tel ? `<a class="call" href="tel:${esc(p.tel.replace(/[^\d+]/g, ""))}" aria-label="${esc(fullName(p))} anrufen: ${esc(p.tel)}" data-act="dial" data-id="${p.id}">${IC.call}</a>` : `<button class="call" aria-label="Nummer für ${esc(fullName(p))} eintragen" data-act="call" data-id="${p.id}">${IC.call}</button>`;
-  return `<div class="card ${withCall ? "due" : ""}" role="button" tabindex="0" data-act="${withCall ? "callmenu" : "person"}" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(withCall && p.tel ? p.tel + " · " + sub : sub)}</div></span>${withCall ? callBtn : (st === "none" ? "" : pill(st, p))}</div>`;
+  const callBtn = p.tel ? `<button class="call" aria-label="${esc(fullName(p))} anrufen: ${esc(p.tel)}" data-act="dialnow" data-id="${p.id}">${IC.call}</button>` : `<button class="call" aria-label="Nummer für ${esc(fullName(p))} eintragen" data-act="call" data-id="${p.id}">${IC.call}</button>`;
+  return `<div class="card ${withCall ? "due" : ""}" role="button" tabindex="0" data-act="${withCall ? "callmenu" : "person"}" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(withCall && p.tel ? p.tel + " · " + sub : sub)}</div></span>${withCall ? callBtn : (st === "none" ? "" : pill(st, p))}</div>`;
 }
 function todoRow(t) {
   const pr = !t.done && prioOf(t), shop = t.list === "einkauf", q = shop ? L.qtyLabel(t) : "";
@@ -317,8 +329,8 @@ const R = {
     if (leave.length) h2 += `<div class="sec"><span class="label">Bevor du losgehst</span></div><div class="morning">${leave.map(x => `<label class="chk"><input type="checkbox" data-act="toggle" data-id="${x.id}"><span>${esc(x.t)}</span></label>`).join("")}</div>`;
     if (dueCalls.length || doneCalls) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length ? dueCalls.length + " heute" : ""}${doneCalls ? (dueCalls.length ? " · " : "") + doneCalls + " erledigt" : ""}</span></div>${dueCalls.map(p => personCard(p, true)).join("")}${!dueCalls.length ? `<div class="swipehint" style="text-align:left">Für heute alle Anrufe geschafft. 👍</div>` : ""}${pool.length && dueCalls.length < 2 ? `<button class="btn" data-act="pullcalls" style="width:100%;margin-top:6px">Weitere Anrufe vorziehen (${Math.min(pool.length, +S.settings.maxCalls || 3)} von ${pool.length})</button>` : ""}`;
     const quit = S.people.filter(p => !p.arch && gaveUp(p));
-    if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card"><span class="av">${esc(initials(p))}</span><span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
-    if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : (n === 1 ? "morgen" : "in " + n + " Tagen") + " · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
+    if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
+    if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : (n === 1 ? "morgen" : "in " + n + " Tagen") + " · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
     const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && !p.death && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
     if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
     const md = t.slice(5), mem = [];
@@ -326,7 +338,7 @@ const R = {
     if (mem.length) h2 += `<div class="sec"><span class="label">In Gedenken</span></div>${mem.map(([p, k]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🕯️</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">heute ${k}</div></span></div>`).join("")}`;
     if (dueTodos.length) h2 += `<div class="sec"><span class="label">Aufgaben</span><span class="label">${dueTodos.length}</span></div>${dueTodos.sort(byPrio).map(todoRow).join("")}`;
     h2 += HOOKS.heute.map(f => f()).join("");
-    if (asks.length) h2 += `<div class="sec"><span class="label">Nachfragen</span></div>${asks.slice(0, 5).map(([p, a]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(a.t)}</div></span></div>`).join("")}`;
+    if (asks.length) h2 += `<div class="sec"><span class="label">Nachfragen</span></div>${asks.slice(0, 5).map(([p, a]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(a.t)}</div></span></div>`).join("")}`;
     if (docs.length) h2 += `<div class="sec"><span class="label">Dokumente laufen ab</span></div>${docs.map(x => `<div class="card" role="button" tabindex="0" data-act="area" data-id="doku"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(x.name)}</div><div class="s">gültig bis ${esc(fmtDate(x.until))}</div></span>${x.until < t ? '<span class="pill late">abgelaufen</span>' : '<span class="pill">bald</span>'}</div>`).join("")}`;
     if (shop) h2 += `<div class="sec"><span class="label">Einkaufsliste</span></div><div class="card" role="button" tabindex="0" data-act="shoplist"><span class="av">🛒</span><span><div class="t">${shop} ${shop === 1 ? "Sache" : "Sachen"} offen</div><div class="s">Antippen für die Liste</div></span><button class="mini" data-act="shopmode" data-on="1">Einkaufen gehen</button></div>`;
     return h2;
@@ -349,8 +361,8 @@ const R = {
     const st = callState(p), due = nextDue(p), nb = nextBirthday(p);
     const list = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="emptyline">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
     const calls = (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1);
-    return `${subtop("Kontakte", "go\" data-v=\"menschen", `<button class="mini" data-act="editperson" data-id="${p.id}">Bearbeiten</button>`)}
-    <div class="hero${p.death ? " dead" : ""}"><span class="av">${esc(initials(p))}</span><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>
+    return `${subtop("Kontakte", "go\" data-v=\"menschen")}
+    <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${p.death ? "" : p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
@@ -446,17 +458,17 @@ const R = {
     const ico = s2 => `<span class="setic">${s2}</span>`;
     return `${subtop("Zurück", "go\" data-v=\"heute")}<p class="big">Einstellungen</p>
     <div class="sethead2">Seiten</div>
-    ${row("heute", ico("☀️"), "Heute", "Name, Wetter, Briefing")}
-    ${row("kontakte", ico("👥"), "Kontakte", "Anrufe, Geburtstage, Gruppen, Import")}
-    ${row("todos", ico("✓"), "To-dos & Einkauf", "Prioritäten, Einkaufs-Vorlagen")}
-    ${row("kalender", ico("📅"), "Kalender", "Filter, Startansicht")}
+    ${row("heute", IC.sun, "Heute", "Name, Wetter, Briefing")}
+    ${row("kontakte", IC.people, "Kontakte", "Anrufe, Geburtstage, Gruppen, Import")}
+    ${row("todos", IC.check, "To-dos & Einkauf", "Prioritäten, Einkaufs-Vorlagen")}
+    ${row("kalender", IC.cal, "Kalender", "Filter, Startansicht")}
     <div class="sethead2">Bereiche</div>
     ${AREAS.map(A => row(A.id, IC[A.ic], A.n, (typeof AREA_SUB !== "undefined" && AREA_SUB[A.id]) || "")).join("")}
     <div class="sethead2">Mirella</div>
-    ${row("nerv", ico("🔔"), "Nerv-Modus", "was dich erinnert, bis es erledigt ist")}
-    ${row("konto", ico("☁️"), "Konto & Abgleich", typeof syOn === "function" && syOn() ? "angemeldet" : "nicht angemeldet")}
-    ${row("sicherung", ico("💾"), "Datensicherung", "speichern und zurückholen")}
-    ${row("info", ico("ℹ️"), "Über Mirella", "Version, was noch kommt, alles löschen")}
+    ${row("nerv", IC.bell, "Nerv-Modus", "was dich erinnert, bis es erledigt ist")}
+    ${row("konto", IC.cloud, "Konto & Abgleich", typeof syOn === "function" && syOn() ? "angemeldet" : "nicht angemeldet")}
+    ${row("sicherung", IC.save, "Datensicherung", "speichern und zurückholen")}
+    ${row("info", IC.info, "Über Mirella", "Version, was noch kommt, alles löschen")}
     <p class="swipehint">Mirella ${VERSION} · ${S.people.length} Kontakte · ${S.todos.length} Einträge · ${S.docs.length} Dokumente</p>`;
   }
 };
@@ -501,7 +513,9 @@ const SETS = {
     <p class="hint">Am PC auf icloud.com › Kontakte alle markieren und „vCard exportieren“, Datei aufs iPhone (z. B. per AirDrop oder Dateien-App) und hier auswählen. Namen, Telefonnummern und Geburtstage werden übernommen, Doppelte übersprungen. In der iPhone-App liest Mirella die Kontakte später direkt.</p>`;
   },
   todos() {
-    return `${setH("Prioritäten")}<p class="hint" style="margin-top:0">Jede Aufgabe kann eine Stufe bekommen. Hoch steht immer oben und erscheint auf „Heute“, auch ohne Datum.</p>
+    return `${setH("Nerv-Modus für Aufgaben")}${setTgl("nerv.aufgaben", "Aufgaben mit Nerv-Modus", "und alle mit Priorität Hoch, bis erledigt")}${setTgl("nerv.fristen", "Fristen", "Kündigungen, TÜV, Rechnungen, Ablauf von Dokumenten")}${setTgl("nerv.supplements", "Supplements", "morgens und abends, bis abgehakt")}${setSel("nervEvery", "Erneut melden", "solange Mirella offen ist", [[5, "alle 5 Minuten"], [10, "alle 10 Minuten"], [15, "alle 15 Minuten"], [30, "alle 30 Minuten"], [60, "jede Stunde"], [120, "alle 2 Stunden"]])}
+    <p class="hint">Neue Aufgaben haben den Nerv-Modus standardmäßig an. Alles zum Nerv-Modus auch unter Einstellungen › Nerv-Modus.</p>
+    ${setH("Prioritäten")}<p class="hint" style="margin-top:0">Jede Aufgabe kann eine Stufe bekommen. Hoch steht immer oben und erscheint auf „Heute“, auch ohne Datum.</p>
     ${PRIOS.map(([, n, c]) => `<div class="set"><span><i class="pdot" style="background:${c}"></i> ${n}</span></div>`).join("")}
     ${setH("Einkaufs-Vorlagen")}${S.shopTpl.length ? S.shopTpl.map(t => `<div class="listrow"><span class="grow">${esc(t.n)}<small>${t.items.length} Artikel: ${esc(t.items.slice(0, 5).map(i => i.t).join(", "))}${t.items.length > 5 ? " …" : ""}</small></span><button class="rowdel" data-act="deltpl" data-id="${t.id}" aria-label="Vorlage löschen">✕</button></div>`).join("") : '<p class="hint" style="margin-top:0">Noch keine Vorlage. In der Einkaufsliste unten „Liste als Vorlage speichern“ tippen.</p>'}
     ${setH("Waschmaschine")}${setSel("washMin", "„Waschmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"]])}`;
@@ -520,7 +534,7 @@ const SETS = {
   sicherung() {
     const last = S.settings.pcLast;
     return `${setH("Sicherung für den PC")}<p class="hint" style="margin-top:0">Ein ZIP mit allem: <b>Excel</b> mit allen Kontakten und Infos (plus Aufgaben, Einkauf, Verträge, Ausgaben), <b>alle PDFs und Fotos</b> sauber benannt und nach Bereich und Ordner sortiert, und die Datei zum Wiederherstellen. Funktioniert ohne Supabase und ohne Mirella.</p>
-    <button class="btn pri" data-act="pcbackup" style="width:100%">💾 PC-Sicherung jetzt erstellen</button><p class="swipehint" id="pcb-state" style="text-align:left">${last ? "Letzte PC-Sicherung: " + esc(relDate(last)) : "Noch keine PC-Sicherung gemacht."}</p>
+    <button class="btn pri" data-act="pcbackup" style="width:100%">PC-Sicherung jetzt erstellen</button><p class="swipehint" id="pcb-state" style="text-align:left">${last ? "Letzte PC-Sicherung: " + esc(relDate(last)) : "Noch keine PC-Sicherung gemacht."}</p>
     <p class="hint">Danach im Teilen-Fenster „In Dateien sichern“ › <b>OneDrive</b> › CoWork › Private App › 05_Sicherung wählen.</p>
     <p class="hint"><b>Automatisch jede Nacht:</b> Das kleine PC-Programm (im GitHub-Ordner tools/pc-sicherung, einmal <b>EINRICHTEN.cmd</b> doppelklicken) holt alles selbst vom Server in den Ordner 05_Sicherung. Dann musst du hier nichts mehr tun.</p>
     ${setH("Sicherungsdatei (nur für Mirella)")}<div class="row2" style="margin-top:0"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Sicherung laden</button></div>
@@ -675,7 +689,8 @@ function bdayBlock(p, nb) {
   if (!nb) return "";
   const a = ageAt(p, nb), n = diffDays(today(), nb), isT = nb === today();
   const line = isT ? `🎂 Heute ${a ? "wird " + (p.first || "") + " " + a + " Jahre alt" : "ist Geburtstag"}!` : `${a ? `Wird ${a} Jahre alt` : "Nächster Geburtstag"} am ${esc(fmtDate(nb))}, ${n === 1 ? "morgen" : "in " + n + " Tagen"}`;
-  return `<div class="block"><h4>Geburtstag</h4><div class="kvgrid"><div><span class="k">Geboren</span><b>${esc(longDate(p.bday))}</b></div>${a ? `<div><span class="k">Alter</span><b>${isT ? a : a - 1} Jahre</b></div>` : ""}</div><div class="bdline${isT ? " today" : ""}">${line}</div>${p.gift ? `<div class="bdline">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>`;
+  const round = a && !isT ? (a === 18 || (S.settings.roundAges || []).includes(a) || a % 10 === 0) : false;
+  return `<div class="block"><h4>Geburtstag</h4><div class="kvgrid"><div><span class="k">Geboren</span><b>${esc(longDate(p.bday))}</b></div>${a ? `<div><span class="k">Alter</span><b>${isT ? a : a - 1} Jahre</b></div>` : ""}</div><div class="bdline${isT ? " today" : ""}${round ? " round" : ""}">${round ? "🎉 " : ""}${line}</div>${p.gift ? `<div class="bdline">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>`;
 }
 /* Kontaktdaten: jede Zeile gleich aufgebaut (Bezeichnung, Wert, Knopf) */
 function contactBlock(p) {
@@ -1025,7 +1040,20 @@ function callMenu(p) {
   <div style="display:grid;gap:8px">${tel ? `<a class="btn pri" href="tel:${esc(tel)}" data-act="dial" data-id="${p.id}" style="text-decoration:none;text-align:center">📞 ${esc(p.tel)} anrufen</a>` : `<button class="btn" data-act="call" data-id="${p.id}">Telefonnummer eintragen</button>`}
   <button class="btn" data-act="callok" data-id="${p.id}">✓ Erledigt, erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Probiert, nicht erreicht</button><button class="btn" data-act="snooze" data-id="${p.id}">Später anrufen</button><button class="btn" data-act="person" data-id="${p.id}">Zum Kontaktprofil</button></div>`);
 }
-let pendingCall = null;
+let pendingCall = null, avFor = null;
+/* Profilbild: quadratisch zuschneiden, verkleinern, ablegen (gleicht mit dem Server ab) */
+async function setAvatar(file) {
+  const p = S.people.find(x => x.id === avFor); if (!p || !file) return;
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => createImageBitmap(file));
+    const side = Math.min(bmp.width, bmp.height), N = Math.min(480, side), c = document.createElement("canvas"); c.width = c.height = N;
+    c.getContext("2d").drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, N, N);
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.86)), id = "av_" + uid(), old = p.pic;
+    await photoPut(id, blob); p.pic = id; save(); if (old) photoDel(old).catch(() => { });
+    render(true); toast("Profilbild gespeichert");
+  } catch (_) { toast("Bild konnte nicht gelesen werden"); }
+}
+document.addEventListener("change", e => { if (e.target.id === "f-avatar" && e.target.files[0]) setAvatar(e.target.files[0]); });
 function callResult(p, autoDial) {
   openSheet(`<p class="stitle">Anruf mit ${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">Wie ist es gelaufen?</p>
   <div style="display:grid;gap:8px"><button class="btn pri" data-act="callok" data-id="${p.id}">Erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Nicht erreicht (neuer Versuch ${relDate(addCallDays(today(), +S.settings.retryWorkdays || 2))})</button><button class="btn" data-act="snooze" data-id="${p.id}">Später</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
@@ -1432,6 +1460,13 @@ const ACT = {
   logcall: el => callResult(S.people.find(x => x.id === el.dataset.id), false),
   callok: el => logCall(S.people.find(x => x.id === el.dataset.id), true),
   dial: () => { },
+  avpick: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; avFor = p.id;
+    if (!p.pic) { const f = $("#f-avatar"); f.value = ""; f.click(); return; }
+    openSheet(`<p class="stitle">Profilbild</p><div style="display:grid;gap:8px"><button class="btn pri" data-act="avnew">Neues Bild wählen</button><button class="btn danger" data-act="avdel">Bild entfernen</button><button class="btn" data-close="sheet">Abbrechen</button></div>`); },
+  avnew: () => { closeSheet(); const f = $("#f-avatar"); f.value = ""; f.click(); },
+  avdel: () => { const p = S.people.find(x => x.id === avFor); if (!p || !ask("Profilbild wirklich entfernen?")) return; const old = p.pic; delete p.pic; save(); photoDel(old).catch(() => { }); closeSheet(); render(true); toast("Profilbild entfernt"); },
+  // Telefon-Symbol: sofort wählen (iPhone zeigt die Nummer mit „Anrufen“), danach fragt Mirella, wie es lief
+  dialnow: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p || !p.tel) return; pendingCall = p.id; location.href = "tel:" + p.tel.replace(/[^\d+]/g, ""); },
   pcbackup: () => { if (view !== "einstellungen" || setSec !== "sicherung") { setFrom = view === "einstellungen" ? null : { v: view, area, cur, t: "Zurück", y: $("#screen").scrollTop }; view = "einstellungen"; setSec = "sicherung"; closeAll(); render(); } window.pcBackup && window.pcBackup(); },
   roundack: (el, e) => { e.stopPropagation(); const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; p.roundAck = el.dataset.d; save(); render(true); toast("Gemerkt. Am Geburtstag erinnere ich dich wie gewohnt."); },
   callmenu: el => callMenu(S.people.find(x => x.id === el.dataset.id)),
@@ -1585,7 +1620,7 @@ $("#sheet").addEventListener("touchend", e => { if (sy !== null && e.changedTouc
 ["gesturestart", "gesturechange", "gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
 document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 let lastTouch = 0;
-document.addEventListener("touchend", e => { const n = Date.now(); if (n - lastTouch < 300 && !e.target.closest("input,textarea,select")) e.preventDefault(); lastTouch = n; }, { passive: false });
+document.addEventListener("touchend", e => { const n = Date.now(); if (n - lastTouch < 300 && !e.target.closest("input,textarea,select,.call,a[href^='tel:']")) e.preventDefault(); lastTouch = n; }, { passive: false });
 const unshift = () => { if (!document.activeElement || !document.activeElement.matches("input,textarea,select")) { if (window.scrollY || window.scrollX) window.scrollTo(0, 0); } };
 window.addEventListener("scroll", unshift, { passive: true });
 document.addEventListener("focusout", () => setTimeout(unshift, 60));

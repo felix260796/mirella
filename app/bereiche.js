@@ -324,7 +324,7 @@ let finM = today().slice(0, 7), finCat = "";
 R.bereich = function () {
   const A = areaById(area); if (!A) { view = "heute"; return R.heute(); }
   const head = `${subtop("Alle Bereiche", "drawer", `<button class="iconbtn camtop" data-act="photo" data-area="${A.id}" aria-label="Foto oder Brief an Mirella">${IC.cam}</button>`)}
-    <button class="ahero tsetbtn" data-act="tabset" data-k="${A.id}" data-t="${esc(A.n)}" aria-label="Einstellungen ${esc(A.n)}" style="--ac:${A.c || "var(--ink)"}"><span class="av">${IC[A.ic]}</span><span style="min-width:0;flex:1"><p class="big" style="margin:0;font-size:24px">${esc(A.n)}</p><span class="s" style="display:block">${esc(areaSummary(A.id))}</span></span><span class="setcue" aria-hidden="true">⚙</span></button>`;
+    <button class="ahero tsetbtn" data-act="tabset" data-k="${A.id}" data-t="${esc(A.n)}" aria-label="Einstellungen ${esc(A.n)}" style="--ac:${A.c || "var(--ink)"}"><span class="av">${IC[A.ic]}</span><span style="min-width:0;flex:1"><p class="big" style="margin:0;font-size:24px">${esc(A.n)}</p><span class="s" style="display:block">${esc(areaSummary(A.id))}</span></span><span class="setcue" aria-hidden="true">${IC.gear}</span></button>`;
   if (AREA_VIEW[A.id]) return head + AREA_VIEW[A.id]();
   const todos = S.todos.filter(t => t.area === A.id && t.list === "todo" && !t.done).sort((a, b) => (a.date || "9999") < (b.date || "9999") ? -1 : 1).sort(byPrio);
   const notes = S.notes.filter(n => n.area === A.id).sort((a, b) => a.d < b.d ? 1 : -1);

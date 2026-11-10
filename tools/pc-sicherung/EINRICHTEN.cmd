@@ -1,7 +1,7 @@
 @echo off
 title Mirella-Sicherung einrichten
 echo Mirella-Sicherung wird eingerichtet ...
-echo Gleich oeffnet sich ein kleines Fenster fuer E-Mail und Passwort, eventuell hinter diesem Fenster.
+echo Gleich fragt dieses Fenster nach deiner Mirella-E-Mail und deinem Passwort.
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Mirella-Sicherung.ps1" -Einrichten
 echo.

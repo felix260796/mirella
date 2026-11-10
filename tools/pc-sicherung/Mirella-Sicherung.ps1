@@ -379,9 +379,14 @@ function Do-Setup {
   # 1. Zugang
   $ok = $false
   for ($try = 1; $try -le 3 -and -not $ok; $try++) {
-    $gc = @{ Message = 'Mirella: E-Mail und Passwort, genau wie beim Anmelden in der App' }; if (G $cfg 'email') { $gc.UserName = S (G $cfg 'email') }
-    $cred = Get-Credential @gc
-    if (-not $cred) { throw 'Abgebrochen.' }
+    # Eingabe direkt hier im Fenster (das Windows-Anmeldefenster taucht oft nicht auf)
+    $mail = S (G $cfg 'email')
+    $in = Read-Host ('  Mirella-E-Mail' + $(if ($mail) { " (Enter = $mail)" } else { '' }))
+    if ($in.Trim()) { $mail = $in.Trim() }
+    if (-not $mail) { Write-Host '  Bitte eine E-Mail eingeben.' -ForegroundColor Yellow; continue }
+    $cfg['email'] = $mail
+    $pw = Read-Host '  Mirella-Passwort (man sieht beim Tippen nur Sternchen)' -AsSecureString
+    $cred = New-Object System.Management.Automation.PSCredential($mail, $pw)
     try { $a = Sb-Login $cred.UserName $cred.GetNetworkCredential().Password; $ok = $true }
     catch { Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow }
   }

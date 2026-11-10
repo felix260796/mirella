@@ -1,5 +1,21 @@
 # Mirella, die Sekretärin
 
+## Stand 0.11 (2026-11-10): Mirella denkt mit wie eine Sekretärin
+- **Rubriken neu:** Wecker, Finanzen, Verträge & Versicherungen, Gesundheit, Zuhause, Auto & E-Bike, Arbeit, Sport & Hobby, Dokumente, Reisen, Briefings (ganz hinten). Jede Rubrik hat eigene Einträge (z. B. Vertrag, Versicherung, Fahrzeug, Zähler, Wohnung, Gerät, Arzt, wiederkehrender Termin, Supplement, Reise, Auslage zum Erstatten, Verein). Aus jedem Eintrag legt Mirella automatisch die passenden Erinnerungen an (Kündigungsfrist, TÜV, Inspektion, Reifen, Ablesen, Zahnreinigung, Nachbestellen, Packen, Check-in …), `app/bereiche.js`.
+- **Plus** öffnet zuerst eine Auswahl je Rubrik, keine Tastatur.
+- **Finanzen:** Monat wählbar, Einnahmen/Fixkosten/Ausgaben/Übrig, Tortendiagramm, 6-Monats-Entwicklung, Hinweise, Budgets und eigene Kategorien.
+- **Briefe ablegen** (`app/scan.js`): Papier wird erkannt, zugeschnitten und entzerrt, Text wird auf dem Gerät gelesen (Tesseract), Bereich/Art/Betrag/Frist werden vorgeschlagen, auf Wunsch mit Aufgabe. PDFs aus der Dateien-App.
+- **Kontakte** (vorher „Menschen“): Vor-/Nachname untereinander, Gruppen (Familie, Freunde, Bekannte, Geschäftlich + eigene), Geburtstag tippen ohne Kalender, Ländervorwahl, Rhythmus „nie“, ganzer Anrufverlauf (letzte 3 + alle).
+- **Entwürfe:** Jede Eingabe wird sofort gemerkt; schließt sich ein Fenster, ist beim nächsten Öffnen alles wieder da. Fotos werden sofort zwischengespeichert.
+- **To-dos** mit Priorität (rot/orange/blau), **Einkaufsliste** mit Mengen, „Oft gekauft“ und Vorlagen.
+- **Kalender:** Tag/Woche/Monat/Liste, Monats-/Jahresauswahl per Tipp auf den Titel, Filter Geburtstage/Erinnerungen/To-dos/Anrufe.
+- **Einstellungen** gegliedert (Seiten, Bereiche, Mirella); das Logo links oben öffnet die Einstellungen der jeweiligen Seite.
+- **Wecker** (`app/wecker.js`): Ziel + Ankunft, Fahrzeit (Google Routes API mit eigenem Schlüssel, sonst OSRM + Berufsverkehr-Zuschlag), Zeit daheim, Puffer, mehrere Wecker im Abstand; Übergabe an Kurzbefehl „Mirella Wecker“ oder Kalender-Alarm. Echter Wecker mit der iPhone-App (AlarmKit).
+- **Nerv-Modus** einzeln je Art einschaltbar, Fenster mit Ton beim Öffnen und wiederholt.
+- **Suche über alles** und „Mirella fragen“ (eingebaute Hilfe, `app/suche.js`).
+- Kein Zoomen/Verrutschen, Sicherheitsrückfrage bei jedem Löschen, Briefings nur noch als PDF.
+- Rechenlogik in `app/logik.js`, Tests in `tests/logik.test.ts` (`npm test`).
+
 ## Stand 0.9.1 (2026-11-10): Arbeitsversion läuft auf GitHub Pages
 - `app/` ist die lauffähige App (reine Web-App ohne Build). Sie wird bei jedem Push auf `main` automatisch über GitHub Pages veröffentlicht (`.github/workflows/pages.yml`): https://felix260796.github.io/mirella/
 - Daten liegen bis zum Supabase-Sync nur auf dem Gerät (localStorage, Fotos/PDFs in IndexedDB); Sicherung als JSON in den Einstellungen.

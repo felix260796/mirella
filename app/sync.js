@@ -183,8 +183,7 @@ function syBlock() {
     <p class="hint" style="margin-top:0">Melde dich an, dann sind iPhone, iPad und PC immer auf dem gleichen Stand und deine Daten sind auf dem Server in Frankfurt gesichert.</p>
     <form data-form="sylogin" style="margin-bottom:8px"><input ${inp} type="email" name="email" autocomplete="username" placeholder="Deine E-Mail" aria-label="E-Mail" style="margin:0 0 6px;width:100%"><input ${inp} type="password" name="pw" autocomplete="current-password" placeholder="Passwort" aria-label="Passwort" style="margin:0 0 6px;width:100%"><button class="btn pri" style="width:100%">Anmelden</button></form>`;
 }
-const origEinst = R.einstellungen;
-R.einstellungen = function () { const h = origEinst.call(this); const i = h.indexOf('<div class="sec sethead"><span class="label">Datensicherung</span></div>'); return i < 0 ? h + syBlock() : h.slice(0, i) + syBlock() + h.slice(i); };
+/* Erscheint in den Einstellungen unter „Konto & Abgleich“ (siehe SETS.konto in app.js) */
 
 Object.assign(ACT, {
   synow: () => sync(true),

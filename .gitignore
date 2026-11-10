@@ -1,0 +1,4 @@
+native/node_modules/
+native/ios/App/App/public/
+native/ios/App/App/capacitor.config.json
+native/ios/App/CapApp-SPM/.build/

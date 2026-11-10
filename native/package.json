@@ -1,0 +1,19 @@
+{
+  "name": "mirella-native",
+  "private": true,
+  "version": "0.9.3",
+  "scripts": {
+    "sync": "cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.0",
+    "@capacitor/camera": "^7.0.5",
+    "@capacitor/core": "^7.6.10",
+    "@capacitor/geolocation": "^7.1.8",
+    "@capacitor/ios": "^7.6.10",
+    "@capacitor/push-notifications": "^7.0.7"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.10"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "appId": "de.brenzinger.mirella",
+  "appName": "Mirella",
+  "webDir": "../app",
+  "ios": { "contentInset": "never", "backgroundColor": "#FFFFFF" }
+}

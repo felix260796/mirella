@@ -1,5 +1,5 @@
 /* Mirella – Abgleich über Supabase (Frankfurt)
-   Anmeldung per 6-stelligem Code, ganze App-Daten als ein Datensatz je Nutzer,
+   Anmeldung per E-Mail und Passwort (einmal je Gerät), ganze App-Daten als ein Datensatz je Nutzer,
    Fotos/PDFs im privaten Speicher, wöchentliche Sicherung auf dem Server.
    Ohne Anmeldung läuft alles wie bisher nur auf dem Gerät. */
 "use strict";
@@ -10,7 +10,7 @@ const LOCAL_ONLY = ["geoAsked"]; // gilt nur für dieses Gerät
 
 const SY = {
   auth: null, meta: { ver: 0, dirty: false, last: 0, lastBackup: 0, pendingUp: [], pendingDel: [] },
-  busy: false, timer: null, codeFor: "", status: ""
+  busy: false, timer: null, status: ""
 };
 try { SY.auth = JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch (_) { }
 try { Object.assign(SY.meta, JSON.parse(localStorage.getItem(META_KEY) || "{}")); } catch (_) { }
@@ -155,17 +155,13 @@ photoDel = async function (id) {
 };
 
 /* ---------- Anmeldung ---------- */
-async function syLogin1(email) {
-  email = (email || "").trim().toLowerCase(); if (!/^\S+@\S+\.\S+$/.test(email)) { toast("Bitte eine gültige E-Mail eingeben"); return; }
-  try { await sbAuth("otp", { email, create_user: false }); SY.codeFor = email; render(true); toast("Code ist unterwegs, schau in dein Postfach"); }
-  catch (e) { toast(/signup|not allowed|not found/i.test(e.message) ? "Diese E-Mail ist nicht eingeladen" : "Code konnte nicht gesendet werden: " + e.message); }
-}
-async function syLogin2(code) {
-  code = (code || "").replace(/\D/g, ""); if (code.length < 6) { toast("Bitte den 6-stelligen Code eingeben"); return; }
-  let j = null;
-  for (const type of ["email", "magiclink", "invite", "signup"]) { try { j = await sbAuth("verify", { type, email: SY.codeFor, token: code }); break; } catch (_) { } }
-  if (!j || !j.access_token) { toast("Der Code stimmt nicht oder ist abgelaufen"); return; }
-  syTakeSession(j); SY.codeFor = "";
+async function syLogin(email, pw) {
+  email = (email || "").trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email) || !pw) { toast("Bitte E-Mail und Passwort eingeben"); return; }
+  let j;
+  try { j = await sbAuth("token?grant_type=password", { email, password: pw }); }
+  catch (e) { toast(/invalid/i.test(e.message) ? "E-Mail oder Passwort stimmt nicht" : "Anmeldung gerade nicht möglich: " + e.message); return; }
+  syTakeSession(j);
   SY.meta = { ver: 0, dirty: true, last: 0, lastBackup: SY.meta.lastBackup || 0, pendingUp: [], pendingDel: [] };
   try { SY.meta.pendingUp = Object.keys(await photoAll()); } catch (_) { }
   syMetaSave(); toast("Angemeldet, ich gleiche ab …"); render(true); await sync(true); render(true);
@@ -185,8 +181,7 @@ function syBlock() {
     <button class="btn" data-act="syout" style="width:100%;margin-top:8px">Abmelden</button>`;
   return `<div class="sec"><span class="label">Konto und Abgleich</span></div>
     <p class="hint" style="margin-top:0">Melde dich an, dann sind iPhone, iPad und PC immer auf dem gleichen Stand und deine Daten sind auf dem Server in Frankfurt gesichert.</p>
-    ${SY.codeFor ? `<p class="hint">Code an <b>${esc(SY.codeFor)}</b> geschickt.</p><form class="shoprow" data-form="sycode" style="margin-bottom:8px"><input ${inp} inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="6-stelliger Code" aria-label="Code"><button class="btn pri" style="flex:none">Anmelden</button></form><button class="btn" data-act="syreset" style="width:100%">Andere E-Mail</button>`
-      : `<form class="shoprow" data-form="symail" style="margin-bottom:8px"><input ${inp} type="email" autocomplete="email" placeholder="Deine E-Mail" aria-label="E-Mail"><button class="btn pri" style="flex:none">Code</button></form>`}`;
+    <form data-form="sylogin" style="margin-bottom:8px"><input ${inp} type="email" name="email" autocomplete="username" placeholder="Deine E-Mail" aria-label="E-Mail" style="margin:0 0 6px;width:100%"><input ${inp} type="password" name="pw" autocomplete="current-password" placeholder="Passwort" aria-label="Passwort" style="margin:0 0 6px;width:100%"><button class="btn pri" style="width:100%">Anmelden</button></form>}`;
 }
 const origEinst = R.einstellungen;
 R.einstellungen = function () { const h = origEinst.call(this); const i = h.indexOf('<div class="sec"><span class="label">Datensicherung</span></div>'); return i < 0 ? h + syBlock() : h.slice(0, i) + syBlock() + h.slice(i); };
@@ -194,7 +189,6 @@ R.einstellungen = function () { const h = origEinst.call(this); const i = h.inde
 Object.assign(ACT, {
   synow: () => sync(true),
   syout: () => syLogout(),
-  syreset: () => { SY.codeFor = ""; render(true); },
   syback: async () => {
     try {
       const list = await syRestoreList(); if (!list.length) { toast("Noch keine Sicherung auf dem Server"); return; }
@@ -206,8 +200,7 @@ Object.assign(ACT, {
 document.addEventListener("submit", e => {
   const f = e.target.closest && e.target.closest("form[data-form^=sy]"); if (!f) return;
   e.preventDefault(); e.stopImmediatePropagation();
-  const v = f.querySelector("input").value;
-  if (f.dataset.form === "symail") syLogin1(v); else syLogin2(v);
+  syLogin(f.querySelector("[name=email]").value, f.querySelector("[name=pw]").value);
 }, true);
 
 /* Abgleich beim Start, beim Zurückkehren in die App und jede Minute, solange sie offen ist */

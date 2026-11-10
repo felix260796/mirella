@@ -121,8 +121,8 @@ function beep(n = 2) {
 document.addEventListener("pointerdown", () => { try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch (_) { } }, { once: true });
 function nervList() {
   const s = S.settings, n = s.nerv, now = new Date(), h = now.getHours(), t = today(), hm = `${pad(h)}:${pad(now.getMinutes())}`, wd = now.getDay(), out = [], sn = snz();
-  const msgOk = h >= (+s.msgFrom || 8) && h < (+s.msgTo || 21);
-  if (n.anrufe && wd > 0 && wd < 6 && h >= +s.callFrom && h < +s.callTo) S.people.filter(p => ["late", "due"].includes(callState(p))).slice(0, s.maxCalls).forEach(p => out.push({ k: "c:" + p.id, ic: "📞", t: `${fullName(p)} anrufen`, s: cycLabel(p.cyc), a: "call", id: p.id }));
+  const msgOk = msgDays().includes(wd) && h >= (+s.msgFrom || 8) && h < (+s.msgTo || 21);
+  if (n.anrufe && callDays().includes(wd) && h >= +s.callFrom && h < +s.callTo) S.people.filter(p => ["late", "due"].includes(callState(p))).slice(0, s.maxCalls).forEach(p => out.push({ k: "c:" + p.id, ic: "📞", t: `${fullName(p)} anrufen`, s: cycLabel(p.cyc), a: "call", id: p.id }));
   if (n.aufgaben && msgOk) S.todos.filter(x => x.list === "todo" && !x.done && (x.nerv || +x.prio === 1) && (!x.date || x.date < t || (x.date === t && (!x.time || x.time <= hm))) && (x.date || +x.prio === 1)).forEach(x => out.push({ k: "t:" + x.id, ic: x.auto ? "⚠️" : "✓", t: x.t, s: x.date ? relDate(x.date) : "Priorität hoch", a: "done", id: x.id }));
   if (n.geburtstage && msgOk) S.people.filter(p => nextBirthday(p) === t && p.congrats !== t.slice(0, 4)).forEach(p => out.push({ k: "b:" + p.id, ic: "🎂", t: `${fullName(p)} hat Geburtstag`, s: "gratulieren", a: "congrats", id: p.id }));
   if (n.supplements) { const sl = suppSlot(), at = { morgens: s.suppMorning, mittags: s.suppNoon, abends: s.suppEvening }[sl] || "08:00"; if (hm >= at) S.items.filter(x => x.kind === "supplement" && x[sl] && !(S.suppLog || {})[t + "|" + sl + "|" + x.id]).forEach(x => out.push({ k: "s:" + t + sl + x.id, ic: "💊", t: `${x.name} nehmen`, s: sl, a: "supp", id: t + "|" + sl + "|" + x.id })); }
@@ -130,7 +130,7 @@ function nervList() {
 }
 let nervShown = 0;
 function nervCheck(force) {
-  if (document.hidden || $("#sheet").classList.contains("open") || document.querySelector(".nerv,.pdfview,.imgfull")) return;
+  if (document.hidden || $("#sheet").classList.contains("open") || document.querySelector(".nerv,.pdfview,.imgfull,.zv")) return;
   if (!force && Date.now() - nervShown < (+S.settings.nervEvery || 30) * 60e3) return;
   const list = nervList(); if (!list.length) return;
   nervShown = Date.now(); beep(2);

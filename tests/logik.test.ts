@@ -97,3 +97,20 @@ test("PC-Sicherung: ZIP und Excel sind gültig", () => {
   assert.equal(ZX.fname('Rechnung: Zahn/reinigung?'), "Rechnung Zahn reinigung");
   assert.ok(ZX.xlsx([{ name: "Kontakte", rows: [["Name"], ["Tim"]] }]).length > 500);
 });
+
+test("Wetter: Tag/Nacht und Hinweise", () => {
+  const time: string[] = [], T: number[] = [], P: number[] = [], G: number[] = [], U: number[] = [], C: number[] = [], A: number[] = [];
+  for (const d of ["2026-11-10", "2026-11-11"]) for (let h = 0; h < 24; h++) { time.push(`${d}T${String(h).padStart(2, "0")}:00`); T.push(h >= 7 && h < 20 ? 12 : -2); A.push(h >= 7 && h < 20 ? 10 : -5); P.push(h === 15 ? 80 : 0); G.push(h === 14 ? 70 : 10); U.push(0); C.push(0); }
+  const r = L.wxDayNight({ time, temperature_2m: T, apparent_temperature: A, precipitation_probability: P, wind_gusts_10m: G, uv_index: U, weather_code: C }, "2026-11-10", 8);
+  assert.equal(r.dayMax, 12); assert.equal(r.nightMin, -2);
+  const k = r.hints.map((h: any) => h.k);
+  assert.ok(k.includes("regen")); assert.ok(k.includes("sturm")); assert.ok(k.includes("frost"));
+});
+
+test("Anrufplan mit eigenen Anruftagen und runde Geburtstage nach Auswahl", () => {
+  // Di 2026-11-10, nur Di und Do erlaubt, 1 pro Tag
+  const m = L.callPlan(["a", "b", "c"], "2026-11-10", 1, 0, 0, [2, 4]);
+  assert.deepEqual([m.a, m.b, m.c], ["2026-11-10", "2026-11-12", "2026-11-17"]);
+  assert.equal(L.roundBday("2001-03-01", "2026-01-10", 183, [25])!.age, 25);
+  assert.equal(L.roundBday("2001-03-01", "2026-01-10", 183, [30]), null);
+});

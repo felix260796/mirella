@@ -110,7 +110,7 @@ h2{font-family:var(--f-display);font-weight:600;font-size:22px;margin:0 0 12px}
 .fld{display:grid;gap:4px;margin-bottom:10px;min-width:0}
 .fld label{font-size:12px;color:var(--ink-2)}
 .fld input,.fld select{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--ink);font:inherit;font-size:14px;margin:0}
-.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .fgrid[hidden]{display:none}
 .tgl{display:flex;gap:8px;align-items:center;font-size:15px;margin:4px 0}
 .tgl input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--ink,#111)}
@@ -462,3 +462,33 @@ a.call{display:grid;place-items:center;text-decoration:none}
 .goaltip{font-size:14px;color:var(--ink-2);margin:10px 0 0}
 .actrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .actrow .mini{flex:none;white-space:nowrap;padding:7px 12px;font-size:13.5px}
+/* v0.14 Wetter Tag/Nacht */
+.wxdn{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.wxdn>div{background:var(--surface-2);border-radius:12px;padding:8px 10px}
+.wxdn .label{display:block;font-size:13px}
+.wxdn b{font-size:19px;font-weight:700}
+.wxhints{margin-top:8px;display:grid;gap:4px;font-size:15px;color:var(--ink-2)}
+.daychips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.daychips .chip2{min-width:44px;justify-content:center}
+/* v0.14 Geburtstag in der Akte */
+.bdbig{display:grid;gap:2px;margin-top:4px}
+.bdnow{font-family:var(--f-display);font-size:26px;font-weight:700;line-height:1.15}
+.bdnext{font-size:19px;line-height:1.3}
+.bdnext b{font-weight:700}
+.bdin{font-size:16px;color:var(--ink-2)}
+.shophd{display:flex;justify-content:space-between;margin:12px 0 2px;padding-top:8px;border-top:1px solid var(--line)}
+/* v0.14 Zoom-Anzeiger für Fotos und PDFs */
+.zv{position:fixed;inset:0;z-index:75;background:#1b1b1b;display:flex;flex-direction:column}
+.zvbar{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;background:var(--surface);border-bottom:1px solid var(--line)}
+.zvbar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px}
+.zvbar .iconbtn{font-size:22px}
+.zvs{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.zvc{width:100%;transform-origin:0 0;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 16px)}
+.zvc img,.zvc canvas{display:block;width:100%;height:auto;margin:0 auto 8px;background:#fff}
+.zvload{color:#ddd;text-align:center;padding:30px 16px;font-size:15px}
+/* v0.14 Fenster nur senkrecht scrollen: iPhone-Datumsfelder sind sonst breiter als ihre Spalte */
+.sheet{overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
+.sheet .fgrid>*,.sheet .fld{min-width:0}
+.sheet input,.sheet select,.sheet textarea{max-width:100%;min-width:0;box-sizing:border-box}
+.sheet input[type=date],.sheet input[type=month],.sheet input[type=time]{-webkit-appearance:none;appearance:none;width:100%;display:block;text-align:left}
+input[type=date]::-webkit-date-and-time-value,input[type=time]::-webkit-date-and-time-value{text-align:left}

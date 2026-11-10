@@ -145,7 +145,7 @@ const KINDS = {
       { k: "name", l: "Name", ph: "z. B. Vitamin D3", req: 1 },
       { k: "morgens", l: "morgens", t: "chk", third: 1 }, { k: "mittags", l: "mittags", t: "chk", third: 1 }, { k: "abends", l: "abends", t: "chk", third: 1 },
       { k: "dose", l: "Stück pro Einnahme", t: "num", half: 1, def: 1 }, { k: "stock", l: "Vorrat (Stück)", t: "num", half: 1 },
-      { k: "reorder", l: "Nachbestellen, wenn noch … Tage reichen", t: "sel", o: [[7, "7 Tage"], [14, "14 Tage"], [21, "21 Tage"], [30, "30 Tage"]], def: 14 },
+      { k: "reorder", l: "Nachbestellen, wenn es noch so viele Tage reicht", t: "num", def: 14, ph: "z. B. 10" },
       { k: "shop", l: "Wo bestellen (Link oder Laden)" }, { k: "note", l: "Notiz (z. B. mit Essen)", t: "area" }
     ],
     sub: it => { const l = L.supplyLeft(it, today()); return [["morgens", "mittags", "abends"].filter(k => it[k]).join(" + ") || "keine Zeit", l ? `reicht noch ${l.days} Tage` : ""].filter(Boolean).join(" · "); },
@@ -373,7 +373,7 @@ function itemDetail(it) {
   if (it.kind === "reise") {
     extra = `<div class="block"><div class="bh"><h4>Packliste</h4><span class="label">${(it.pack || []).filter(p => p.done).length}/${(it.pack || []).length}</span></div>${(it.pack || []).map(p => `<label class="chk${p.done ? " done" : ""}"><input type="checkbox" data-act="packtog" data-id="${it.id}" data-p="${p.id}"${p.done ? " checked" : ""}><span>${esc(p.t)}</span></label>`).join("")}<form class="shoprow" data-form="pack" data-id="${it.id}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="Noch etwas einpacken …" aria-label="Packliste ergänzen"><button class="btn pri" style="flex:none">+</button></form></div>`;
   }
-  if (it.kind === "supplement") { const l = L.supplyLeft(it, today()); extra = `<div class="block"><h4>Vorrat</h4>${l ? `<div class="catrow"><span>noch ${Math.round(l.left)} Stück</span><b>reicht ${l.days} Tage</b></div>` : '<p class="hint">Vorrat eintragen, dann erinnert Mirella rechtzeitig ans Nachbestellen.</p>'}<button class="btn" data-act="restock" data-id="${it.id}" style="width:100%;margin-top:8px">Nachgekauft: Vorrat auffüllen</button></div>`; }
+  if (it.kind === "supplement") { const l = L.supplyLeft(it, today()); extra = `<div class="block"><h4>Vorrat</h4>${l ? `<div class="catrow"><span>noch ${Math.round(l.left)} Stück</span><b>reicht ${l.days} Tage</b></div>` : '<p class="hint">Vorrat eintragen, dann erinnert Mirella rechtzeitig ans Nachbestellen.</p>'}<div class="set" style="margin-top:8px"><span>Nachbestellen erinnern<small>wenn es noch so viele Tage reicht</small></span><span style="display:flex;align-items:center;gap:6px"><button class="iconbtn" data-act="reord" data-id="${it.id}" data-n="-1" aria-label="weniger">−</button><b style="min-width:58px;text-align:center">${+it.reorder || 14} Tage</b><button class="iconbtn" data-act="reord" data-id="${it.id}" data-n="1" aria-label="mehr">+</button></span></div><button class="btn" data-act="restock" data-id="${it.id}" style="width:100%;margin-top:8px">Nachgekauft: Vorrat auffüllen</button></div>`; }
   const tel = it.tel || it.hotline || it.shopTel;
   const acts = [tel ? `<a class="mini" href="tel:${esc(tel.replace(/[^\d+]/g, ""))}" style="text-decoration:none">📞 Anrufen</a>` : "", it.web ? `<a class="mini" href="${esc(/^https?:/.test(it.web) ? it.web : "https://" + it.web)}" target="_blank" rel="noopener" style="text-decoration:none">Website</a>` : "", it.addr ? `<a class="mini" href="https://maps.apple.com/?q=${encodeURIComponent(it.addr)}" style="text-decoration:none">Karte</a>` : "", it.mail ? `<a class="mini" href="mailto:${esc(it.mail)}" style="text-decoration:none">E-Mail</a>` : ""].join("");
   const todos = S.todos.filter(t => t.ref === it.id && !t.done).sort((a, b) => (a.date || "") < (b.date || "") ? -1 : 1);
@@ -553,6 +553,7 @@ Object.assign(SETS, {
 
 /* ---------- Klicks ---------- */
 Object.assign(ACT, {
+  reord: el => { const it = S.items.find(x => x.id === el.dataset.id); if (!it) return; it.reorder = Math.max(1, Math.min(90, (+it.reorder || 14) + +el.dataset.n)); syncAuto(it); save(); itemDetail(it); render(true); },
   goalnew: () => goalForm(null),
   goaledit: el => goalForm((S.goals || []).find(g => g.id === el.dataset.id)),
   goalsave: el => { const n = $("#g-n").value.trim(), t = parseAmount($("#g-t").value), sv = parseAmount($("#g-s").value) || 0; if (!n || !t) { toast("Bitte Name und Zielbetrag eintragen"); return; } S.goals = S.goals || []; const g = S.goals.find(x => x.id === el.dataset.id); const v = { n, target: t, saved: sv, until: $("#g-u").value || "" }; if (g) Object.assign(g, v); else S.goals.push({ id: uid(), ...v }); save(); closeSheet(); render(true); toast("Sparziel gespeichert: " + n); },

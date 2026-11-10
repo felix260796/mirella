@@ -1,5 +1,10 @@
 # Mirella, die Sekretärin
 
+## Stand 0.14.1 (2026-11-10): automatische PC-Sicherung
+
+- Neues PC-Programm in `tools/pc-sicherung`: einmal **EINRICHTEN.cmd** doppelklicken, Mirella-E-Mail und Passwort eingeben, fertig. Jede Nacht um 2 Uhr holt es Excel, alle PDFs und Fotos und die Wiederherstellungs-Datei vom Server in `05_Sicherung` (die letzten 14 Tage bleiben liegen). Anleitung: `tools/pc-sicherung/LIESMICH.md`.
+- Hängt nur am Server (Supabase), nicht an der Web-App, und läuft deshalb mit der iPhone-App unverändert weiter.
+
 ## Stand 0.13 (2026-11-10): Einkaufsmodus, Anrufplan, PC-Sicherung
 - Schrift: Überschriften in der Serifenschrift groß und fett, Text klar davon abgesetzt; alles größer, „Mirella“ oben rechts markanter.
 - Anrufe auf „Heute“: Telefon-Symbol wählt direkt die Nummer, danach fragt Mirella, wie es lief. Antippen des Kontakts: erledigt, probiert, später, Kontaktprofil. Höchstens 3 pro Werktag (auch in der Kontaktliste: „morgen“ oder Datum), „Weitere Anrufe vorziehen“.

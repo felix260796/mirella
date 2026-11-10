@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos: IndexedDB "mirella" / "photos".
    Später ersetzt der Supabase-Sync (v0.7) die lokale Speicherung. */
 "use strict";
-const VERSION = "0.9.3";
+const VERSION = "0.10";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -355,9 +355,9 @@ const R = {
     <p class="hint">Am PC auf icloud.com › Kontakte alle markieren und „vCard exportieren“, Datei aufs iPhone (z. B. per AirDrop oder Dateien-App) und hier auswählen. Namen, Telefonnummern und Geburtstage werden übernommen, Doppelte übersprungen.</p>
     <div class="sec"><span class="label">Datensicherung</span></div>
     <div class="row2" style="margin-top:0"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Sicherung laden</button></div>
-    <p class="hint">Deine Daten liegen nur auf diesem Gerät, in dieser App-Adresse. Speichere ab und zu eine Sicherung (z. B. in iCloud Drive). Auf einem anderen Gerät kannst du sie mit „Sicherung laden“ übernehmen. Der automatische Abgleich zwischen iPhone, iPad und PC kommt mit dem Server (Supabase).</p>
+    <p class="hint">Zusätzlich kannst du jederzeit eine Sicherungsdatei speichern, z. B. in iCloud Drive, und sie mit „Sicherung laden“ zurückholen.</p>
     <div class="sec"><span class="label">Was noch fehlt</span></div>
-    <p class="hint">Push-Nachrichten, wenn die App geschlossen ist, Briefings aus Gmail und das automatische Lesen von Belegen per KI brauchen den Server und den Claude-Schlüssel. Bis dahin zeigt Mirella alles Fällige beim Öffnen.</p>
+    <p class="hint">Push-Nachrichten, wenn die App geschlossen ist, und das automatische Lesen von Belegen per KI brauchen den Server und den Claude-Schlüssel. Bis dahin zeigt Mirella alles Fällige beim Öffnen.</p>
     <div class="sec"><span class="label">Gefahrenzone</span></div>
     <button class="btn danger" data-act="wipe" style="width:100%">Alle Daten auf diesem Gerät löschen</button>
     <p class="swipehint">Mirella ${VERSION} · ${S.people.length} Kontakte · ${S.todos.length} Einträge · ${S.docs.length} Dokumente</p>`;

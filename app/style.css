@@ -413,3 +413,45 @@ body{font-size:16px}
 .todo .box{width:26px;height:26px;border-radius:8px;margin-top:0}
 .tgl.big b{font-family:var(--f-body);font-size:16px;font-weight:700}
 .tgl.big small{font-family:var(--f-body);font-weight:500;line-height:1.35}
+/* v0.13: Überschriften klar anders als Text, alles größer und kräftiger */
+body{font-size:17px}
+.sec{margin:26px 0 10px;align-items:center}
+.sec .label:first-child{font-family:var(--f-display);font-size:21px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--ink);line-height:1.2}
+.sec .label + .label{font-family:var(--f-body);font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink-2)}
+.sec .mini{font-size:14.5px}
+.block h4{font-family:var(--f-display);font-size:19px;font-weight:700}
+.card .t{font-size:17.5px;font-weight:600;color:var(--ink)}
+.card .s{font-size:15px;font-weight:500}
+.todo{padding:14px 0}
+.todo .tt{font-size:17.5px;font-weight:600;line-height:1.35}
+.todo .meta{font-size:14.5px;font-weight:500;color:var(--ink-2);margin-top:2px}
+.todo .qty{font-weight:800}
+.todo.done .tt{font-weight:500;text-decoration:line-through}
+.drow small{font-size:14.5px}
+.swipehint,.empty{font-size:16px}
+.hint{font-size:15px;line-height:1.45}
+.chk{font-size:16.5px;font-weight:500;padding:10px 0}
+.chk input{width:22px;height:22px}
+.set span{font-size:16px;font-weight:600}.set small{font-size:14px;font-weight:500;color:var(--ink-2)}
+.fld label{font-size:14px;font-weight:600;color:var(--ink-2)}
+.seg button{font-size:15.5px;font-weight:600}
+.chip2{font-size:15px;font-weight:600;padding:8px 14px}
+.chip2 small{font-weight:500;color:var(--ink-3)}
+/* Schriftzug oben rechts */
+.brandbtn b{font-size:25px;font-weight:800;letter-spacing:-.01em}
+.brandbtn img{width:34px}
+/* Einkauf nach Warengruppen */
+.shopgrp{margin:6px 0 14px}
+.sgh{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0 2px;border-bottom:2px solid var(--ink)}
+.sgh span:first-child{font-family:var(--f-display);font-size:19px;font-weight:700}
+.sgn{font-size:13.5px;font-weight:600;color:var(--ink-2)}
+.shopgrp.alldone .sgh{border-bottom-color:var(--ok)}.shopgrp.alldone .sgn{color:var(--ok)}
+.shopgrp .todo:last-child{border-bottom:0}
+/* Mirella merkt */
+.insight{background:color-mix(in srgb,#2E7BBF 7%,#fff);border:1px solid color-mix(in srgb,#2E7BBF 30%,#fff);border-radius:16px;padding:12px 14px;margin:18px 0 6px}
+.insight .ih{font-family:var(--f-display);font-weight:700;font-size:18px;margin-bottom:4px}
+.insight p{margin:4px 0;font-size:15.5px;font-weight:500}
+/* Runde Geburtstage, Eingabe-Warnungen */
+.card.round{border-color:#C2416B;background:color-mix(in srgb,#C2416B 5%,#fff)}
+.fwarn{color:var(--late);font-size:14px;font-weight:600;margin-top:4px}
+a.call{display:grid;place-items:center;text-decoration:none}

@@ -22,7 +22,7 @@ const contractFields = (arten, namePh) => [
   { k: "start", l: "Beginn", t: "date", half: 1 }, { k: "end", l: "Mindestlaufzeit bis", t: "date", half: 1 },
   { k: "renew", l: "Danach verlängert sich der Vertrag", t: "sel", o: RENEW, def: 12 },
   { k: "noticeN", l: "Kündigungsfrist", t: "num", half: 1, ph: "z. B. 3" }, { k: "noticeU", l: "Einheit", t: "sel", o: NOTICE_U, half: 1, def: "Monate" },
-  { k: "lead", l: "Erinnern vor Ablauf der Frist", t: "sel", o: [[14, "2 Wochen vorher"], [30, "4 Wochen vorher"], [60, "2 Monate vorher"]], def: () => S.settings.contractLead },
+  { k: "lead", l: "Erinnern vor Ablauf der Frist", t: "sel", o: [[14, "2 Wochen vorher"], [30, "1 Monat vorher"], [60, "2 Monate vorher"], [90, "3 Monate vorher"]], def: () => S.settings.contractLead },
   { k: "hotline", l: "Hotline / Kontakt", t: "tel", half: 1 }, { k: "web", l: "Kundenportal / Kündigungslink", half: 1, ph: "https://…" },
   { k: "note", l: "Notiz", t: "area" }
 ];
@@ -517,7 +517,7 @@ Object.assign(SETS, {
     ${catList().map(c => `<div class="set"><span><i class="pdot" style="background:${S.settings.catColor && S.settings.catColor[c] != null ? catColor(c) : "var(--line)"}"></i> ${esc(c)}${(S.settings.cats || []).includes(c) ? ` <button class="xbtn" data-act="delcat" data-c="${esc(c)}" aria-label="${esc(c)} entfernen">✕</button>` : ""}</span><input class="setin" inputmode="decimal" data-budget="${esc(c)}" value="${bud[c] ? String(bud[c]).replace(".", ",") : ""}" placeholder="Budget €"></div>`).join("")}
     <form class="shoprow" data-form="cat" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Eigene Kategorie, z. B. Haustier" aria-label="Neue Kategorie"><button class="btn pri" style="flex:none">+</button></form>`;
   },
-  vertrag: () => `${setSel("contractLead", "Vor Kündigungsfristen erinnern", "gilt für neue Verträge", [[14, "2 Wochen vorher"], [30, "4 Wochen vorher"], [60, "2 Monate vorher"]])}${setTgl("nerv.fristen", "Nerv-Modus für Fristen", "meldet sich, bis du es erledigt hast")}`,
+  vertrag: () => `${setSel("contractLead", "Vor Kündigungsfristen erinnern", "gilt für neue Verträge", [[14, "2 Wochen vorher"], [30, "1 Monat vorher"], [60, "2 Monate vorher"], [90, "3 Monate vorher"]])}${setTgl("nerv.fristen", "Nerv-Modus für Fristen", "meldet sich, bis du es erledigt hast")}`,
   gesund: () => `${setH("Supplements")}${setTxt("suppMorning", "Morgens", "Uhrzeit der Erinnerung", "07:30", "time")}${setTxt("suppNoon", "Mittags", "", "12:30", "time")}${setTxt("suppEvening", "Abends", "", "21:00", "time")}${setTgl("nerv.supplements", "Nerv-Modus Supplements", "bis abgehakt")}`,
   haus: () => `${setSel("washMin", "„Waschmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"]])}<p class="hint">Sag einfach „Waschmaschine läuft“ ins Mikrofon.</p>`,
   auto: () => `${setSel("huLead", "Vor HU/TÜV erinnern", "", [[14, "2 Wochen vorher"], [28, "4 Wochen vorher"], [42, "6 Wochen vorher"]])}`,

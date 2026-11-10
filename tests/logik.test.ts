@@ -58,3 +58,42 @@ test("Hilfe: Frage findet die passende Antwort", () => {
   const list = [{ q: "Wie stelle ich einen Wecker?", k: ["wecker", "aufstehen"] }, { q: "Wie lege ich einen Brief ab?", k: ["brief", "scan"] }];
   assert.equal(L.helpMatch("wie geht der Wecker", list)[0].q, "Wie stelle ich einen Wecker?");
 });
+test("Einkauf: Warengruppen und übliche Einheiten", () => {
+  assert.equal(L.shopGroup("Bananen").n, "Obst & Gemüse");
+  assert.equal(L.shopGroup("Reis").n, "Vorrat & Konserven");
+  assert.equal(L.shopGroup("Eier").n, "Milch, Käse & Eier");
+  assert.equal(L.shopGroup("Tomatenmark").n, "Vorrat & Konserven");
+  assert.deepEqual(L.defUnit("Eier"), { qty: 1, unit: "Pck." });
+  assert.deepEqual(L.defUnit("Butter"), { qty: 1, unit: "Stk." });
+  assert.deepEqual(L.defUnit("eier", { eier: { qty: 1, unit: "Stk." } }), { qty: 1, unit: "Stk." });
+  assert.equal(L.defUnit("Gin"), null);
+});
+test("Einkaufszettel: Zeilen werden Artikel", () => {
+  assert.deepEqual(L.parseShopLines("Einkauf\n- 2 Liter Milch\n• Butter\n|||\nbananen").map(x => x.t), ["Milch", "Butter", "Bananen"]);
+});
+test("E-Mail und Telefon prüfen", () => {
+  assert.match(L.checkEmail("felix@gmial.com"), /gmail\.com/);
+  assert.match(L.checkEmail("felix.gmx.de"), /@/);
+  assert.equal(L.checkEmail("felix@web.de"), null);
+  assert.match(L.checkTel("+49", "151 234"), /Handynummer/);
+  assert.equal(L.checkTel("+49", "151 23456789"), null);
+});
+test("Runde Geburtstage: ein halbes Jahr vorher", () => {
+  assert.equal(L.roundBday("1997-03-02", "2026-11-10").age, 30);
+  assert.equal(L.roundBday("1996-03-02", "2026-11-10"), null);
+  assert.equal(L.roundBday("1997-08-02", "2026-11-10"), null); // erst in > 6 Monaten
+});
+test("Anrufplan: höchstens 3 pro Werktag", () => {
+  const p = L.callPlan(["a", "b", "c", "d", "e"], "2026-11-10", 3);
+  assert.deepEqual([p.a, p.c, p.d], ["2026-11-10", "2026-11-10", "2026-11-11"]);
+  const f = L.callPlan(["a", "b"], "2026-11-13", 3, 3); // Freitag, schon 3 erledigt -> Montag
+  assert.equal(f.a, "2026-11-16");
+});
+test("PC-Sicherung: ZIP und Excel sind gültig", () => {
+  const ZX = createRequire(import.meta.url)("../app/export.js");
+  const z = ZX.zip([{ name: "a.txt", data: "Hallo" }]);
+  assert.equal(z[0], 0x50); assert.equal(z[1], 0x4b);
+  assert.equal(ZX.crc32(new TextEncoder().encode("Hallo")), 0x78b31ed5);
+  assert.equal(ZX.fname('Rechnung: Zahn/reinigung?'), "Rechnung Zahn reinigung");
+  assert.ok(ZX.xlsx([{ name: "Kontakte", rows: [["Name"], ["Tim"]] }]).length > 500);
+});

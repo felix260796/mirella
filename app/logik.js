@@ -212,12 +212,97 @@ const L = (() => {
   }
   const mapPt = (H, u, v) => { const z = H[6] * u + H[7] * v + 1; return [(H[0] * u + H[1] * v + H[2]) / z, (H[3] * u + H[4] * v + H[5]) / z]; };
 
+
+  /* ---------- Einkauf: Warengruppen und übliche Einheiten ---------- */
+  const SHOPGROUPS = [
+    ["Obst & Gemüse", "🥦", /apfel|äpfel|banane|birne|orange|zitrone|limette|traube|beere|kiwi|mango|ananas|melone|pfirsich|nektarine|pflaume|obst|gemüse|tomate(?!nmark)|gurke|paprika|salat|rucola|spinat|karotte|möhre|zwiebel|knoblauch|kartoffel|zucchini|aubergine|brokkoli|blumenkohl|kohl|lauch|porree|sellerie|pilz|champignon|avocado|ingwer|kräuter|petersilie|basilikum|schnittlauch|radieschen|mais|erbsen|bohnen|spargel|kürbis|süßkartoffel/],
+    ["Brot & Backwaren", "🥖", /brot|brötchen|semmel|brezel|breze|toast|baguette|croissant|kuchen|laugen|knäcke|wrap|tortilla/],
+    ["Milch, Käse & Eier", "🧀", /milch|butter|käse|kaese|joghurt|jogurt|quark|sahne|schmand|frischkäse|mozzarella|parmesan|feta|ei$|eier|skyr|kefir|buttermilch|margarine|creme fraiche|crème/],
+    ["Fleisch, Wurst & Fisch", "🥩", /fleisch|hack|schwein|rind|lamm|gulasch|schnitzel|steak|hähnchen|hühnchen|huhn|pute|wurst|salami|schinken|speck|würstchen|bratwurst|lachs|fisch|thunfisch|garnele|aufschnitt|leberkäs/],
+    ["Tiefkühl", "🧊", /tiefkühl|^tk |tk-|pizza|^eis$|speiseeis|eiscreme|pommes|fischstäbchen/],
+    ["Getränke", "🥤", /wasser|sprudel|saft|cola|limo|bier|wein|sekt|schorle|getränk|eistee|energy|spezi|fanta|sprite|^mate$|club-mate/],
+    ["Süßes & Snacks", "🍫", /schokolade|schoko|chips|keks|gummibär|bonbon|riegel|nüsse|nuss|erdnuss|salzstangen|popcorn|süßigkeit/],
+    ["Vorrat & Konserven", "🥫", /nudel|pasta|spaghetti|reis|mehl|zucker|salz|pfeffer|gewürz|öl|essig|ketchup|senf|mayo|soße|sauce|brühe|dose|konserve|linsen|kichererbsen|haferflocken|müsli|cornflakes|honig|marmelade|nutella|aufstrich|kaffee|tee|kakao|backpulver|hefe|passierte|tomatenmark|pesto/],
+    ["Drogerie & Hygiene", "🧴", /zahnpasta|zahnbürste|shampoo|duschgel|seife|deo|creme|rasier|toilettenpapier|klopapier|taschentuch|watte|pflaster|tampon|binde|windel|sonnencreme|lotion|haar/],
+    ["Haushalt & Putzen", "🧽", /spülmittel|spül|tabs|waschmittel|weichspüler|reiniger|putz|schwamm|müllbeutel|mülltüte|küchenrolle|alufolie|frischhaltefolie|backpapier|batterie|glühbirne|kerze|serviette|zewa/]
+  ];
+  function shopGroup(t) {
+    const s = " " + String(t || "").toLowerCase() + " ";
+    for (const [n, ic, re] of SHOPGROUPS) if (re.test(s.trim())) return { n, ic };
+    return { n: "Sonstiges", ic: "🛒" };
+  }
+  const DEFUNIT = [[/^eier$/, 1, "Pck."], [/^butter$/, 1, "Stk."], [/milch$/, 1, "l"], [/^(mehl|zucker|nudeln|spaghetti|reis|kaffee|toast|käse|aufschnitt|salami|schinken|haferflocken|müsli)$/, 1, "Pck."], [/^(joghurt|sahne|quark|schmand|frischkäse|skyr)$/, 1, "Becher"], [/^(brot|gurke|paprika|zucchini|avocado|mozzarella|baguette|salat|eisbergsalat|zitrone)$/, 1, "Stk."], [/^(bananen|tomaten|äpfel|kartoffeln|zwiebeln|möhren|karotten)$/, 1, "kg"], [/^(wasser|sprudel)$/, 1, "Kasten"], [/^(bier)$/, 1, "Kasten"], [/^(wein|saft|cola|öl|olivenöl)$/, 1, "Fl."], [/^(schokolade)$/, 1, "Tafel"], [/^(chips|gummibärchen)$/, 1, "Tüte"], [/^(küchenrolle|alufolie|frischhaltefolie|backpapier)$/, 1, "Rolle"], [/^(toilettenpapier|klopapier|taschentücher|spülmaschinentabs|müllbeutel)$/, 1, "Pck."], [/^(brötchen|semmeln)$/, 6, "Stk."]];
+  function defUnit(t, learned) {
+    const k = String(t || "").trim().toLowerCase();
+    if (learned && learned[k]) return learned[k];
+    for (const [re, q, u] of DEFUNIT) if (re.test(k)) return { qty: q, unit: u };
+    return null;
+  }
+
+
+  /* Einkaufszettel-Foto: Zeilen in Artikel zerlegen */
+  function parseShopLines(text) {
+    const out = [], seen = new Set();
+    String(text || "").split(/\r?\n|;|,(?!\d)/).forEach(line => {
+      let x = line.replace(/^[\s\-–•*·•□☐☑✓✔>#.)\]]+/, "").replace(/[|_~^"“”„]/g, " ").replace(/\s+/g, " ").trim();
+      if (x.length < 2 || !/[a-zäöüß]{2,}/i.test(x)) return;
+      if (/^(einkauf|einkaufsliste|liste|rewe|edeka|aldi|lidl|summe|gesamt|datum|\d{1,2}\.\d{1,2})/i.test(x)) return;
+      const letters = (x.match(/[a-zäöüß]/gi) || []).length; if (letters / x.length < 0.5) return;
+      const pq = parseQty(x), k = pq.t.toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); out.push(pq);
+    });
+    return out.slice(0, 40);
+  }
+  /* ---------- Eingaben prüfen ---------- */
+  const MAILFIX = { "gmial.com": "gmail.com", "gmai.com": "gmail.com", "gmail.de": "gmail.com", "gamil.com": "gmail.com", "gmx.dee": "gmx.de", "gmx.ed": "gmx.de", "gmc.de": "gmx.de", "web.dee": "web.de", "wbe.de": "web.de", "hotmial.com": "hotmail.com", "hotmail.de": null, "outlok.com": "outlook.com", "outlook.de": null, "icloud.de": "icloud.com", "iclod.com": "icloud.com", "icoud.com": "icloud.com", "yahooo.com": "yahoo.com", "t-onlien.de": "t-online.de", "tonline.de": "t-online.de" };
+  function checkEmail(e) {
+    const v = String(e || "").trim(); if (!v) return null;
+    if (/\s/.test(v)) return "Die E-Mail enthält ein Leerzeichen.";
+    const m = v.match(/^[^@]+@([^@]+)$/); if (!m) return v.includes("@") ? "Die E-Mail hat mehr als ein @." : "In der E-Mail fehlt das @.";
+    const dom = m[1].toLowerCase();
+    if (!/^[a-z0-9äöü-]+(\.[a-z0-9äöü-]+)*\.[a-z]{2,}$/.test(dom)) return "Nach dem @ fehlt etwas, z. B. „.de“ oder „.com“.";
+    if (/\.\./.test(v) || /^\.|\.@/.test(v)) return "Die E-Mail hat einen Punkt an einer falschen Stelle.";
+    if (MAILFIX[dom]) return `Meintest du „${v.split("@")[0]}@${MAILFIX[dom]}“?`;
+    return null;
+  }
+  function checkTel(prefix, num) {
+    const n = String(num || "").replace(/[^\d]/g, ""); if (!n) return null;
+    if (/[a-z]/i.test(num)) return "In der Nummer stehen Buchstaben.";
+    if (n.length < 5) return "Die Nummer ist zu kurz.";
+    if ((prefix + n).replace(/\D/g, "").length > 15) return "Die Nummer ist zu lang.";
+    if (prefix === "+49") {
+      if (/^1[5-7]/.test(n) && (n.length < 10 || n.length > 11)) return "Eine Handynummer (015x, 016x, 017x) hat meist 10 bis 11 Ziffern ohne die 0.";
+      if (/^0/.test(n)) return null;
+    }
+    return null;
+  }
+
+  /* ---------- Runde Geburtstage ---------- */
+  function roundBday(bday, t, lead = 183) {
+    const y = +String(bday || "").slice(0, 4); if (!y || y < 1900) return null;
+    const md = bday.slice(5); let ny = +t.slice(0, 4); if (`${ny}-${md}` < t) ny++;
+    const next = `${ny}-${md}`, age = ny - y, d = diffDays(t, next);
+    if ((age % 10 === 0 || age === 18) && age > 0 && d <= lead) return { date: next, age, days: d };
+    return null;
+  }
+
+  /* ---------- Anrufplan: höchstens N pro Tag, nur Mo–Fr ---------- */
+  function callPlan(ids, t, max, doneToday = 0, extra = 0) {
+    const out = {}; let day = t, cap = Math.max(0, max - doneToday) + extra, used = 0;
+    const work = d => { const w = D(d).getDay(); return w > 0 && w < 6; };
+    if (!work(day)) cap = extra;
+    for (const id of ids) {
+      while (used >= cap) { day = addDays(day, 1); while (!work(day)) day = addDays(day, 1); cap = max; used = 0; }
+      out[id] = day; used++;
+    }
+    return out;
+  }
+
   /* ---------- Hilfe: „Wie funktioniert …?“ ---------- */
   function helpMatch(q, list) {
     const words = String(q || "").toLowerCase().replace(/[?!.,]/g, " ").split(/\s+/).filter(w => w.length > 2 && !/^(wie|was|wo|geht|das|der|die|den|ich|mit|und|eine?n?|kann|funktioniert|mache|machen|hey|mirella)$/.test(w));
     return list.map(h => ({ h, s: words.reduce((a, w) => a + (h.k.some(k => k.startsWith(w.slice(0, 5)) || w.startsWith(k.slice(0, 5))) ? 2 : 0) + (h.q.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.h);
   }
 
-  return { pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch };
+  return { pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = L;

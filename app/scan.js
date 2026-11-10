@@ -151,7 +151,7 @@ photoForm = function () {
   let f = "";
   if (k === "beleg") f = `<div class="fgrid"><div class="fld"><label for="e-amt">Betrag in €</label><input id="e-amt" inputmode="decimal" placeholder="0,00"></div><div class="fld"><label for="e-date">Datum</label><input id="e-date" type="date" value="${today()}"></div></div><div class="fld"><label for="e-shop">Laden</label><input id="e-shop" placeholder="z. B. REWE"></div><div class="fld"><label for="e-cat">Kategorie</label><select id="e-cat">${catList().map(c => `<option>${esc(c)}</option>`).join("")}</select></div>`;
   if (k === "dokument") f = `<div class="fld"><label for="d-name">Was ist das?</label><input id="d-name" placeholder="z. B. Rechnung Telekom"></div>
-    <div class="fgrid"><div class="fld"><label for="d-area">Bereich</label><select id="d-area">${AREAS.filter(a => a.id !== "wecker").map(a => `<option value="${a.id}"${a.id === defArea ? " selected" : ""}>${esc(a.id === "doku" ? "Allgemein (Dokumente)" : a.n)}</option>`).join("")}</select></div><div class="fld"><label for="d-folder">Art</label><select id="d-folder">${FOLDERS.map(x => `<option>${x}</option>`).join("")}</select></div></div>
+    <div class="fgrid"><div class="fld"><label for="d-area">Bereich</label><select id="d-area">${AREAS.filter(a => a.id !== "wecker").map(a => `<option value="${a.id}"${a.id === defArea ? " selected" : ""}>${esc(a.id === "doku" ? "Allgemein (Dokumente)" : a.n)}</option>`).join("")}</select></div><div class="fld"><label for="d-folder">Art</label><select id="d-folder">${folderOpts("")}</select></div></div>
     <div class="fld"><label for="d-until">Frist / gültig bis (freiwillig)</label><input id="d-until" type="date"></div>
     <label class="tgl" hidden><input type="checkbox" id="d-task"> Aufgabe anlegen: <span id="d-tasktxt"></span></label>`;
   if (k === "zettel") f = `<div class="fld"><label for="z-items">Was steht drauf? Eine Zeile pro Artikel, gern mit Menge</label><textarea id="z-items" placeholder="2 Liter Milch&#10;Brot&#10;500 g Hack"></textarea></div><p class="hint">Tipp: Im Textfeld gedrückt halten und „Text scannen“ wählen, dann liest das iPhone den Zettel selbst ab.</p>`;
@@ -199,8 +199,13 @@ photoSave = async function () {
 /* PDF oder Datei aus der Dateien-App */
 let pdfRef = "";
 async function addDocFile(file) {
-  const id = "ph_" + uid(), refIt = pdfRef && S.items.find(x => x.id === pdfRef); pdfRef = "";
+  const id = "ph_" + uid(), refIt = pdfRef && S.items.find(x => x.id === pdfRef), refT = pdfRef && S.todos.find(x => x.id === pdfRef); pdfRef = "";
   try { await photoPut(id, file); } catch (_) { toast("Datei konnte nicht gespeichert werden"); return; }
+  if (refT) {
+    const g = L.classifyDoc(file.name.replace(/[_-]/g, " "), today());
+    S.docs.push({ id, name: `${refT.t} – ${file.name.replace(/\.[a-z0-9]+$/i, "")}`, area: refT.area || "doku", folder: g.sure > 0 && allFolders().includes(g.type) ? g.type : "Rechnung", until: "", photo: id, created: today(), type: file.type || "application/pdf", ref: refT.id });
+    save(); render(true); todoForm(refT); toast("Dokument hängt jetzt an „" + refT.t + "“"); return;
+  }
   if (refIt) {
     const K = KINDS[refIt.kind], folder = refIt.kind === "versicherung" ? "Versicherung" : refIt.kind === "vertrag" ? "Vertrag" : "Sonstiges";
     S.docs.push({ id, name: `${kindTitle(refIt.kind, refIt)} – ${file.name.replace(/\.[a-z0-9]+$/i, "")}`, area: K.area, folder, until: "", photo: id, created: today(), type: file.type || "application/pdf", ref: refIt.id });
@@ -227,7 +232,7 @@ viewPhoto = async function (id) {
 function docForm(d) {
   openSheet(`<p class="stitle">Dokument</p>
   <div class="fld"><label for="dd-name">Name</label><input id="dd-name" value="${esc(d.name)}"></div>
-  <div class="fgrid"><div class="fld"><label for="dd-area">Bereich</label><select id="dd-area">${AREAS.filter(a => a.id !== "wecker").map(a => `<option value="${a.id}"${a.id === (d.area || "doku") ? " selected" : ""}>${esc(a.id === "doku" ? "Allgemein" : a.n)}</option>`).join("")}</select></div><div class="fld"><label for="dd-folder">Art</label><select id="dd-folder">${[...new Set([...FOLDERS, d.folder || "Sonstiges"])].map(x => `<option${x === d.folder ? " selected" : ""}>${esc(x)}</option>`).join("")}</select></div></div>
+  <div class="fgrid"><div class="fld"><label for="dd-area">Bereich</label><select id="dd-area">${AREAS.filter(a => a.id !== "wecker").map(a => `<option value="${a.id}"${a.id === (d.area || "doku") ? " selected" : ""}>${esc(a.id === "doku" ? "Allgemein" : a.n)}</option>`).join("")}</select></div><div class="fld"><label for="dd-folder">Art</label><select id="dd-folder">${folderOpts(d.folder || "Sonstiges")}</select></div></div>
   <div class="fld"><label for="dd-until">Frist / gültig bis</label><input id="dd-until" type="date" value="${esc(d.until || "")}"></div>
   ${d.text ? `<details class="hint"><summary>Gelesener Text</summary><div style="white-space:pre-wrap;max-height:200px;overflow:auto">${esc(d.text)}</div></details>` : ""}
   <div class="row2"><button class="btn danger" data-act="deldoc" data-id="${d.id}" style="flex:none">Löschen</button><button class="btn" data-act="viewphoto" data-id="${d.photo || ""}">Ansehen</button><button class="btn pri" data-act="savedoc" data-id="${d.id}">Speichern</button></div>`);
@@ -235,6 +240,7 @@ function docForm(d) {
 
 Object.assign(ACT, {
   pickpdf: () => { pdfRef = ""; const f = $("#f-doc"); f.value = ""; f.click(); },
+  docfortodo: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; photoStart("dokument", t.area || "doku"); photoCtx.ref = t.id; },
   pdffor: el => { pdfRef = el.dataset.id; const f = $("#f-doc"); f.value = ""; f.click(); },
   scanok: () => scanDone(true),
   scanskip: () => scanDone(false),
@@ -248,3 +254,23 @@ Object.assign(ACT, {
 document.addEventListener("change", e => { if (e.target.id === "f-doc" && e.target.files[0]) addDocFile(e.target.files[0]); });
 HOOKS.heuteTop.push(() => tmpGet() ? `<div class="card due" role="button" tabindex="0" data-act="resumephoto"><span class="av">📷</span><span style="min-width:0"><div class="t">Foto noch nicht abgelegt</div><div class="s">Antippen, dann geht es genau da weiter</div></span></div>` : "");
 HOOKS.search.push(ql => S.docs.filter(d => ((d.name || "") + " " + (d.folder || "") + " " + (d.text || "")).toLowerCase().includes(ql)).map(d => ({ g: "Dokumente", ic: "📄", t: d.name, s: [areaById(d.area || "doku") ? areaById(d.area || "doku").n : "", d.folder, fmtDate(d.created)].filter(Boolean).join(" · "), act: "editdoc", id: d.id })));
+
+/* ---------- Einkaufszettel fotografieren: Mirella liest die Artikel ---------- */
+let shopScan = [];
+async function shopPhotoRead(file) {
+  openSheet(`<p class="stitle">Einkaufszettel</p><p class="hint" id="sz-state">Mirella liest deinen Zettel …</p><div id="sz-list"></div>`);
+  try {
+    const T = await ocrLib();
+    const r = await T.recognize(file, "deu", { logger: m => { if (m.status === "recognizing text" && $("#sz-state")) $("#sz-state").textContent = `Mirella liest deinen Zettel … ${Math.round(m.progress * 100)} %`; } });
+    shopScan = L.parseShopLines(r && r.data && r.data.text);
+  } catch (e) { $("#sz-state") && ($("#sz-state").textContent = "Lesen hat nicht geklappt (" + (e.message || "Fehler") + "). Tipp die Artikel bitte ein."); return; }
+  if (!$("#sz-list")) return;
+  if (!shopScan.length) { $("#sz-state").textContent = "Ich konnte keine Artikel erkennen. Am besten gerade und hell fotografieren, eine Sache pro Zeile."; return; }
+  $("#sz-state").textContent = `Ich habe ${shopScan.length} Artikel erkannt. Haken weg bei allem, was falsch ist:`;
+  $("#sz-list").innerHTML = shopScan.map((x, i) => `<label class="chk"><input type="checkbox" data-sz="${i}" checked><span>${x.qty ? `<b class="qty">${esc(L.qtyLabel(x))}</b> ` : ""}${esc(x.t)} <small style="color:var(--ink-3)">${esc(L.shopGroup(x.t).n)}</small></span></label>`).join("") + `<button class="btn pri" data-act="shopscanadd" style="width:100%;margin-top:10px">Auf die Einkaufsliste</button>`;
+}
+Object.assign(ACT, {
+  shopphoto: () => { const f = $("#f-shopimg"); f.value = ""; f.click(); },
+  shopscanadd: () => { let n = 0; document.querySelectorAll("[data-sz]").forEach(el => { if (!el.checked) return; const x = shopScan[+el.dataset.sz]; if (addShop(x.t, x.qty, x.unit)) n++; const k = x.t.trim(); S.shopFreq[k] = (S.shopFreq[k] || 0) + 0.5; }); save(); closeSheet(); render(true); toast(`${n} Artikel vom Zettel übernommen`); }
+});
+document.addEventListener("change", e => { if (e.target.id === "f-shopimg" && e.target.files[0]) shopPhotoRead(e.target.files[0]); });

@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.12";
+const VERSION = "0.13";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -38,6 +38,10 @@ const REPS = ["nie", "täglich", "wöchentlich", "alle 2 Wochen", "monatlich", "
 const BASECATS = ["Lebensmittel & Supermarkt", "Getränke", "Bäcker & Metzger", "Restaurant & Café", "Tanken & Auto", "Kleidung", "Drogerie & Gesundheit", "Haushalt & Wohnen", "Hobby & Sport", "Freizeit & Ausgehen", "Reisen", "Geschenke", "Technik & Abos", "Sonstiges"];
 const catList = () => [...new Set([...BASECATS, ...((S && S.settings.cats) || []), ...((S && S.expenses.map(e => e.cat)) || [])].filter(Boolean))];
 const FOLDERS = ["Brief", "Rechnung", "Bescheid", "Vertrag", "Versicherung", "Kontoauszug", "Lohnabrechnung", "Steuer", "Ausweis & Urkunde", "Garantie & Kaufbeleg", "Gesundheit", "Sonstiges"];
+/* Ordner: feste plus eigene (S.folders); „＋ Eigener Ordner …“ legt einen neuen an */
+const allFolders = () => [...new Set([...FOLDERS, ...(S.folders || [])])];
+const folderOpts = sel => [...new Set([...allFolders(), sel || "Sonstiges"])].filter(Boolean).map(x => `<option${x === sel ? " selected" : ""}>${esc(x)}</option>`).join("") + '<option value="__new">＋ Eigener Ordner …</option>';
+document.addEventListener("change", e => { const el = e.target; if (!el.matches || !el.matches("#d-folder,#dd-folder") || el.value !== "__new") return; const n = (prompt("Name des neuen Ordners, z. B. „Zahnarzt“ oder „Steuer 2026“") || "").trim(); if (!n) { el.selectedIndex = 0; return; } S.folders = S.folders || []; if (!allFolders().includes(n)) S.folders.push(n); save(); el.innerHTML = folderOpts(n); el.dataset.touched = 1; });
 const IC = {
   auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M3 16h18v3H3zM7 19v2M17 19v2"/><circle cx="7.5" cy="13.5" r="1"/><circle cx="16.5" cy="13.5" r="1"/></svg>',
   geld: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 6.5A7 7 0 1 0 17 17.5"/><path d="M4 10h9M4 14h9"/></svg>',
@@ -78,11 +82,11 @@ function blank() {
       cats: [], wxName: "", wxLat: null, wxLon: null, showBrief: 1, showWx: 1,
       nerv: { anrufe: 1, aufgaben: 1, geburtstage: 1, fristen: 1, supplements: 1 }, nervEvery: 30, nervSound: 1,
       calFilter: { geb: 1, erin: 1, todo: 1, anruf: 1 }, calStart: "monat",
-      income: 0, budgets: {}, contractLead: 30, huLead: 28, washMin: 120, suppMorning: "07:30", suppNoon: "12:30", suppEvening: "21:00",
+      income: 0, budgets: {}, contractLead: 30, huLead: 28, pcEvery: 7, pcLast: "", washMin: 120, suppMorning: "07:30", suppNoon: "12:30", suppEvening: "21:00",
       homeAddr: "", homeLat: null, homeLon: null, prepMin: 30, bufMin: 10, alarmCount: 3, alarmGap: 5, gmapsKey: ""
     },
     briefings: [],
-    people: [], todos: [], expenses: [], docs: [], notes: [], items: [], alarms: [], shopTpl: [], shopFreq: {}, groups: BASEGROUPS.slice()
+    people: [], todos: [], expenses: [], docs: [], notes: [], items: [], alarms: [], shopTpl: [], shopFreq: {}, shopUnits: {}, folders: [], groups: BASEGROUPS.slice()
   };
 }
 let S;
@@ -154,6 +158,19 @@ function nextDue(p) {
   if (p.snooze && p.snooze > due) due = p.snooze;
   return due;
 }
+/* Anrufplan: höchstens maxCalls pro Werktag; Überzählige rutschen auf die nächsten Werktage. „Vorziehen“ holt weitere auf heute. */
+function callsToday() { const t = today(); return S.people.filter(p => (p.calls || []).some(c => c.d === t)).length; }
+function callPlanMap() {
+  const t = today(), due = S.people.filter(p => { const d = nextDue(p); return d && d <= t; }).sort((a, b) => nextDue(a) < nextDue(b) ? -1 : 1);
+  const pull = S.pull && S.pull.d === t ? S.pull.ids : [], map = {};
+  const rest = due.filter(p => !pull.includes(p.id));
+  Object.assign(map, L.callPlan(rest.map(p => p.id), t, +S.settings.maxCalls || 3, Math.max(0, callsToday() - pull.filter(id => S.people.some(p => p.id === id && (p.calls || []).some(c => c.d === t))).length)));
+  pull.forEach(id => { const p = S.people.find(x => x.id === id); if (p && !(p.calls || []).some(c => c.d === t && c.ok)) map[id] = t; });
+  return map;
+}
+function callsForToday() { const m = callPlanMap(), t = today(); return S.people.filter(p => m[p.id] === t).sort((a, b) => (nextDue(a) || "9999") < (nextDue(b) || "9999") ? -1 : 1); }
+function pullPool() { const m = callPlanMap(), t = today(); return S.people.filter(p => !(p.calls || []).some(c => c.d === t)).filter(p => m[p.id] ? m[p.id] > t : (nextDue(p) && nextDue(p) > t && diffDays(t, nextDue(p)) <= 21)).sort((a, b) => (m[a.id] || nextDue(a)) < (m[b.id] || nextDue(b)) ? -1 : 1); }
+function planLabel(p) { const m = callPlanMap()[p.id]; if (!m) return null; const n = diffDays(today(), m); return n <= 0 ? "heute" : n === 1 ? "morgen" : fmtDate(m).replace(/^(\w+)\.?,? /, "$1. "); }
 function callState(p) { const d = nextDue(p); if (!d) return "none"; const n = diffDays(today(), d); return n < 0 ? "late" : n === 0 ? "due" : n <= 3 ? "soon" : "ok"; }
 function nextBirthday(p) {
   if (!p.bday) return null;
@@ -206,14 +223,15 @@ function toggleTodo(id) {
 function addShop(t, qty, unit) {
   const pq = qty != null ? { qty, unit: unit || "", t: cap(String(t).trim()) } : L.parseQty(t);
   const k = (pq.t || "").trim().toLowerCase(); if (!k) return false;
-  const ex = S.todos.find(x => x.list === "einkauf" && !x.done && x.t.trim().toLowerCase() === k);
+  const ex = S.todos.find(x => x.list === "einkauf" && !x.done && !x.arch && x.t.trim().toLowerCase() === k);
   if (ex) { if (!pq.qty) return false; ex.qty = (+ex.qty || (ex.unit ? 0 : 1)) + pq.qty; if (pq.unit) ex.unit = pq.unit; return true; }
+  if (!pq.qty && !pq.unit) { const du = L.defUnit(pq.t, S.shopUnits); if (du) { pq.qty = du.qty; pq.unit = du.unit; } }
   S.todos.push({ id: uid(), t: pq.t, qty: pq.qty || null, unit: pq.unit || "", list: "einkauf", done: false, created: today() }); return true;
 }
 function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const w1 = new Date(d.getFullYear(), 0, 4, 12); return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
 
 /* ---------- Zustand ---------- */
-let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null;
+let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0;
 { const t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); selDate = today(); }
 
 /* ---------- Bausteine ---------- */
@@ -227,7 +245,8 @@ function subtop(backLabel, backAct, right = "") {
   return `<div class="top"><button class="back" data-act="${backAct}" style="margin:0">‹ ${esc(backLabel)}</button><span class="tright">${right}<button class="brandbtn" data-act="drawer" aria-label="Menü öffnen"><b>Mirella</b><img src="./logo-final.svg" alt=""></button></span></div>`;
 }
 function pill(st, p) {
-  if (st === "late") return '<span class="pill late">überfällig</span>';
+  if ((st === "late" || st === "due") && p) { const l = planLabel(p); if (l && l !== "heute") return `<span class="pill">${esc(l)}</span>`; }
+  if (st === "late") return '<span class="pill late">heute · überfällig</span>';
   if (st === "due") return '<span class="pill acc">heute</span>';
   if (st === "soon") return '<span class="pill">bald</span>';
   return p ? `<span class="pill">${esc(cycLabel(p.cyc))}</span>` : "";
@@ -235,7 +254,8 @@ function pill(st, p) {
 function personCard(p, withCall) {
   const st = callState(p), due = nextDue(p);
   const sub = st === "none" ? (p.group || "") : `${cycLabel(p.cyc)} · zuletzt ${agoText(lastCall(p))}`;
-  return `<div class="card ${withCall ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(sub)}</div></span>${withCall ? `<button class="call" aria-label="${esc(fullName(p))} anrufen" data-act="call" data-id="${p.id}">${IC.call}</button>` : (st === "none" ? "" : pill(st, p))}</div>`;
+  const callBtn = p.tel ? `<a class="call" href="tel:${esc(p.tel.replace(/[^\d+]/g, ""))}" aria-label="${esc(fullName(p))} anrufen: ${esc(p.tel)}" data-act="dial" data-id="${p.id}">${IC.call}</a>` : `<button class="call" aria-label="Nummer für ${esc(fullName(p))} eintragen" data-act="call" data-id="${p.id}">${IC.call}</button>`;
+  return `<div class="card ${withCall ? "due" : ""}" role="button" tabindex="0" data-act="${withCall ? "callmenu" : "person"}" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(withCall && p.tel ? p.tel + " · " + sub : sub)}</div></span>${withCall ? callBtn : (st === "none" ? "" : pill(st, p))}</div>`;
 }
 function todoRow(t) {
   const pr = !t.done && prioOf(t), shop = t.list === "einkauf", q = shop ? L.qtyLabel(t) : "";
@@ -255,8 +275,8 @@ const R = {
   heute() {
     const t = today(), d = new Date(), h = d.getHours();
     const greet = h < 11 ? "Guten Morgen" : h < 17 ? "Hallo" : "Guten Abend";
-    const dueCalls = S.people.filter(p => ["late", "due"].includes(callState(p))).sort((a, b) => nextDue(a) < nextDue(b) ? -1 : 1);
-    const shownCalls = dueCalls.slice(0, S.settings.maxCalls);
+    const dueCalls = callsForToday();
+    const shownCalls = dueCalls, doneCalls = callsToday(), pool = pullPool();
     const leave = S.todos.filter(x => x.list === "todo" && !x.done && x.trig === "verlassen");
     const dueTodos = S.todos.filter(x => x.list === "todo" && !x.done && x.trig !== "verlassen" && ((x.date && x.date <= t) || (+x.prio === 1 && !x.date))).sort((a, b) => (a.date + (a.time || "")) < (b.date + (b.time || "")) ? -1 : 1);
     const bdays = S.people.map(p => [p, nextBirthday(p)]).filter(([, b]) => b && diffDays(t, b) <= S.settings.giftLead).sort((a, b) => a[1] < b[1] ? -1 : 1);
@@ -280,12 +300,16 @@ const R = {
       h2 += `<div class="block"><h4>So fängst du an</h4><ul><li><b>Kontakte:</b> unten auf „Kontakte“ und dann auf +, oder in den Einstellungen deine Kontakte als vCard importieren.</li><li><b>Sprechen:</b> der runde Knopf unten. Beispiele: „Erinnere mich morgen um 9 an die Steuer“, „Hab mit Tim telefoniert“, „Butter und Eier auf die Einkaufsliste“.</li><li><b>Foto:</b> die Kamera oben rechts, für Belege, Dokumente oder Einkaufszettel.</li><li><b>Mirella</b> oben rechts öffnet alle Bereiche. Das <b>Logo links</b> öffnet die Einstellungen der jeweiligen Seite.</li><li><b>Lupe</b> oben: alles durchsuchen oder Mirella fragen, wie etwas geht.</li></ul></div>`;
     }
     if (leave.length) h2 += `<div class="sec"><span class="label">Bevor du losgehst</span></div><div class="morning">${leave.map(x => `<label class="chk"><input type="checkbox" data-act="toggle" data-id="${x.id}"><span>${esc(x.t)}</span></label>`).join("")}</div>`;
-    if (dueCalls.length) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length} fällig${dueCalls.length > shownCalls.length ? ", heute max. " + S.settings.maxCalls : ""}</span></div>${shownCalls.map(p => personCard(p, true)).join("")}${dueCalls.length > shownCalls.length ? `<button class="mini" data-act="go" data-v="menschen">${dueCalls.length - shownCalls.length} weitere in „Kontakte“</button>` : ""}`;
+    if (dueCalls.length || doneCalls) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length ? dueCalls.length + " heute" : ""}${doneCalls ? (dueCalls.length ? " · " : "") + doneCalls + " erledigt" : ""}</span></div>${dueCalls.map(p => personCard(p, true)).join("")}${!dueCalls.length ? `<div class="swipehint" style="text-align:left">Für heute alle Anrufe geschafft. 👍</div>` : ""}${pool.length && dueCalls.length < 2 ? `<button class="btn" data-act="pullcalls" style="width:100%;margin-top:6px">Weitere Anrufe vorziehen (${Math.min(pool.length, +S.settings.maxCalls || 3)} von ${pool.length})</button>` : ""}`;
     if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : "in " + n + " Tagen · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
+    const rounds = S.people.map(p => [p, L.roundBday(p.bday, t)]).filter(([p, r]) => r && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
+    if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
     if (dueTodos.length) h2 += `<div class="sec"><span class="label">Aufgaben</span><span class="label">${dueTodos.length}</span></div>${dueTodos.sort(byPrio).map(todoRow).join("")}`;
     h2 += HOOKS.heute.map(f => f()).join("");
     if (asks.length) h2 += `<div class="sec"><span class="label">Nachfragen</span></div>${asks.slice(0, 5).map(([p, a]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(a.t)}</div></span></div>`).join("")}`;
     if (docs.length) h2 += `<div class="sec"><span class="label">Dokumente laufen ab</span></div>${docs.map(x => `<div class="card" role="button" tabindex="0" data-act="area" data-id="doku"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(x.name)}</div><div class="s">gültig bis ${esc(fmtDate(x.until))}</div></span>${x.until < t ? '<span class="pill late">abgelaufen</span>' : '<span class="pill">bald</span>'}</div>`).join("")}`;
+    const pcE = +S.settings.pcEvery, pcL = S.settings.pcLast;
+    if (pcE && (S.people.length || S.docs.length) && (!pcL || diffDays(pcL, t) >= pcE)) h2 += `<div class="card" role="button" tabindex="0" data-act="pcbackup"><span class="av">💾</span><span style="min-width:0"><div class="t">PC-Sicherung ${pcL ? "fällig" : "einrichten"}</div><div class="s">${pcL ? "zuletzt " + esc(relDate(pcL)) : "Excel + alle PDFs in deinen OneDrive-Ordner"} · antippen</div></span></div>`;
     if (shop) h2 += `<div class="sec"><span class="label">Einkaufsliste</span></div><div class="card" role="button" tabindex="0" data-act="shoplist"><span class="av">🛒</span><span><div class="t">${shop} ${shop === 1 ? "Sache" : "Sachen"} offen</div><div class="s">Antippen zum Einkaufen</div></span></div>`;
     return h2;
   },
@@ -321,13 +345,15 @@ const R = {
   todos() {
     const isShop = todoList === "einkauf";
     const all = S.todos.filter(t => t.list === todoList);
-    const open = all.filter(t => !t.done).concat(!isShop && typeof suppTodos === "function" ? suppTodos() : []).sort((a, b) => ((a.date || "9999") + (a.time || "")) < ((b.date || "9999") + (b.time || "")) ? -1 : 1).sort(byPrio);
-    const done = all.filter(t => t.done).sort((a, b) => (a.doneAt || "") < (b.doneAt || "") ? 1 : -1);
-    return `${topbar("To-dos")}<div class="seg"><button data-act="todolist" data-l="todo" aria-pressed="${!isShop}">Aufgaben</button><button data-act="todolist" data-l="einkauf" aria-pressed="${isShop}">Einkaufsliste</button></div>
-    ${isShop ? `<form class="shoprow" data-form="shop" style="margin-bottom:8px"><input class="search" id="shopin" style="margin:0" placeholder="z. B. 2 Liter Milch, Butter" aria-label="Artikel" enterkeyhint="done"><button class="btn pri" style="flex:none">+</button></form>` : ""}
-    ${open.length ? open.map(t => t.supp ? suppTodoRow(t) : todoRow(t)).join("") : empty(isShop ? "Die Einkaufsliste ist leer." : "Keine offenen Aufgaben. Neu per + oder per Mikrofon.")}
-    ${isShop ? shopExtras(open) : ""}
-    ${done.length ? `<div class="sec"><button class="mini" data-act="showdone">${showDone ? "Erledigte ausblenden" : "Erledigte zeigen (" + done.length + ")"}</button>${isShop ? `<button class="mini" data-act="cleardone">Erledigte löschen</button>` : ""}</div>${showDone ? done.slice(0, 50).map(todoRow).join("") : ""}` : ""}`;
+    if (isShop) return `${topbar("To-dos")}${todoSeg(true)}${shopView(all)}`;
+    const open = all.filter(t => !t.done).concat(typeof suppTodos === "function" ? suppTodos() : []).sort((a, b) => ((a.date || "9999") + (a.time || "")) < ((b.date || "9999") + (b.time || "")) ? -1 : 1).sort(byPrio);
+    const doneToday = all.filter(t => t.done && t.doneAt === today());
+    const older = all.filter(t => t.done && t.doneAt !== today()).sort((a, b) => (a.doneAt || "") < (b.doneAt || "") ? 1 : -1);
+    return `${topbar("To-dos")}${todoSeg(false)}
+    ${open.length ? open.map(t => t.supp ? suppTodoRow(t) : todoRow(t)).join("") : empty(doneToday.length ? "Alles erledigt für heute. Stark!" : "Keine offenen Aufgaben. Neu per + oder per Mikrofon.")}
+    ${doneToday.length ? `<div class="sec"><span class="label">Heute erledigt</span><span class="label">${doneToday.length}</span></div>${doneToday.map(todoRow).join("")}` : ""}
+    ${todoInsights(all)}
+    ${older.length ? `<div class="sec"><button class="mini" data-act="showdone">${showDone ? "Erledigte ausblenden" : "Alle erledigten zeigen (" + older.length + ")"}</button></div>${showDone ? older.slice(0, 100).map(todoRow).join("") : ""}` : ""}`;
   },
   kalender() {
     const f = S.settings.calFilter, dd = D(selDate);
@@ -465,7 +491,12 @@ const SETS = {
   },
   konto() { return typeof syBlock === "function" ? syBlock().replace('<div class="sec sethead"><span class="label">Konto und Abgleich</span></div>', "") : '<p class="hint">Abgleich ist nicht geladen.</p>'; },
   sicherung() {
-    return `<div class="row2" style="margin-top:0"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Sicherung laden</button></div>
+    const last = S.settings.pcLast;
+    return `${setH("Sicherung für den PC")}<p class="hint" style="margin-top:0">Ein ZIP mit allem: <b>Excel</b> mit allen Kontakten und Infos (plus Aufgaben, Einkauf, Verträge, Ausgaben), <b>alle PDFs und Fotos</b> sauber benannt und nach Bereich und Ordner sortiert, und die Datei zum Wiederherstellen. Funktioniert ohne Supabase und ohne Mirella.</p>
+    <button class="btn pri" data-act="pcbackup" style="width:100%">💾 PC-Sicherung jetzt erstellen</button><p class="swipehint" id="pcb-state" style="text-align:left">${last ? "Letzte PC-Sicherung: " + esc(relDate(last)) : "Noch keine PC-Sicherung gemacht."}</p>
+    <p class="hint">Danach im Teilen-Fenster „In Dateien sichern“ › <b>OneDrive</b> › CoWork › Private App › 05_Sicherung wählen. Dann liegt sie automatisch auch auf deinem PC. Das Antippen musst du selbst machen, denn eine Web-App darf nicht von allein auf deinen PC schreiben. Mirella erinnert dich dafür.</p>
+    ${setSel("pcEvery", "Erinnern an die PC-Sicherung", "auf „Heute“", [[7, "jede Woche"], [14, "alle 2 Wochen"], [30, "jeden Monat"], [0, "nie"]])}
+    ${setH("Sicherungsdatei (nur für Mirella)")}<div class="row2" style="margin-top:0"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Sicherung laden</button></div>
     <p class="hint">Mit Anmeldung sichert Mirella jede Woche automatisch auf dem Server. Zusätzlich kannst du jederzeit eine Sicherungsdatei speichern, z. B. in iCloud Drive, und sie mit „Sicherung laden“ zurückholen.</p>`;
   },
   info() {
@@ -746,9 +777,14 @@ function todoForm(t, preset = {}) {
   <div class="fgrid"><div class="fld"><label for="a-rep">Wiederholen</label><select id="a-rep">${REPS.map(r => `<option${r === (v.rep || "nie") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
   <div class="fld"><label for="a-area">Bereich</label><select id="a-area"><option value="">kein Bereich</option>${AREAS.map(a => `<option value="${a.id}"${a.id === v.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div></div>
   <label class="tgl big"><input type="checkbox" id="a-nerv"${v.nerv ? " checked" : ""}><span><b>Nerv-Modus</b><small>meldet sich, bis es erledigt ist. Zum Ausschalten Haken wegnehmen.</small></span></label>
+  ${t ? todoDocs(t) : '<p class="swipehint" style="text-align:left;margin:8px 0 0">Rechnung oder Dokument dazu? Erst speichern, dann die Aufgabe antippen und anhängen.</p>'}
   ${t && t.date ? `<button class="btn" data-act="ics" data-id="${t.id}" style="width:100%;margin-top:8px">⏰ Zusätzlich als Wecker in den iPhone-Kalender</button>` : ""}
   <div class="row2">${t ? `<button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savetodo" data-id="${t ? t.id : ""}">Speichern</button></div></div>`,
     () => { $("#a-trig").onchange = e => { $("#f-time").hidden = e.target.value === "verlassen"; }; });
+}
+function todoDocs(t) {
+  const docs = S.docs.filter(d => d.ref === t.id);
+  return `<div class="block" style="margin-top:10px"><div class="bh"><h4>Dokumente dazu</h4><span class="label">${docs.length || ""}</span></div>${docs.length ? docs.map(docRow).join("") : '<div class="swipehint" style="text-align:left;margin:0">z. B. die Rechnung zur Zahnreinigung. Bleibt fest an dieser Aufgabe, auch wenn sie sich wiederholt.</div>'}<div class="row2" style="margin-top:8px"><button class="btn" type="button" data-act="pdffor" data-id="${t.id}">📄 PDF</button><button class="btn" type="button" data-act="docfortodo" data-id="${t.id}">📷 Foto / Scan</button></div></div>`;
 }
 function saveTodo(id) {
   const w = $("#a-what").value.trim(); if (!w) { toast("Bitte eintragen, was zu tun ist"); return; }
@@ -759,6 +795,35 @@ function saveTodo(id) {
   else S.todos.push(Object.assign({ id: uid(), list: "todo", done: false, created: today() }, data));
   draftClear(); save(); closeSheet(); render(true); toast("Gespeichert: " + w);
 }
+const todoSeg = isShop => `<div class="seg"><button data-act="todolist" data-l="todo" aria-pressed="${!isShop}">Aufgaben</button><button data-act="todolist" data-l="einkauf" aria-pressed="${isShop}">Einkaufsliste</button></div>`;
+/* Einkaufsliste nach Warengruppen; Abgehaktes bleibt sichtbar, bis „Einkauf fertig“ */
+function shopView(all) {
+  const cur = all.filter(t => !t.arch), open = cur.filter(t => !t.done), got = cur.filter(t => t.done);
+  const order = L.SHOPGROUPS.map(g => g[0]).concat("Sonstiges"), by = {};
+  cur.forEach(t => { const g = L.shopGroup(t.t); (by[g.n] = by[g.n] || { ic: g.ic, l: [] }).l.push(t); });
+  const groups = order.filter(n => by[n]).map(n => { const g = by[n], l = g.l.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0)), o = l.filter(t => !t.done).length;
+    return `<div class="shopgrp${o ? "" : " alldone"}"><div class="sgh"><span>${g.ic} ${esc(n)}</span><span class="sgn">${o ? o + " offen" : "✓ alles"}</span></div>${l.map(todoRow).join("")}</div>`; }).join("");
+  return `<form class="shoprow" data-form="shop" style="margin-bottom:8px"><input class="search" id="shopin" style="margin:0" placeholder="z. B. 2 Liter Milch, Butter" aria-label="Artikel" enterkeyhint="done"><button class="btn pri" style="flex:none" aria-label="Hinzufügen">+</button><button class="btn" type="button" data-act="shopphoto" style="flex:none" aria-label="Einkaufszettel fotografieren">📷</button></form>
+    ${cur.length ? groups : empty("Die Einkaufsliste ist leer. Tipp oben ein, sprich es ein, oder fotografier deinen Einkaufszettel.")}
+    ${got.length ? `<button class="btn pri" data-act="shopdone" style="width:100%;margin:10px 0 4px">Einkauf fertig (${got.length} im Wagen${open.length ? ", " + open.length + " bleiben" : ""})</button><p class="swipehint">Abgehaktes bleibt sichtbar, bis du hier tippst. Danach landet es in deinem Einkaufs-Verlauf.</p>` : ""}
+    ${shopExtras(open)}`;
+}
+/* Mirella merkt: kleine Auswertungen aus erledigten Aufgaben */
+function todoInsights(all) {
+  const t = today(), wk = addDays(t, -6), done = all.filter(x => x.done && x.doneAt);
+  if (done.length < 3) return "";
+  const week = done.filter(x => x.doneAt >= wk), late = done.filter(x => x.date && x.doneAt > x.date), out = [];
+  out.push(`Diese Woche hast du <b>${week.length}</b> Aufgabe${week.length === 1 ? "" : "n"} erledigt.`);
+  if (done.length >= 5) { const p = Math.round(100 * (done.length - late.length) / done.length); out.push(`<b>${p} %</b> davon pünktlich.${p < 70 ? " Tipp: Gib Aufgaben ein realistisches Datum oder eine Priorität, dann erinnert Mirella rechtzeitig." : ""}`); }
+  const ar = {}; late.forEach(x => { if (x.area) ar[x.area] = (ar[x.area] || 0) + 1; }); const worst = Object.entries(ar).sort((a, b) => b[1] - a[1])[0];
+  if (worst && worst[1] >= 2 && areaById(worst[0])) out.push(`Bei <b>${esc(areaById(worst[0]).n)}</b> wird es öfter knapp. Vielleicht dort früher erinnern lassen?`);
+  const open = all.filter(x => !x.done && x.date && x.date < addDays(t, -7)); if (open.length) out.push(`${open.length} Aufgabe${open.length === 1 ? " ist" : "n sind"} seit über einer Woche überfällig. Erledigen, neu planen oder löschen?`);
+  return `<div class="insight"><div class="ih">💡 Mirella merkt</div>${out.map(x => `<p>${x}</p>`).join("")}</div>`;
+}
+function shopRhythm() {
+  const by = {}; S.todos.filter(x => x.list === "einkauf" && x.done && x.doneAt).forEach(x => { const k = x.t.trim().toLowerCase(); (by[k] = by[k] || { n: x.t, d: [] }).d.push(x.doneAt); });
+  return Object.values(by).map(o => { const d = [...new Set(o.d)].sort(); if (d.length < 3) return null; const gaps = d.slice(1).map((x, i) => diffDays(d[i], x)), avg = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length), last = d[d.length - 1]; return { n: o.n, avg, due: diffDays(last, today()) >= avg }; }).filter(Boolean).sort((a, b) => a.avg - b.avg);
+}
 function shopItemForm(t) {
   openSheet(`<div data-draft="shop:${t.id}"><p class="stitle">Artikel</p>
   <div class="fld"><label for="s-what">Was?</label><input id="s-what" value="${esc(t.t)}"></div>
@@ -768,7 +833,9 @@ function shopItemForm(t) {
 function shopExtras(open) {
   const openK = new Set(open.map(x => x.t.trim().toLowerCase()));
   const freq = Object.entries(S.shopFreq || {}).filter(([k]) => !openK.has(k.toLowerCase())).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  return `${freq.length ? `<div class="sec"><span class="label">Oft gekauft</span><span class="label">antippen = drauf</span></div><div class="chips">${freq.map(([k]) => `<button class="chip2" data-act="shopadd" data-t="${esc(k)}">+ ${esc(k)}</button>`).join("")}</div>` : ""}
+  const rh = shopRhythm().filter(r => r.due && !openK.has(r.n.trim().toLowerCase())).slice(0, 8);
+  return `${rh.length ? `<div class="sec"><span class="label">Wohl bald wieder fällig</span><span class="label">nach deinem Rhythmus</span></div><div class="chips">${rh.map(r => `<button class="chip2" data-act="shopadd" data-t="${esc(r.n)}">+ ${esc(r.n)} <small>alle ~${r.avg} T.</small></button>`).join("")}</div>` : ""}
+  ${freq.length ? `<div class="sec"><span class="label">Oft gekauft</span><span class="label">antippen = drauf</span></div><div class="chips">${freq.map(([k]) => `<button class="chip2" data-act="shopadd" data-t="${esc(k)}">+ ${esc(k)}</button>`).join("")}</div>` : ""}
   <div class="sec"><span class="label">Vorlagen</span><span class="label">für wiederkehrende Einkäufe</span></div>
   ${S.shopTpl.length ? `<div class="chips">${S.shopTpl.map(t => `<span class="tplchip"><button class="chip2" data-act="usetpl" data-id="${t.id}">🧺 ${esc(t.n)} (${t.items.length})</button><button class="tplx" data-act="deltpl" data-id="${t.id}" aria-label="Vorlage ${esc(t.n)} löschen">✕</button></span>`).join("")}</div>` : '<p class="hint" style="margin-top:0">Lege z. B. „Wocheneinkauf“ oder „Grillen“ an: einmal die Liste füllen, dann als Vorlage speichern. Ein Tipp holt später alles wieder drauf.</p>'}
   ${open.length ? `<button class="btn" data-act="savetpl" style="width:100%;margin-top:6px">Aktuelle Liste als Vorlage speichern</button>` : ""}`;
@@ -779,8 +846,8 @@ function personForm(p) {
   openSheet(`<div data-draft="person:${p ? p.id : "new"}"><p class="stitle">${p ? "Kontakt bearbeiten" : "Neuer Kontakt"}</p>
   <div class="fld"><label for="c-first">Vorname</label><input id="c-first" value="${esc(v.first)}" autocomplete="off" autocapitalize="words"></div>
   <div class="fld"><label for="c-last">Nachname</label><input id="c-last" value="${esc(v.last)}" autocomplete="off" autocapitalize="words"></div>
-  <div class="fld"><label for="c-tel">Telefon</label><div class="telrow"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678"></div></div>
-  <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"></div>
+  <div class="fld"><label for="c-tel">Telefon</label><div class="telrow"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678"></div><div class="fwarn" id="w-tel" hidden></div></div>
+  <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"><div class="fwarn" id="w-mail" hidden></div></div>
   <div class="fld"><label>Gruppe</label><div class="chips" id="c-grps">${grpChips(v.group)}</div><input type="hidden" id="c-grp" value="${esc(v.group || "")}"></div>
   <div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}${c === "nie" ? " (nur Geburtstag merken)" : ""}</option>`).join("")}</select></div>
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.bday))}" autocomplete="off"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
@@ -792,6 +859,8 @@ function personForm(p) {
   <p class="swipehint">Deine Eingaben werden laufend gemerkt. Schließt sich das Fenster, ist beim nächsten Öffnen alles wieder da.</p></div>`,
     () => {
       addrSuggest($("#c-addr"), $("#addr-sug"));
+      const chk = () => { const wm = L.checkEmail($("#c-mail").value), wt = L.checkTel($("#c-cc").value, $("#c-tel").value); $("#w-mail").hidden = !wm; $("#w-mail").textContent = wm ? "⚠ " + wm : ""; $("#w-tel").hidden = !wt; $("#w-tel").textContent = wt ? "⚠ " + wt : ""; };
+      ["#c-mail", "#c-tel"].forEach(q => $(q).addEventListener("blur", chk)); $("#c-cc").addEventListener("change", chk); if ($("#c-mail").value || $("#c-tel").value) chk();
       $("#c-bday").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
       $("#sheetbody [data-draft]").addEventListener("draftapplied", () => { $("#c-grps").innerHTML = grpChips($("#c-grp").value); });
     });
@@ -846,6 +915,8 @@ function savePerson(id) {
   if (!first && !last) { toast("Bitte einen Namen eintragen"); return; }
   if (data.bdayBad) { toast("Geburtstag bitte als TT.MM.JJJJ, z. B. 07041964"); return; }
   delete data.bdayBad;
+  const warn = [L.checkEmail(data.email), L.checkTel($("#c-cc").value, $("#c-tel").value)].filter(Boolean);
+  if (warn.length && !savePerson.force && !ask(warn.join("\n") + "\n\nTrotzdem so speichern?")) return;
   if (data.group && !S.groups.includes(data.group)) S.groups.push(data.group);
   const dups = findDups(data, id);
   if (dups.length && !savePerson.force) {
@@ -862,6 +933,13 @@ function savePerson(id) {
   }
   draftClear(); save(); closeSheet(); render(); toast("Gespeichert: " + [first, last].join(" ").trim());
 }
+function callMenu(p) {
+  const tel = p.tel ? p.tel.replace(/[^\d+]/g, "") : "";
+  openSheet(`<p class="stitle">${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">${esc(cycLabel(p.cyc))} · zuletzt ${esc(agoText(lastCall(p)))}</p>
+  <div style="display:grid;gap:8px">${tel ? `<a class="btn pri" href="tel:${esc(tel)}" data-act="dial" data-id="${p.id}" style="text-decoration:none;text-align:center">📞 ${esc(p.tel)} anrufen</a>` : `<button class="btn" data-act="call" data-id="${p.id}">Telefonnummer eintragen</button>`}
+  <button class="btn" data-act="callok" data-id="${p.id}">✓ Erledigt, erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Probiert, nicht erreicht</button><button class="btn" data-act="snooze" data-id="${p.id}">Später anrufen</button><button class="btn" data-act="person" data-id="${p.id}">Zum Kontaktprofil</button></div>`);
+}
+let pendingCall = null;
 function callResult(p, autoDial) {
   openSheet(`<p class="stitle">Anruf mit ${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">Wie ist es gelaufen?</p>
   <div style="display:grid;gap:8px"><button class="btn pri" data-act="callok" data-id="${p.id}">Erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Nicht erreicht (neuer Versuch in ${S.settings.retryWorkdays} ${S.settings.retryWorkdays == 1 ? "Werktag" : "Werktagen"})</button><button class="btn" data-act="snooze" data-id="${p.id}">Später</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
@@ -905,7 +983,7 @@ function photoForm() {
   const kinds = [["beleg", "Beleg / Rechnung"], ["dokument", "Dokument"], ["zettel", "Einkaufszettel"], ["bereich", "Für einen Bereich"]];
   let f = "";
   if (k === "beleg") f = `<div class="fgrid"><div class="fld"><label for="e-amt">Betrag in €</label><input id="e-amt" inputmode="decimal" placeholder="0,00"></div><div class="fld"><label for="e-date">Datum</label><input id="e-date" type="date" value="${today()}"></div></div><div class="fld"><label for="e-shop">Laden</label><input id="e-shop" placeholder="z. B. REWE"></div><div class="fld"><label for="e-cat">Kategorie</label><select id="e-cat">${catList().map(c => `<option>${c}</option>`).join("")}</select></div>`;
-  if (k === "dokument") f = `<div class="fld"><label for="d-name">Name</label><input id="d-name" placeholder="z. B. Reisepass"></div><div class="fgrid"><div class="fld"><label for="d-folder">Ordner</label><select id="d-folder">${FOLDERS.map(x => `<option>${x}</option>`).join("")}</select></div><div class="fld"><label for="d-until">Gültig bis (freiwillig)</label><input id="d-until" type="date"></div></div>`;
+  if (k === "dokument") f = `<div class="fld"><label for="d-name">Name</label><input id="d-name" placeholder="z. B. Reisepass"></div><div class="fgrid"><div class="fld"><label for="d-folder">Ordner</label><select id="d-folder">${folderOpts("")}</select></div><div class="fld"><label for="d-until">Gültig bis (freiwillig)</label><input id="d-until" type="date"></div></div>`;
   if (k === "zettel") f = `<div class="fld"><label for="z-items">Was steht drauf? Eine Zeile pro Artikel</label><textarea id="z-items" placeholder="Butter&#10;Brot&#10;Zwiebeln"></textarea></div><p class="hint">Tipp: Auf dem iPhone kannst du im Textfeld auf „Text scannen“ tippen (Feld gedrückt halten), dann liest das iPhone den Zettel selbst ab.</p>`;
   if (k === "bereich") f = `<div class="fld"><label for="b-area">Bereich</label><select id="b-area">${AREAS.filter(a => a.id !== "doku").map(a => `<option value="${a.id}"${a.id === photoCtx.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div><div class="fld"><label for="b-name">Was ist das?</label><input id="b-name" placeholder="z. B. Werkstattrechnung, Fahrzeugschein"></div><div class="fld"><label for="b-until">Gültig bis / Frist (freiwillig)</label><input id="b-until" type="date"></div>`;
   openSheet(`<p class="stitle">Wohin damit?</p><img class="photo-prev" src="${photoCtx.url}" alt="Dein Foto">
@@ -1242,11 +1320,16 @@ const ACT = {
   photokind: el => { photoCtx.kind = el.dataset.k; photoForm(); },
   photosave: () => photoSave(),
   viewphoto: el => viewPhoto(el.dataset.id),
-  person: el => { cur = el.dataset.id; view = "akte"; render(); },
+  person: el => { closeAll(); cur = el.dataset.id; view = "akte"; render(); },
   area: el => { area = el.dataset.id; closeDrawer(); view = "bereich"; render(); },
   call: (el, e) => { e.stopPropagation(); const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; if (!p.tel) { personForm(p); toast("Erst eine Telefonnummer eintragen"); return; } callResult(p, true); },
   logcall: el => callResult(S.people.find(x => x.id === el.dataset.id), false),
   callok: el => logCall(S.people.find(x => x.id === el.dataset.id), true),
+  dial: () => { },
+  pcbackup: () => { if (view !== "einstellungen" || setSec !== "sicherung") { setFrom = view === "einstellungen" ? null : { v: view, area, cur, t: "Zurück", y: $("#screen").scrollTop }; view = "einstellungen"; setSec = "sicherung"; closeAll(); render(); } window.pcBackup && window.pcBackup(); },
+  roundack: (el, e) => { e.stopPropagation(); const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; p.roundAck = el.dataset.d; save(); render(true); toast("Gemerkt. Am Geburtstag erinnere ich dich wie gewohnt."); },
+  callmenu: el => callMenu(S.people.find(x => x.id === el.dataset.id)),
+  pullcalls: () => { const t = today(), pool = pullPool().slice(0, +S.settings.maxCalls || 3); S.pull = S.pull && S.pull.d === t ? S.pull : { d: t, ids: [] }; pool.forEach(p => { if (!S.pull.ids.includes(p.id)) S.pull.ids.push(p.id); }); save(); render(true); toast(pool.length + " weitere Anrufe für heute"); },
   callno: el => logCall(S.people.find(x => x.id === el.dataset.id), false),
   snooze: el => snoozeForm(S.people.find(x => x.id === el.dataset.id)),
   dosnooze: el => { const p = S.people.find(x => x.id === el.dataset.id); p.snooze = el.dataset.d; save(); closeSheet(); render(true); toast(`${fullName(p)}: ${relDate(p.snooze)} wieder dran`); },
@@ -1258,7 +1341,7 @@ const ACT = {
   delgroup: el => { const g = el.dataset.g, n = S.people.filter(p => p.group === g).length; if (!ask(`Gruppe „${g}“ entfernen?${n ? ` ${n} Kontakt${n > 1 ? "e verlieren" : " verliert"} die Gruppe.` : ""}`)) return; S.groups = S.groups.filter(x => x !== g); S.people.forEach(p => { if (p.group === g) p.group = ""; }); save(); render(true); },
   pickprio: el => { $("#a-prio").value = el.dataset.p; $$("#a-prio-pick button").forEach(b => b.setAttribute("aria-pressed", b === el)); draftSave(); },
   qty: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; const n = (+t.qty || (t.unit ? 0 : 1)) + (+el.dataset.n) * (["g", "ml"].includes(t.unit) ? 100 : 1); t.qty = n > 0 ? n : null; if (!t.qty && ["g", "ml", "kg", "l"].includes(t.unit)) t.unit = ""; save(); render(true); },
-  saveshop: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; const w = $("#s-what").value.trim(); if (!w) { toast("Bitte eintragen, was"); return; } t.t = w; t.qty = parseAmount($("#s-qty").value) || null; t.unit = $("#s-unit").value; draftClear(); save(); closeSheet(); render(true); },
+  saveshop: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; const w = $("#s-what").value.trim(); if (!w) { toast("Bitte eintragen, was"); return; } t.t = w; t.qty = parseAmount($("#s-qty").value) || null; t.unit = $("#s-unit").value; if (t.unit) { S.shopUnits = S.shopUnits || {}; S.shopUnits[w.toLowerCase()] = { qty: 1, unit: t.unit }; } draftClear(); save(); closeSheet(); render(true); },
   shopadd: el => { addShop(el.dataset.t); save(); render(true); toast("Drauf: " + el.dataset.t); },
   savetpl: () => { const items = S.todos.filter(x => x.list === "einkauf" && !x.done).map(x => ({ t: x.t, qty: x.qty || null, unit: x.unit || "" })); if (!items.length) return; const n = (prompt("Name der Vorlage, z. B. Wocheneinkauf") || "").trim(); if (!n) return; const ex = S.shopTpl.find(t => t.n.toLowerCase() === n.toLowerCase()); if (ex) { if (!ask(`Vorlage „${ex.n}“ gibt es schon. Ersetzen?`)) return; ex.items = items; } else S.shopTpl.push({ id: uid(), n, items }); save(); render(true); toast("Vorlage gespeichert: " + n); },
   usetpl: el => { const t = S.shopTpl.find(x => x.id === el.dataset.id); if (!t) return; let n = 0; t.items.forEach(i => { if (addShop(i.t, i.qty, i.unit)) n++; }); save(); render(true); toast(n ? `${n} Artikel aus „${t.n}“ drauf` : "Steht schon alles drauf"); },
@@ -1270,9 +1353,9 @@ const ACT = {
   mpy: el => monthPicker(+el.dataset.y),
   mpset: el => { calY = +el.dataset.y; calM = +el.dataset.m; selDate = iso(new Date(calY, calM, 1, 12)); if (today().startsWith(`${calY}-${pad(calM + 1)}`)) selDate = today(); if (calView === "liste") calView = "monat"; closeSheet(); render(); },
   mptoday: () => { selDate = today(); calY = +selDate.slice(0, 4); calM = +selDate.slice(5, 7) - 1; closeSheet(); render(); },
-  tabset: el => { setFrom = { v: view, area, cur, t: el.dataset.t || "Zurück" }; setSec = el.dataset.k; view = "einstellungen"; closeAll(); render(); },
-  setsec: el => { setFrom = null; setSec = el.dataset.k || ""; render(); },
-  setback: () => { const f = setFrom || { v: "heute" }; setFrom = null; setSec = ""; view = f.v; if (f.area) area = f.area; if (f.cur) cur = f.cur; render(); },
+  tabset: el => { setFrom = { v: view, area, cur, t: el.dataset.t || "Zurück", y: $("#screen").scrollTop }; setSec = el.dataset.k; view = "einstellungen"; closeAll(); render(); },
+  setsec: el => { const sc = $("#screen"), k = el.dataset.k || ""; if (k && !setSec) setIdxY = sc.scrollTop; setFrom = null; setSec = k; render(); if (!k) sc.scrollTop = setIdxY; },
+  setback: () => { const f = setFrom || { v: "heute" }; setFrom = null; setSec = ""; view = f.v; if (f.area) area = f.area; if (f.cur) cur = f.cur; render(); $("#screen").scrollTop = f.y || 0; },
   cancel: () => { if (sheetDirty && $("#sheetbody [data-draft]") && !ask("Eingaben verwerfen?")) return; draftClear(); closeSheet(); },
   resumedraft: (el, e) => { if (e.target.closest('[data-act="dropdraft"]')) return; draftResume(); },
   dropdraft: (el, e) => { if (!ask("Unfertige Eingabe verwerfen?")) return; draftClear(); render(true); },
@@ -1288,6 +1371,7 @@ const ACT = {
   newtodo: el => todoForm(null, { date: el.dataset.d || "", area: el.dataset.area || "" }),
   todolist: el => { todoList = el.dataset.l; showDone = false; render(); },
   showdone: () => { showDone = !showDone; render(true); },
+  shopdone: () => { const got = S.todos.filter(t => t.list === "einkauf" && t.done && !t.arch); got.forEach(t => { t.arch = 1; }); save(); render(true); toast(`Einkauf erledigt: ${got.length} Artikel im Verlauf gespeichert`); },
   cleardone: () => { const n = S.todos.filter(t => t.list === "einkauf" && t.done).length; if (!ask(`${n} erledigte Artikel von der Liste löschen?`)) return; S.todos = S.todos.filter(t => !(t.list === "einkauf" && t.done)); save(); render(true); },
   shoplist: () => { todoList = "einkauf"; view = "todos"; render(); },
   mstep: el => shiftMonth(+el.dataset.n),
@@ -1319,9 +1403,12 @@ document.addEventListener("click", e => {
   const a = e.target.closest("[data-act]");
   if (a && ACT[a.dataset.act]) {
     if (a.tagName === "INPUT" && a.type === "checkbox") return; // über "change"
+    if (a.dataset.act === "dial") { e.stopPropagation(); pendingCall = a.dataset.id; closeSheet(); return; } // tel:-Link normal öffnen
     e.preventDefault(); ACT[a.dataset.act](a, e);
   }
 });
+/* Nach dem Telefonat zurück in Mirella: gleich fragen, wie es lief */
+document.addEventListener("visibilitychange", () => { if (!document.hidden && pendingCall) { const p = S.people.find(x => x.id === pendingCall); pendingCall = null; if (p) setTimeout(() => callResult(p, false), 400); } });
 document.addEventListener("change", e => {
   const el = e.target;
   if (el.matches('input[type=checkbox][data-act="toggle"]')) { toggleTodo(el.dataset.id); return; }

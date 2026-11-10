@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos: IndexedDB "mirella" / "photos".
    Später ersetzt der Supabase-Sync (v0.7) die lokale Speicherung. */
 "use strict";
-const VERSION = "0.9.0";
+const VERSION = "0.9.1";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -263,9 +263,10 @@ const R = {
     const list = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="swipehint" style="text-align:left;margin:0 0 6px">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
     const calls = (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1);
     return `${subtop("Menschen", "go\" data-v=\"menschen", `<button class="mini" data-act="editperson" data-id="${p.id}">Bearbeiten</button>`)}
-    <div class="hero"><span class="av">${esc(initials(p))}</span><h3>${esc(fullName(p))}</h3><p>${esc([p.group, p.cyc].filter(Boolean).join(" · "))}${due ? " · nächster Anruf " + esc(relDate(due)) : ""}</p>
+    <div class="hero"><span class="av">${esc(initials(p))}</span><h3>${esc(fullName(p))}</h3><p>${esc([p.group, p.cyc].filter(Boolean).join(" · "))}</p>
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
+    ${nextCallBlock(p)}
     ${nb ? `<div class="block"><h4>Geburtstag</h4><div class="catrow"><span>${esc(fmtDate(nb))}${ageAt(p, nb) ? ", wird " + ageAt(p, nb) : ""}</span><span>in ${diffDays(today(), nb)} Tagen</span></div>${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
     ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
@@ -446,6 +447,12 @@ function icsFor(t) {
   return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mirella//DE", "BEGIN:VEVENT", "UID:" + t.id + "@mirella", "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", "DTSTART;TZID=Europe/Berlin:" + st, "DTEND;TZID=Europe/Berlin:" + en, "SUMMARY:" + e("Mirella: " + t.t), "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + e(t.t), "TRIGGER:-PT0M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
 }
 function icsOpen(t) { if (!t.date) { toast("Erst ein Datum eintragen"); return; } location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(icsFor(t)); }
+function nextCallBlock(p) {
+  const due = nextDue(p), st = callState(p), last = lastCall(p), lastAny = lastCall(p, false);
+  if (!due) return `<div class="nextcall"><div><div class="label">Nächster Anruf</div><b>kein fester Rhythmus</b><small>Unter „Bearbeiten“ einen Rhythmus wählen, dann plant Mirella die Anrufe.</small></div></div>`;
+  const n = diffDays(today(), due), big = st === "late" ? `seit ${-n} ${-n === 1 ? "Tag" : "Tagen"} fällig` : n === 0 ? "heute" : n === 1 ? "morgen" : `in ${n} Tagen`;
+  return `<div class="nextcall ${st}"><div><div class="label">Nächster Anruf</div><b>${esc(big)}</b><small>${st === "late" ? "fällig seit " : ""}${esc(fmtDate(due))} · ${esc(p.cyc)}${p.snooze && p.snooze >= today() ? " · verschoben" : ""}</small></div><div class="nc-r"><div class="label">Zuletzt erreicht</div><b style="font-size:16px">${esc(last ? relDate(last) : "noch nie")}</b>${lastAny && lastAny !== last ? `<small>Versuch ${esc(relDate(lastAny))}</small>` : ""}</div></div>`;
+}
 function waNum(tel) { let n = tel.replace(/[^\d+]/g, ""); if (n.startsWith("+")) return n.slice(1); if (n.startsWith("00")) return n.slice(2); if (n.startsWith("0")) return "49" + n.slice(1); return n; }
 function notePh(id) { return { auto: "z. B. getankt, 58.900 km, 72 €", geld: "z. B. Handyvertrag gekündigt zum 31.3.", gesund: "z. B. Zahnarzt: alles gut", haus: "z. B. Zählerstand Strom 19.310", frei: "z. B. Skiurlaub gebucht, 13.–20.2.", arbeit: "z. B. Jahresgespräch im Januar", sport: "z. B. Paddeln: neues Paddel gekauft", doku: "z. B. Pass beantragt" }[id] || "Notiz"; }
 function docRow(d) { return `<div class="listrow"><button data-act="viewphoto" data-id="${d.photo || ""}" style="border:0;padding:0;background:none" aria-label="Foto ansehen"><img class="thumbimg" data-thumb="${d.photo || ""}" alt=""></button><span class="grow">${esc(d.name)}<small>${esc([d.folder, d.until ? "gültig bis " + fmtDate(d.until) : "", fmtDate(d.created)].filter(Boolean).join(" · "))}</small></span><button class="rowdel" data-act="deldoc" data-id="${d.id}" aria-label="löschen">✕</button></div>`; }

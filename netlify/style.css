@@ -262,3 +262,11 @@ body{background:var(--phone);padding:0!important;overflow:hidden;-webkit-tap-hig
 .pdfbar{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 14px 8px;border-bottom:1px solid var(--line)}
 .pdfbar b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
 .pdfview iframe{flex:1;border:0;width:100%}
+/* v0.9.1 Nächster Anruf */
+.nextcall{display:flex;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:10px}
+.nextcall b{display:block;font-family:var(--f-display);font-size:24px;font-weight:600;line-height:1.15;margin-top:2px}
+.nextcall small{display:block;font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.nextcall .nc-r{text-align:right;flex:none}
+.nextcall.due{border-color:var(--accent)}
+.nextcall.late{border-color:var(--late)}.nextcall.late b{color:var(--late)}
+.nextcall.late .nc-r b{color:var(--ink)}

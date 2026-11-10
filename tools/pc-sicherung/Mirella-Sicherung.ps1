@@ -5,9 +5,9 @@
     Mirella_Daten_<Datum>.xlsx  alle Kontakte, Aufgaben, Einkäufe, Verträge, Dokumente, Ausgaben, Sparziele, Notizen
     Dokumente\                  alle PDFs und Fotos, nach Bereich und Ordner sortiert
     Belege\                     Kassenbons zu den Ausgaben
-    Wiederherstellen\           Datei für Mirella › Einstellungen › Sicherung › „Sicherung laden“
+    Wiederherstellen\           Datei für Mirella › Einstellungen › Sicherung › 'Sicherung laden'
 
-  Hängt nur an Supabase (Login, Tabelle mirella_state, Speicher „mirella“), nicht an der Web-App.
+  Hängt nur an Supabase (Login, Tabelle mirella_state, Speicher 'mirella'), nicht an der Web-App.
   Die iPhone-App nutzt dieselben Daten, die Sicherung läuft dann unverändert weiter.
 
   Aufruf:
@@ -320,7 +320,7 @@ function Run-Backup {
       @{ name = 'Kontakte'; rows = $kon }, @{ name = 'Aufgaben'; rows = $auf }, @{ name = 'Einkauf'; rows = $ein }, @{ name = 'Verträge & Bereiche'; rows = $ber },
       @{ name = 'Dokumente'; rows = $docRows }, @{ name = 'Ausgaben'; rows = $ausg }, @{ name = 'Sparziele'; rows = $zie }, @{ name = 'Notizen'; rows = $not })
 
-    # Wiederherstellungs-Datei im Format der App (Einstellungen › Sicherung › „Sicherung laden“)
+    # Wiederherstellungs-Datei im Format der App (Einstellungen › Sicherung › 'Sicherung laden')
     MkDir (Join-Path $tmp 'Wiederherstellen')
     $jw = New-Object IO.StreamWriter((Join-Path $tmp "Wiederherstellen\Mirella-Sicherung_$day.json"), $false, $Utf8)
     $jw.Write('{"app":"Mirella","version":"PC-Sicherung","exported":' + $JS.Serialize((Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")) + ',"data":' + $JS.Serialize($S) + ',"photos":{')
@@ -332,12 +332,12 @@ function Run-Backup {
     }
     $jw.Write('}}'); $jw.Close()
 
-    [IO.File]::WriteAllText((Join-Path $tmp 'LIESMICH.txt'), "Mirella-Sicherung vom $(De $day), automatisch vom PC geholt`r`n`r`nMirella_Daten_$day.xlsx: alle Kontakte, Aufgaben, Einkäufe, Verträge und Einträge, Dokumente, Ausgaben, Sparziele und Notizen. Jede Tabelle hat ein eigenes Blatt.`r`nDokumente\: alle PDFs und Fotos, nach Bereich und Ordner sortiert, Dateiname = Ablagedatum + Name.`r`nBelege\: Fotos von Kassenbons zu den Ausgaben.`r`nWiederherstellen\: diese Datei in Mirella unter Einstellungen › Sicherung › „Sicherung laden“ auswählen, dann ist alles wieder da.`r`n`r`nExcel und PDFs lassen sich auch ohne Mirella öffnen.`r`n", $Utf8)
+    [IO.File]::WriteAllText((Join-Path $tmp 'LIESMICH.txt'), "Mirella-Sicherung vom $(De $day), automatisch vom PC geholt`r`n`r`nMirella_Daten_$day.xlsx: alle Kontakte, Aufgaben, Einkäufe, Verträge und Einträge, Dokumente, Ausgaben, Sparziele und Notizen. Jede Tabelle hat ein eigenes Blatt.`r`nDokumente\: alle PDFs und Fotos, nach Bereich und Ordner sortiert, Dateiname = Ablagedatum + Name.`r`nBelege\: Fotos von Kassenbons zu den Ausgaben.`r`nWiederherstellen\: diese Datei in Mirella unter Einstellungen › Sicherung › 'Sicherung laden' auswählen, dann ist alles wieder da.`r`n`r`nExcel und PDFs lassen sich auch ohne Mirella öffnen.`r`n", $Utf8)
 
     if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
     Rename-Item -LiteralPath $tmp (Split-Path $dir -Leaf)
 
-    # alte Tages-Ordner aufräumen (nur eigene „Mirella_JJJJ-MM-TT“-Ordner)
+    # alte Tages-Ordner aufräumen (nur eigene 'Mirella_JJJJ-MM-TT'-Ordner)
     if ($keep -gt 0) {
       $old = Get-ChildItem -LiteralPath $ziel -Directory | Where-Object { $_.Name -match '^Mirella_\d{4}-\d{2}-\d{2}$' } | Sort-Object Name -Descending | Select-Object -Skip $keep
       foreach ($o in $old) { Remove-Item -LiteralPath $o.FullName -Recurse -Force; Log "Alte Sicherung $($o.Name) entfernt." }

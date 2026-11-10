@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.16";
+const VERSION = "0.17";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -610,7 +610,7 @@ function pruneBriefings() {
 
 /* ---------- Wetter (Open-Meteo, ohne Schlüssel) ---------- */
 const WXC = c => c === 0 ? ["☀️", "klar"] : c <= 2 ? ["🌤️", "leicht bewölkt"] : c === 3 ? ["☁️", "bewölkt"] : c <= 48 ? ["🌫️", "Nebel"] : c <= 57 ? ["🌦️", "Nieselregen"] : c <= 67 ? ["🌧️", "Regen"] : c <= 77 ? ["🌨️", "Schnee"] : c <= 82 ? ["🌧️", "Schauer"] : c <= 86 ? ["🌨️", "Schneeschauer"] : ["⛈️", "Gewitter"];
-let WX = null, wxOpen = false;
+let WX = null;
 try { WX = JSON.parse(localStorage.getItem("mirella.wx") || "null"); } catch (_) { }
 function wxHTML() {
   if (!WX || !WX.cur) return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:28px">🌡️</span><div><span style="font-size:14px">Wetter wird geladen …</span><small>Falls nichts kommt: Einstellungen › Wetter-Ort festlegen.</small></div></div></div>`;
@@ -619,10 +619,9 @@ function wxHTML() {
   const r = n => n == null ? "–" : Math.round(n) + "°";
   const dayMax = dn.dayMax != null ? dn.dayMax : (dl.temperature_2m_max || [])[0], nightMin = dn.nightMin != null ? dn.nightMin : (dl.temperature_2m_min || [])[0];
   const hints = dn.hints.filter(h => on[h.k] === undefined || !!on[h.k]);
-  // kompakt: eine Zeile Wetter, eine Zeile Tag/Nacht, Hinweise zusammengefasst (antippen = alle)
-  const more = hints.length > 1;
-  return `<div class="wxc"${more ? ' role="button" tabindex="0" data-act="wxmore"' : ""}><div class="wxrow"><span class="wxic">${ic}</span><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><span class="wxtxt"><span>${esc(txt)} · Regen ${(dl.precipitation_probability_max || [])[0] ?? 0} %</span><small>☀️ ${r(dn.dayMin)} bis ${r(dayMax)}  ·  🌙 ${r(nightMin)} bis ${r(dn.nightMax)}</small></span></div>
-  ${hints.length ? (wxOpen || !more ? `<div class="wxhints">${hints.map(h => `<div>${h.ic} ${esc(h.t)}</div>`).join("")}</div>` : `<div class="wxhint1"><span>${hints[0].ic} ${esc(hints[0].t)}</span><span class="wxplus">+${hints.length - 1} ${hints.length === 2 ? "Hinweis" : "Hinweise"} ${hints.slice(1).map(h => h.ic).join("")}</span></div>`) : ""}</div>`;
+  // kompakt, alle Hinweise direkt sichtbar; antippen öffnet die ausführliche Wetterseite
+  return `<div class="wxc" role="button" tabindex="0" data-act="wetter" aria-label="Ausführliches Wetter öffnen"><div class="wxrow"><span class="wxic">${ic}</span><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><span class="wxtxt"><span>${esc(txt)} · Regen ${(dl.precipitation_probability_max || [])[0] ?? 0} %</span><small>☀️ ${r(dn.dayMin)} bis ${r(dayMax)}  ·  🌙 ${r(nightMin)} bis ${r(dn.nightMax)}</small></span></div>
+  ${hints.length ? `<div class="wxhints">${hints.map(h => `<div>${h.ic} ${esc(h.t)}</div>`).join("")}</div>` : ""}<div class="wxmorel">Ausführliches Wetter ›</div></div>`;
 }
 /* Standort: einmal erlauben, dann dauerhaft gespeichert (kein erneutes Nachfragen) */
 function geoOnce() {
@@ -652,14 +651,15 @@ async function wxCoords() {
   const g = await wxCoords.p; return g.err ? null : g;
 }
 async function loadWeather(force) {
-  if (!force && WX && WX.hourly && WX.hourly.temperature_2m && Date.now() - WX.t < 30 * 60e3) return;
+  if (!force && WX && WX.hourly && WX.hourly.precipitation && WX.daily && WX.daily.sunrise && Date.now() - WX.t < 30 * 60e3) return;
   const c = await wxCoords(); if (!c) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<button class="btn" data-act="wxhere" style="width:100%">📍 Wetter: Standort für Mirella freigeben</button><div class="hint" style="margin-top:6px">Oder unter Einstellungen › Wetter einen Ort eintippen, dann braucht Mirella keinen Standort.</div>`; return; }
   try {
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&hourly=temperature_2m,apparent_temperature,precipitation_probability,wind_gusts_10m,uv_index,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Europe%2FBerlin&forecast_days=2`);
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,apparent_temperature,weather_code,is_day,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,wind_gusts_10m,uv_index,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,precipitation_hours,weather_code,sunrise,sunset,uv_index_max&minutely_15=precipitation&forecast_minutely_15=12&timezone=Europe%2FBerlin&forecast_days=8`);
     const j = await r.json(); if (!j.current) throw new Error();
-    WX = { t: Date.now(), place: c.place, cur: j.current, daily: j.daily, hourly: j.hourly };
+    WX = { t: Date.now(), place: c.place, cur: j.current, daily: j.daily, hourly: j.hourly, minutely_15: j.minutely_15 };
     try { localStorage.setItem("mirella.wx", JSON.stringify(WX)); } catch (_) { }
-    const el = $("#wx"); if (el) el.innerHTML = wxHTML();
+    const el = $("#wx"); if (el) el.innerHTML = view === "wetter" ? "" : wxHTML();
+    if (view === "wetter") render(true);
   } catch (_) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<div class="hint">Wetter gerade nicht erreichbar.</div>`; }
 }
 async function setWxPlace(q) {
@@ -745,7 +745,7 @@ function render(keepScroll) {
   const tabView = view === "akte" ? "menschen" : view;
   $$(".tab").forEach(b => b.dataset.v === tabView ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   $("#plus").hidden = !["heute", "menschen", "todos", "kalender", "bereich"].includes(view);
-  if (view === "heute") loadWeather();
+  if (view === "heute" || view === "wetter") loadWeather();
   loadThumbs();
 }
 async function loadThumbs() {
@@ -805,12 +805,16 @@ function closeSheet(byUser) {
 function drawerHTML() {
   const nb = S.briefings.filter(b => !b.read).length;
   const brief = `<button class="drow" data-act="go" data-v="briefings">${IC.doku}<span class="dt"><b>Briefings</b><small>${S.briefings.length ? "Diese Woche: " + S.briefings.filter(b => isoWeek(b.d) === isoWeek(today()) && b.d.slice(0, 4) === today().slice(0, 4)).length + " · neuestes " + relDate(latestBriefing().d) : "Noch keine Briefings"}</small></span>${nb ? `<span class="pill acc">${nb}</span>` : ""}<span class="chev">›</span></button>`;
-  return AREAS.map(A => {
+  return wxRow() + AREAS.map(A => {
     const open = S.todos.filter(t => t.area === A.id && !t.done && t.list === "todo");
     const late = open.some(t => t.date && t.date < today());
     const sub = A.id === "doku" ? pl(S.docs.length, "Dokument", "Dokumente") : A.id === "geld" ? `${eur(S.expenses.filter(e => e.d.startsWith(today().slice(0, 7))).reduce((a, e) => a + +e.amount, 0))} diesen Monat` : open.length ? open[0].t : "Notizen, Erinnerungen, Fotos";
     return `<button class="drow" data-act="area" data-id="${A.id}"><span class="aic" style="--ac:${A.c}">${IC[A.ic]}</span><span class="dt"><b>${esc(A.n)}</b><small>${esc(sub)}</small></span>${open.length ? `<span class="pill ${late ? "late" : "acc"}">${open.length}</span>` : ""}<span class="chev">›</span></button>`;
   }).join("") + brief;
+}
+function wxRow() {
+  const sub = WX && WX.cur ? `${Math.round(WX.cur.temperature_2m)}° · ${WXC(WX.cur.weather_code)[1]} · Regen ${((WX.daily || {}).precipitation_probability_max || [])[0] ?? 0} %` : "Regen Stunde für Stunde, 7 Tage";
+  return `<button class="drow" data-act="wxdrawer"><span class="aic" style="--ac:#3E8FD0">${IC.cloud}</span><span class="dt"><b>Wetter</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
 }
 function openDrawer() { closeSheet(); $("#dbody").innerHTML = drawerHTML(); $("#drawer").classList.add("open"); $("#drawer").setAttribute("aria-hidden", "false"); $("#scrim").classList.add("open"); }
 function closeDrawer() { $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true"); if (!$("#sheet").classList.contains("open")) $("#scrim").classList.remove("open"); }
@@ -1335,15 +1339,15 @@ function reviewRender(txt) {
   </div>`).join("") || empty("Alles weggelassen.")}</div>
   <div class="row2"><button class="btn" data-act="vback" style="flex:none">‹ Zurück</button><button class="btn" data-close="sheet">Abbrechen</button><button class="btn pri" data-act="vsave"${pending.length ? "" : " disabled"}>Speichern</button></div>`);
   sheetCleanup = null;
-  $("#pitems").addEventListener("change", e => { const el = e.target, box = el.closest(".pitem"); if (!box) return; const it = pending[+box.dataset.i]; readItem(box, it); if (el.dataset.pf === "type") { it.type = el.value; reviewRender(txt); } });
-  $("#pitems").addEventListener("input", e => { const box = e.target.closest(".pitem"); if (box) readItem(box, pending[+box.dataset.i]); });
+  $("#pitems").addEventListener("change", e => { const el = e.target, box = el.closest(".pitem"); if (!box) return; const it = pending[+box.dataset.i]; readPItem(box, it); if (el.dataset.pf === "type") { it.type = el.value; reviewRender(txt); } });
+  $("#pitems").addEventListener("input", e => { const box = e.target.closest(".pitem"); if (box) readPItem(box, pending[+box.dataset.i]); });
   voiceReview.lastTxt = txt;
 }
-function readItem(box, it) {
+function readPItem(box, it) {
   box.querySelectorAll("[data-pf]").forEach(el => { const k = el.dataset.pf; if (k === "type") return; if (k === "ok") it.ok = el.value === "1"; else if (k === "amount") it.amount = parseAmount(el.value); else it[k] = el.value; });
 }
 function voiceSave() {
-  $$("#pitems .pitem").forEach(b => readItem(b, pending[+b.dataset.i]));
+  $$("#pitems .pitem").forEach(b => readPItem(b, pending[+b.dataset.i]));
   let n = 0; const miss = [];
   for (const it of pending) {
     if (it.type === "shop" && it.t) { if (addShop(it.t)) n++; }
@@ -1528,7 +1532,6 @@ const ACT = {
   cleardone: () => { const n = S.todos.filter(t => t.list === "einkauf" && t.done).length; if (!ask(`${n} erledigte Artikel von der Liste löschen?`)) return; S.todos = S.todos.filter(t => !(t.list === "einkauf" && t.done)); save(); render(true); },
   shoplist: () => { todoList = "einkauf"; view = "todos"; render(); },
   shopmode: el => { shopMode = el.dataset.on === "1"; wakeLock(shopMode); todoList = "einkauf"; view = "todos"; render(); $("#screen").scrollTop = 0; },
-  wxmore: () => { wxOpen = !wxOpen; const el = $("#wx"); if (el) el.innerHTML = wxHTML(); },
   mstep: el => shiftMonth(+el.dataset.n),
   calview: el => { calView = el.dataset.cv; if (calView === "monat") { calY = +selDate.slice(0, 4); calM = +selDate.slice(5, 7) - 1; } render(); },
   selday: el => { selDate = el.dataset.d; render(true); },
@@ -1541,7 +1544,7 @@ const ACT = {
   vnext: () => voiceReview(),
   vback: () => { const t = voiceReview.lastTxt || ""; voiceStart(); recStop(); $("#v-text").value = t; $("#v-state").textContent = "Ändern oder auf „Nochmal“ tippen."; },
   vsave: () => voiceSave(),
-  pdel: el => { $$("#pitems .pitem").forEach(b => readItem(b, pending[+b.dataset.i])); pending.splice(+el.dataset.i, 1); reviewRender(voiceReview.lastTxt); },
+  pdel: el => { $$("#pitems .pitem").forEach(b => readPItem(b, pending[+b.dataset.i])); pending.splice(+el.dataset.i, 1); reviewRender(voiceReview.lastTxt); },
   importvcf: () => { const f = $("#f-vcf"); f.value = ""; f.click(); },
   export: () => exportData(),
   import: () => { const f = $("#f-import"); f.value = ""; f.click(); },

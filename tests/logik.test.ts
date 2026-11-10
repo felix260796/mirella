@@ -114,3 +114,13 @@ test("Anrufplan mit eigenen Anruftagen und runde Geburtstage nach Auswahl", () =
   assert.equal(L.roundBday("2001-03-01", "2026-01-10", 183, [25])!.age, 25);
   assert.equal(L.roundBday("2001-03-01", "2026-01-10", 183, [30]), null);
 });
+
+test("Wetter: Regen-Zeiträume", () => {
+  const time: string[] = [], P: number[] = [], M: number[] = [];
+  for (let h = 0; h < 24; h++) { time.push(`2026-11-10T${String(h).padStart(2, "0")}:00`); P.push(h >= 17 && h <= 19 ? 70 : h === 22 ? 45 : 5); M.push(h >= 17 && h <= 19 ? 0.7 : 0); }
+  const s = L.rainSpans({ time, precipitation_probability: P, precipitation: M }, "2026-11-10T08:00", 24);
+  assert.equal(s.length, 2);
+  assert.equal(s[0].from, "2026-11-10T17:00"); assert.equal(s[0].to, "2026-11-10T19:00"); assert.equal(s[0].maxP, 70); assert.equal(s[0].mm, 2.1);
+  assert.equal(s[1].from, "2026-11-10T22:00");
+  assert.equal(L.rainSpans({ time, precipitation_probability: P, precipitation: M }, "2026-11-10T20:00", 2).length, 0);
+});

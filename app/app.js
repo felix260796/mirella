@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos: IndexedDB "mirella" / "photos".
    Später ersetzt der Supabase-Sync (v0.7) die lokale Speicherung. */
 "use strict";
-const VERSION = "0.9.2";
+const VERSION = "0.9.3";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -332,7 +332,7 @@ const R = {
     for (const b of list) { const g = grp(b); if (g !== last) { body += `<div class="sec"><span class="label">${esc(g)}</span></div>`; last = g; } body += briefCard(b, true); }
     return `${subtop("Alle Bereiche", "drawer")}<p class="big" style="margin:0 0 4px">Briefings</p>
     <button class="btn pri" data-act="addbrief" style="width:100%;margin:8px 0">+ Briefing hinzufügen (PDF)</button>
-    <p class="hint">So kommt das Briefing rein: in Gmail das PDF öffnen › Teilen › „In Dateien sichern“, dann hier auf „Briefing hinzufügen“. Mehrere auf einmal gehen auch. Automatisch aus Gmail holen kann Mirella erst mit dem Server.</p>
+    <p class="hint">Deine Briefings aus Gmail kommen automatisch: werktags 6–7 und 16–17 Uhr, am Wochenende 10–11 Uhr. Antippen öffnet die Mail mit dem PDF. Eigene PDFs kannst du zusätzlich hier ablegen.</p>
     ${body || empty("Noch keine Briefings abgelegt.")}`;
   },
   einstellungen() {
@@ -365,6 +365,7 @@ const R = {
 };
 function latestBriefing() { return S.briefings.slice().sort((a, b) => (b.d + (b.time || "")).localeCompare(a.d + (a.time || "")))[0] || null; }
 function briefCard(b, del) {
+  if (b.remote) return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : b.kind === "wochenende" ? "Wochenend-Briefing" : "Morning Briefing")}</div><div class="s">${esc(briefWhen(b))} · PDF in Gmail</div></span>${b.read ? '<span class="pill">Gmail</span>' : '<span class="pill acc">neu</span>'}</div>`;
   return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : "Morning Briefing")}</div><div class="s">${esc(fmtDate(b.d))}${b.time ? " · " + esc(b.time) : ""} · ${esc(b.name)}</div></span>${b.read ? (del ? `<button class="rowdel" data-act="delbrief" data-id="${b.id}" aria-label="löschen">✕</button>` : '<span class="pill">PDF</span>') : '<span class="pill acc">neu</span>'}</div>`;
 }
 async function addBriefings(files) {
@@ -383,6 +384,7 @@ async function addBriefings(files) {
 }
 async function openBrief(id) {
   const b = S.briefings.find(x => x.id === id); if (!b) return;
+  if (b.remote) { b.read = true; save(); render(true); window.open(b.url, "_blank", "noopener"); return; }
   const blob = await photoGet(id).catch(() => null); if (!blob) { toast("Datei nicht gefunden"); return; }
   b.read = true; save();
   const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: b.type }));
@@ -393,6 +395,21 @@ async function openBrief(id) {
     o.querySelector("button").onclick = () => { o.remove(); render(true); };
     document.body.appendChild(o);
   }
+}
+
+/* Automatische Briefings: ein Zeitplan legt sie aus Gmail in briefings.json ab */
+function briefWhen(b) { const d = new Date(b.d + "T12:00"); const t = new Date(); t.setHours(12,0,0,0); const diff = Math.round((t - d) / 864e5); return (diff === 0 ? "heute" : diff === 1 ? "gestern" : d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })) + (b.time ? ", " + b.time + " Uhr" : ""); }
+async function syncBriefings() {
+  try {
+    const r = await fetch("./briefings.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
+    const j = await r.json(); let neu = 0;
+    for (const it of j.items || []) {
+      const ex = S.briefings.find(b => b.id === "gm_" + it.id);
+      if (ex) { Object.assign(ex, { d: it.d, time: it.time, kind: it.kind, url: it.url }); delete ex.quote; continue; }
+      S.briefings.push({ id: "gm_" + it.id, remote: true, d: it.d, time: it.time, kind: it.kind, title: "Briefing", url: it.url, name: "Briefing", read: false }); neu++;
+    }
+    if (neu) { save(); if (!$("#sheet").classList.contains("open")) render(true); }
+  } catch (_) { }
 }
 
 /* ---------- Wetter (Open-Meteo, ohne Schlüssel) ---------- */
@@ -1113,11 +1130,12 @@ $("#screen").addEventListener("touchend", e => { if (tx === null) return; const 
 let sy = null;
 $("#sheet").addEventListener("touchstart", e => { sy = $("#sheet").scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
 $("#sheet").addEventListener("touchend", e => { if (sy !== null && e.changedTouches[0].clientY - sy > 120 && !e.target.closest("textarea,input,select")) closeSheet(); sy = null; });
-document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#sheet").classList.contains("open") && !document.querySelector(".pdfview")) { render(true); loadWeather(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#sheet").classList.contains("open") && !document.querySelector(".pdfview")) { render(true); loadWeather(); syncBriefings(); } });
 
 /* ---------- Start ---------- */
 load();
 render();
 loadWeather();
+syncBriefings();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => { });

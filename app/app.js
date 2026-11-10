@@ -384,7 +384,7 @@ async function addBriefings(files) {
 }
 async function openBrief(id) {
   const b = S.briefings.find(x => x.id === id); if (!b) return;
-  if (b.remote) { b.read = true; save(); render(true); window.open(b.pdf ? "./" + b.pdf : b.url, "_blank", "noopener"); return; }
+  if (b.remote) { b.read = true; save(); render(true); window.open(b.pdf ? webBase() + b.pdf : b.url, "_blank", "noopener"); return; }
   const blob = await photoGet(id).catch(() => null); if (!blob) { toast("Datei nicht gefunden"); return; }
   b.read = true; save();
   const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: b.type }));
@@ -397,11 +397,13 @@ async function openBrief(id) {
   }
 }
 
+/* In der iPhone-App liegen die Dateien im Paket, Briefings kommen aber immer frisch von der Website */
+function webBase() { return NATIVE ? "https://felix260796.github.io/mirella/" : "./"; }
 /* Automatische Briefings: ein Zeitplan legt sie aus Gmail in briefings.json ab */
 function briefWhen(b) { const d = new Date(b.d + "T12:00"); const t = new Date(); t.setHours(12,0,0,0); const diff = Math.round((t - d) / 864e5); return (diff === 0 ? "heute" : diff === 1 ? "gestern" : d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })) + (b.time ? ", " + b.time + " Uhr" : ""); }
 async function syncBriefings() {
   try {
-    const r = await fetch("./briefings.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
+    const r = await fetch(webBase() + "briefings.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
     const j = await r.json(); let neu = 0;
     for (const it of j.items || []) {
       const ex = S.briefings.find(b => b.id === "gm_" + it.id);
@@ -438,6 +440,13 @@ function wxHTML() {
 /* Standort: einmal erlauben, dann dauerhaft gespeichert (kein erneutes Nachfragen) */
 function geoOnce() {
   return new Promise(res => {
+    const G = NATIVE && window.Capacitor.Plugins.Geolocation;
+    if (G) { // echte App: Apples Standortabfrage, einmal erlauben unter Einstellungen › Mirella
+      return G.requestPermissions().then(() => G.getCurrentPosition({ timeout: 10000, maximumAge: 24 * 3600e3 })).then(pos => {
+        S.settings.wxLat = +pos.coords.latitude.toFixed(3); S.settings.wxLon = +pos.coords.longitude.toFixed(3); S.settings.wxName = "deinem Standort"; S.settings.geoAsked = true; save();
+        res({ lat: S.settings.wxLat, lon: S.settings.wxLon, place: S.settings.wxName });
+      }).catch(e => { S.settings.geoAsked = true; save(); res({ err: /denied|permission/i.test(String(e && e.message)) ? "denied" : "fail" }); });
+    }
     if (!navigator.geolocation) return res({ err: "none" });
     navigator.geolocation.getCurrentPosition(pos => {
       S.settings.wxLat = +pos.coords.latitude.toFixed(3); S.settings.wxLon = +pos.coords.longitude.toFixed(3); S.settings.wxName = "deinem Standort"; S.settings.geoAsked = true; save();
@@ -449,7 +458,7 @@ const GEO_HELP = "Standort ist für Mirella gesperrt. iPhone: Einstellungen › 
 async function wxCoords() {
   if (S.settings.wxLat != null) return { lat: S.settings.wxLat, lon: S.settings.wxLon, place: S.settings.wxName };
   if (S.settings.geoAsked) { // nicht erneut nachfragen, außer iOS meldet die Freigabe inzwischen als erteilt
-    let st = null; try { st = navigator.permissions ? (await navigator.permissions.query({ name: "geolocation" })).state : null; } catch (_) { }
+    let st = null; if (NATIVE) st = "granted"; else try { st = navigator.permissions ? (await navigator.permissions.query({ name: "geolocation" })).state : null; } catch (_) { }
     if (st !== "granted") return null;
   }
   wxCoords.p = wxCoords.p || geoOnce();
@@ -761,7 +770,24 @@ async function viewPhoto(id) {
 }
 
 /* ---------- Sprache ---------- */
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+/* In der echten iPhone-App gibt es kein Web-Speech: dort übernimmt Apples Spracherkennung (Capacitor-Plugin) */
+class NativeSR {
+  constructor() { this.P = window.Capacitor.Plugins.SpeechRecognition; this.lang = "de-DE"; this.subs = []; }
+  async start() {
+    try {
+      const perm = await this.P.requestPermissions();
+      if (perm && perm.speechRecognition && perm.speechRecognition !== "granted") { this.onerror && this.onerror({ error: "not-allowed" }); this.onend && this.onend(); return; }
+      this.subs.push(await this.P.addListener("partialResults", d => { const t = (d.matches || [])[0] || ""; this.onresult && this.onresult({ results: [Object.assign([{ transcript: t }], { isFinal: false })] }); }));
+      this.subs.push(await this.P.addListener("listeningState", d => { if (d.status === "stopped") this._end(); }));
+      await this.P.start({ language: this.lang, partialResults: true, popup: false, maxResults: 1 });
+    } catch (e) { this.onerror && this.onerror({ error: String(e && e.message || e) }); this._end(); }
+  }
+  _end() { this.subs.forEach(s => s.remove && s.remove()); this.subs = []; this.onend && this.onend(); }
+  stop() { this.P.stop().catch(() => { }); }
+  abort() { this.P.stop().catch(() => { }); this.subs.forEach(s => s.remove && s.remove()); this.subs = []; }
+}
+const SR = NATIVE && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition ? NativeSR : (window.SpeechRecognition || window.webkitSpeechRecognition);
 let rec = null, recOn = false, finalText = "";
 function voiceStart() {
   finalText = "";
@@ -786,7 +812,7 @@ function recStart() {
     rec.onerror = e => {
       const st = $("#v-state");
       if (!st) return;
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") st.textContent = "Mikrofon ist nicht erlaubt. iPhone: Einstellungen › Apps › Safari › Mikrofon › Erlauben. Solange kannst du tippen oder das Tastatur-Mikrofon nutzen.";
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") st.textContent = (NATIVE ? "Mikrofon ist nicht erlaubt. iPhone: Einstellungen › Apps › Mirella › Mikrofon und Spracherkennung einschalten." : "Mikrofon ist nicht erlaubt. iPhone: Einstellungen › Apps › Safari › Mikrofon › Erlauben.") + " Solange kannst du tippen oder das Tastatur-Mikrofon nutzen.";
       else if (e.error === "no-speech") st.textContent = "Ich habe nichts gehört. Tippe auf „Nochmal“.";
       else st.textContent = "Spracheingabe gerade nicht möglich (" + e.error + "). Tippe oder nutze das Tastatur-Mikrofon.";
     };

@@ -277,18 +277,20 @@ const L = (() => {
   }
 
   /* ---------- Runde Geburtstage ---------- */
-  function roundBday(bday, t, lead = 183) {
+  function roundBday(bday, t, lead = 183, ages) {
     const y = +String(bday || "").slice(0, 4); if (!y || y < 1900) return null;
     const md = bday.slice(5); let ny = +t.slice(0, 4); if (`${ny}-${md}` < t) ny++;
     const next = `${ny}-${md}`, age = ny - y, d = diffDays(t, next);
-    if ((age % 10 === 0 || age === 18) && age > 0 && d <= lead) return { date: next, age, days: d };
+    const ok = ages && ages.length ? ages.includes(age) : (age % 10 === 0 || age === 18);
+    if (ok && age > 0 && d <= lead) return { date: next, age, days: d };
     return null;
   }
 
   /* ---------- Anrufplan: höchstens N pro Tag, nur Mo–Fr ---------- */
-  function callPlan(ids, t, max, doneToday = 0, extra = 0) {
+  function callPlan(ids, t, max, doneToday = 0, extra = 0, days = [1, 2, 3, 4, 5]) {
     const out = {}; let day = t, cap = Math.max(0, max - doneToday) + extra, used = 0;
-    const work = d => { const w = D(d).getDay(); return w > 0 && w < 6; };
+    if (!days || !days.length) days = [1, 2, 3, 4, 5];
+    const work = d => days.includes(D(d).getDay());
     if (!work(day)) cap = extra;
     for (const id of ids) {
       while (used >= cap) { day = addDays(day, 1); while (!work(day)) day = addDays(day, 1); cap = max; used = 0; }
@@ -297,12 +299,47 @@ const L = (() => {
     return out;
   }
 
+  /* ---------- Wetter: Tag/Nacht und Hinweise ----------
+     hr: Open-Meteo hourly (time, temperature_2m, apparent_temperature, precipitation_probability, wind_gusts_10m, uv_index, weather_code)
+     day: "JJJJ-MM-TT", nowH: Stunde jetzt. Tag = 7–20 Uhr, Nacht = 20 Uhr bis 7 Uhr am Folgetag. */
+  function wxDayNight(hr, day, nowH) {
+    const t = hr.time || [], next = addDays(day, 1), dayI = [], nightI = [];
+    t.forEach((x, i) => { const d = x.slice(0, 10), h = +x.slice(11, 13); if (d === day && h >= 7 && h < 20) dayI.push(i); if ((d === day && h >= 20) || (d === next && h < 7)) nightI.push(i); });
+    const v = (k, ix, f) => { const a = ix.map(i => (hr[k] || [])[i]).filter(n => n != null); return a.length ? f(...a) : null; };
+    const rest = dayI.filter(i => +t[i].slice(11, 13) >= nowH);
+    const hints = [], H = (k, ic, txt) => hints.push({ k, ic, t: txt });
+    const look = rest.length ? rest : dayI;
+    const rainI = look.find(i => (hr.precipitation_probability || [])[i] >= 50);
+    const codes = look.map(i => (hr.weather_code || [])[i]);
+    if (codes.some(c => c >= 95)) H("gewitter", "⛈️", "Gewitter möglich: draußen vorsichtig sein.");
+    if (codes.some(c => (c >= 71 && c <= 77) || c === 85 || c === 86)) H("schnee", "🌨️", "Schnee: feste Schuhe, mehr Zeit für den Weg.");
+    else if (rainI != null) { const h = +t[rainI].slice(11, 13); H("regen", "☂️", h <= nowH ? "Gerade Regen: Schirm mitnehmen." : `Ab ${h} Uhr Regen: Schirm mitnehmen.`); }
+    const morningMin = v("temperature_2m", t.map((x, i) => i).filter(i => t[i].slice(0, 10) === day && +t[i].slice(11, 13) <= 9), Math.min);
+    const nightMin = v("temperature_2m", nightI, Math.min);
+    if (morningMin != null && morningMin <= 1 && nowH < 11) H("frost", "❄️", "Frost am Morgen: Glätte möglich, Scheibe kratzen einplanen.");
+    else if (nightMin != null && nightMin <= 1) H("frost", "❄️", `Heute Nacht ${Math.round(nightMin)}°: morgen früh Glätte möglich.`);
+    const gust = v("wind_gusts_10m", look, Math.max);
+    if (gust != null && gust >= 60) H("sturm", "💨", `Sturmböen bis ${Math.round(gust)} km/h: Fenster und Balkon sichern.`);
+    else if (gust != null && gust >= 45) H("wind", "🌬️", `Windig, Böen bis ${Math.round(gust)} km/h.`);
+    const dMax = v("temperature_2m", dayI, Math.max), feel = v("apparent_temperature", look, Math.min);
+    if (dMax != null && dMax >= 30) H("hitze", "🥵", `Hitze bis ${Math.round(dMax)}°: viel trinken, Wasser mitnehmen.`);
+    if (feel != null && feel < 5) H("jacke", "🧥", `Gefühlt nur ${Math.round(feel)}°: warme Jacke.`);
+    else if (dMax != null && dMax < 10) H("jacke", "🧥", "Kühl: Jacke mitnehmen.");
+    const dMin = v("temperature_2m", dayI, Math.min);
+    if (dMax != null && dMin != null && dMax - dMin >= 10 && dMax >= 12) H("zwiebel", "🧣", `Großer Unterschied (${Math.round(dMin)}° bis ${Math.round(dMax)}°): Zwiebellook.`);
+    const uv = v("uv_index", look, Math.max);
+    if (uv != null && uv >= 6) H("uv", "🧴", `Starke Sonne (UV ${Math.round(uv)}): Sonnencreme und Sonnenbrille.`);
+    else if (uv != null && uv >= 4 && dMax >= 18) H("uv", "😎", "Sonnig: Sonnenbrille einpacken.");
+    if (codes.some(c => c === 45 || c === 48) && nowH < 12) H("nebel", "🌫️", "Nebel: vorsichtig fahren.");
+    return { dayMax: dMax, dayMin: dMin, nightMin, nightMax: v("temperature_2m", nightI, Math.max), hints };
+  }
+
   /* ---------- Hilfe: „Wie funktioniert …?“ ---------- */
   function helpMatch(q, list) {
     const words = String(q || "").toLowerCase().replace(/[?!.,]/g, " ").split(/\s+/).filter(w => w.length > 2 && !/^(wie|was|wo|geht|das|der|die|den|ich|mit|und|eine?n?|kann|funktioniert|mache|machen|hey|mirella)$/.test(w));
     return list.map(h => ({ h, s: words.reduce((a, w) => a + (h.k.some(k => k.startsWith(w.slice(0, 5)) || w.startsWith(k.slice(0, 5))) ? 2 : 0) + (h.q.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.h);
   }
 
-  return { pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines };
+  return { pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines, wxDayNight };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = L;

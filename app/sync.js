@@ -17,6 +17,10 @@ try { Object.assign(SY.meta, JSON.parse(localStorage.getItem(META_KEY) || "{}"))
 const syMetaSave = () => { try { localStorage.setItem(META_KEY, JSON.stringify(SY.meta)); } catch (_) { } };
 const syAuthSave = () => { try { SY.auth ? localStorage.setItem(AUTH_KEY, JSON.stringify(SY.auth)) : localStorage.removeItem(AUTH_KEY); } catch (_) { } };
 const syOn = () => !!(SY.auth && SY.auth.user);
+/* Wem die Daten auf diesem Gerät gehören (Konto-ID), damit sich Konten nie vermischen */
+const OWNER_KEY = "mirella.owner", STASH = "mirella.stash.";
+const syOwner = () => { try { return localStorage.getItem(OWNER_KEY); } catch (_) { return null; } };
+try { if (SY.auth && SY.auth.user && !syOwner()) localStorage.setItem(OWNER_KEY, SY.auth.user.id); } catch (_) { }
 
 async function sbAuth(path, body) {
   const r = await fetch(SB_URL + "/auth/v1/" + path, { method: "POST", headers: { apikey: SB_KEY, "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -161,10 +165,18 @@ async function syLogin(email, pw) {
   let j;
   try { j = await sbAuth("token?grant_type=password", { email, password: pw }); }
   catch (e) { toast(/invalid/i.test(e.message) ? "E-Mail oder Passwort stimmt nicht" : "Anmeldung gerade nicht möglich: " + e.message); return; }
-  syTakeSession(j);
-  SY.meta = { ver: 0, dirty: true, last: 0, lastBackup: SY.meta.lastBackup || 0, pendingUp: [], pendingDel: [] };
-  try { SY.meta.pendingUp = Object.keys(await photoAll()); } catch (_) { }
-  syMetaSave(); toast("Angemeldet, ich gleiche ab …"); render(true); await sync(true); render(true);
+  // Jedes Konto hat eigene Daten: gehörten die Daten auf diesem Gerät einem anderen Konto, werden sie beiseitegelegt
+  const owner = syOwner(), switched = owner && owner !== j.user.id;
+  if (switched) {
+    try { localStorage.setItem(STASH + owner, JSON.stringify(S)); } catch (_) { toast("Speicher voll, bitte vorher eine Sicherung speichern"); return; }
+    const st = localStorage.getItem(STASH + j.user.id);
+    try { localStorage.setItem(KEY, st || JSON.stringify(blank())); } catch (_) { }
+    localStorage.removeItem(STASH + j.user.id); load();
+  }
+  syTakeSession(j); localStorage.setItem(OWNER_KEY, j.user.id);
+  SY.meta = { ver: 0, dirty: true, last: 0, lastBackup: switched ? 0 : (SY.meta.lastBackup || 0), pendingUp: [], pendingDel: [] };
+  if (!switched) { try { SY.meta.pendingUp = Object.keys(await photoAll()); } catch (_) { } }
+  syMetaSave(); toast(switched ? "Anderes Konto: eigene Daten, ich lade sie …" : "Angemeldet, ich gleiche ab …"); render(true); await sync(true); render(true);
 }
 async function syLogout() {
   if (!confirm("Abmelden? Deine Daten bleiben auf diesem Gerät und auf dem Server.")) return;
@@ -172,13 +184,20 @@ async function syLogout() {
   SY.auth = null; syAuthSave(); SY.meta.ver = 0; syMetaSave(); render(true);
 }
 
+/* Mehrere Konten: Geschäftshandy, Freundin … */
+function syAccountsHint() {
+  return `<div class="sec sethead"><span class="label">Weitere Konten</span></div>
+    <p class="hint" style="margin-top:0">Jedes Konto hat seine <b>eigenen Daten</b>, nichts gleicht sich zwischen Konten ab. Die Briefings sehen alle Konten (abschaltbar unter Einstellungen › Heute).</p>
+    <p class="hint"><b>Neues Konto anlegen</b> (z. B. für dein Geschäftshandy oder deine Freundin): auf supabase.com dein Projekt öffnen › Authentication › Users › „Add user“ › „Create new user“, E-Mail und Passwort eintragen, „Auto Confirm User“ anhaken. Dann auf dem anderen Gerät hier mit dieser E-Mail anmelden.</p>
+    <p class="hint">Meldest du dich auf diesem Gerät mit einem anderen Konto an, legt Mirella die bisherigen Daten beiseite und holt sie zurück, wenn du dich wieder mit deinem Konto anmeldest.</p>`;
+}
 /* Bereich in den Einstellungen */
 function syBlock() {
   const inp = 'class="search" style="margin:0"';
   if (syOn()) return `<div class="sec sethead"><span class="label">Konto und Abgleich</span></div>
     <p class="hint" style="margin-top:0">Angemeldet als <b>${esc(SY.auth.user.email)}</b>. Mirella gleicht automatisch zwischen deinen Geräten ab und legt jede Woche eine Sicherung auf dem Server ab (die letzten 8 bleiben).<br><span id="sy-status">${esc(SY.status || (SY.meta.last ? "Zuletzt abgeglichen " + new Date(SY.meta.last).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""))}</span></p>
     <div class="row2" style="margin-top:0"><button class="btn" data-act="synow">Jetzt abgleichen</button><button class="btn" data-act="syback">Sicherung zurückholen</button></div>
-    <button class="btn" data-act="syout" style="width:100%;margin-top:8px">Abmelden</button>`;
+    <button class="btn" data-act="syout" style="width:100%;margin-top:8px">Abmelden</button>${syAccountsHint()}`;
   return `<div class="sec sethead"><span class="label">Konto und Abgleich</span></div>
     <p class="hint" style="margin-top:0">Melde dich an, dann sind iPhone, iPad und PC immer auf dem gleichen Stand und deine Daten sind auf dem Server in Frankfurt gesichert.</p>
     <form data-form="sylogin" style="margin-bottom:8px"><input ${inp} type="email" name="email" autocomplete="username" placeholder="Deine E-Mail" aria-label="E-Mail" style="margin:0 0 6px;width:100%"><input ${inp} type="password" name="pw" autocomplete="current-password" placeholder="Passwort" aria-label="Passwort" style="margin:0 0 6px;width:100%"><button class="btn pri" style="width:100%">Anmelden</button></form>`;

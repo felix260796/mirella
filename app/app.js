@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.13";
+const VERSION = "0.14";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -78,11 +78,11 @@ function blank() {
   return {
     v: 1,
     settings: {
-      name: "Felix", maxCalls: 3, retryWorkdays: 2, giveUp: 5, giftLead: 14, callFrom: 8, callTo: 18, callWeekdays: true, msgFrom: 8, msgTo: 21,
+      name: "Felix", maxCalls: 3, retryWorkdays: 2, giveUp: 5, giftLead: 14, callFrom: 8, callTo: 18, callDays: [1, 2, 3, 4, 5], msgFrom: 8, msgTo: 21, msgDays: [0, 1, 2, 3, 4, 5, 6], roundLead: 183, roundAges: [18, 20, 30, 40, 50, 60, 70, 80, 90, 100], wxHint: { regen: 1, schnee: 1, gewitter: 1, frost: 1, sturm: 1, wind: 1, hitze: 1, jacke: 1, zwiebel: 1, uv: 1, nebel: 1 }, shopHistDays: 90,
       cats: [], wxName: "", wxLat: null, wxLon: null, showBrief: 1, showWx: 1,
       nerv: { anrufe: 1, aufgaben: 1, geburtstage: 1, fristen: 1, supplements: 1 }, nervEvery: 30, nervSound: 1,
       calFilter: { geb: 1, erin: 1, todo: 1, anruf: 1 }, calStart: "monat",
-      income: 0, budgets: {}, contractLead: 30, huLead: 28, pcEvery: 7, pcLast: "", washMin: 120, suppMorning: "07:30", suppNoon: "12:30", suppEvening: "21:00",
+      income: 0, budgets: {}, contractLead: 30, huLead: 28, pcEvery: 0, pcLast: "", washMin: 120, suppMorning: "07:30", suppNoon: "12:30", suppEvening: "21:00",
       homeAddr: "", homeLat: null, homeLon: null, prepMin: 30, bufMin: 10, alarmCount: 3, alarmGap: 5, gmapsKey: ""
     },
     briefings: [],
@@ -95,7 +95,7 @@ function load() {
   const b = blank();
   for (const k of Object.keys(b)) if (S[k] == null) S[k] = b[k];
   S.settings = Object.assign(b.settings, S.settings || {});
-  for (const k of ["nerv", "calFilter"]) S.settings[k] = Object.assign({}, b.settings[k], S.settings[k] || {});
+  for (const k of ["nerv", "calFilter", "wxHint"]) S.settings[k] = Object.assign({}, b.settings[k], S.settings[k] || {});
   migrate();
 }
 /* Ältere Stände an die neue Struktur anpassen (läuft bei jedem Start, ändert nur, was nötig ist) */
@@ -164,12 +164,19 @@ function nextDue(p) {
   return due;
 }
 /* Anrufplan: höchstens maxCalls pro Werktag; Überzählige rutschen auf die nächsten Werktage. „Vorziehen“ holt weitere auf heute. */
+/* Anruftage (0 = So … 6 = Sa), einstellbar unter Einstellungen › Kontakte */
+const callDays = () => (Array.isArray(S.settings.callDays) && S.settings.callDays.length ? S.settings.callDays : [1, 2, 3, 4, 5]).map(Number);
+const msgDays = () => (Array.isArray(S.settings.msgDays) && S.settings.msgDays.length ? S.settings.msgDays : [0, 1, 2, 3, 4, 5, 6]).map(Number);
+const addCallDays = (s, n) => { let d = s; const ds = callDays(); while (n > 0) { d = addDays(d, 1); if (ds.includes(D(d).getDay())) n--; } return d; };
+const WDS = [[1, "Mo"], [2, "Di"], [3, "Mi"], [4, "Do"], [5, "Fr"], [6, "Sa"], [0, "So"]];
+const dayLabel = ds => { const s = WDS.filter(([d]) => ds.includes(d)).map(x => x[1]); if (s.length === 7) return "jeden Tag"; if (s.join() === "Mo,Di,Mi,Do,Fr") return "Mo–Fr"; return s.join(", ") || "nie"; };
+const setDays = (k, label, cur) => `<div class="set" style="display:block"><span>${label}<small>${esc(dayLabel(cur))}</small></span><div class="daychips">${WDS.map(([d, l]) => `<button class="chip2" data-act="setday" data-k="${k}" data-d="${d}" aria-pressed="${cur.includes(d)}">${l}</button>`).join("")}</div></div>`;
 function callsToday() { const t = today(); return S.people.filter(p => (p.calls || []).some(c => c.d === t)).length; }
 function callPlanMap() {
   const t = today(), due = S.people.filter(p => { const d = nextDue(p); return d && d <= t; }).sort((a, b) => nextDue(a) < nextDue(b) ? -1 : 1);
   const pull = S.pull && S.pull.d === t ? S.pull.ids : [], map = {};
   const rest = due.filter(p => !pull.includes(p.id));
-  Object.assign(map, L.callPlan(rest.map(p => p.id), t, +S.settings.maxCalls || 3, Math.max(0, callsToday() - pull.filter(id => S.people.some(p => p.id === id && (p.calls || []).some(c => c.d === t))).length)));
+  Object.assign(map, L.callPlan(rest.map(p => p.id), t, +S.settings.maxCalls || 3, Math.max(0, callsToday() - pull.filter(id => S.people.some(p => p.id === id && (p.calls || []).some(c => c.d === t))).length), 0, callDays()));
   pull.forEach(id => { const p = S.people.find(x => x.id === id); if (p && !(p.calls || []).some(c => c.d === t && c.ok)) map[id] = t; });
   return map;
 }
@@ -236,7 +243,7 @@ function addShop(t, qty, unit) {
 function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const w1 = new Date(d.getFullYear(), 0, 4, 12); return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
 
 /* ---------- Zustand ---------- */
-let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false;
+let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false, showShopHist = 0;
 { const t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); selDate = today(); }
 
 /* ---------- Bausteine ---------- */
@@ -310,14 +317,12 @@ const R = {
     const quit = S.people.filter(p => !p.arch && gaveUp(p));
     if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card"><span class="av">${esc(initials(p))}</span><span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
     if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : "in " + n + " Tagen · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
-    const rounds = S.people.map(p => [p, L.roundBday(p.bday, t)]).filter(([p, r]) => r && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
+    const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
     if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
     if (dueTodos.length) h2 += `<div class="sec"><span class="label">Aufgaben</span><span class="label">${dueTodos.length}</span></div>${dueTodos.sort(byPrio).map(todoRow).join("")}`;
     h2 += HOOKS.heute.map(f => f()).join("");
     if (asks.length) h2 += `<div class="sec"><span class="label">Nachfragen</span></div>${asks.slice(0, 5).map(([p, a]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(a.t)}</div></span></div>`).join("")}`;
     if (docs.length) h2 += `<div class="sec"><span class="label">Dokumente laufen ab</span></div>${docs.map(x => `<div class="card" role="button" tabindex="0" data-act="area" data-id="doku"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(x.name)}</div><div class="s">gültig bis ${esc(fmtDate(x.until))}</div></span>${x.until < t ? '<span class="pill late">abgelaufen</span>' : '<span class="pill">bald</span>'}</div>`).join("")}`;
-    const pcE = +S.settings.pcEvery, pcL = S.settings.pcLast;
-    if (pcE && (S.people.length || S.docs.length) && (!pcL || diffDays(pcL, t) >= pcE)) h2 += `<div class="card" role="button" tabindex="0" data-act="pcbackup"><span class="av">💾</span><span style="min-width:0"><div class="t">PC-Sicherung ${pcL ? "fällig" : "einrichten"}</div><div class="s">${pcL ? "zuletzt " + esc(relDate(pcL)) : "Excel + alle PDFs in deinen OneDrive-Ordner"} · antippen</div></span></div>`;
     if (shop) h2 += `<div class="sec"><span class="label">Einkaufsliste</span></div><div class="card" role="button" tabindex="0" data-act="shoplist"><span class="av">🛒</span><span><div class="t">${shop} ${shop === 1 ? "Sache" : "Sachen"} offen</div><div class="s">Antippen zum Einkaufen</div></span></div>`;
     return h2;
   },
@@ -344,7 +349,7 @@ const R = {
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
-    ${nb ? `<div class="block"><h4>Geburtstag${ageAt(p, nb) ? ` <small class="agechip">${nb === today() ? ageAt(p, nb) : ageAt(p, nb) - 1} Jahre alt</small>` : ""}</h4><div class="catrow"><span>${esc(fmtDate(nb))}${ageAt(p, nb) ? ", wird " + ageAt(p, nb) : ""}</span><span>in ${diffDays(today(), nb)} Tagen</span></div>${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
+    ${nb ? `<div class="block"><h4>Geburtstag</h4>${(() => { const a = ageAt(p, nb), n = diffDays(today(), nb), isT = nb === today(); return `<div class="bdbig">${a ? `<div class="bdnow">${isT ? a : a - 1} Jahre alt</div>` : ""}<div class="bdnext">${isT ? `🎂 Heute ${a ? a + " Jahre" : "Geburtstag"}!` : `${a ? `wird <b>${a} Jahre</b>` : "Geburtstag"} am ${esc(fmtDate(nb))}`}</div>${isT ? "" : `<div class="bdin">${n === 1 ? "morgen" : "in " + n + " Tagen"}</div>`}</div>`; })()}${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
     ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
     ${list("Geschenkideen", "gifts", "Noch keine Ideen", "z. B. Kochkurs")}
@@ -463,18 +468,26 @@ const SETS = {
   heute() {
     const s = S.settings;
     return `${setH("Begrüßung")}${setTxt("name", "Dein Name", "für die Begrüßung auf „Heute“", "z. B. Felix")}
-    ${setH("Wetter")}${setTgl("showWx", "Wetter auf „Heute“", "Temperatur, Regen, Schirm-Hinweis")}
+    ${setH("Wetter")}${setTgl("showWx", "Wetter auf „Heute“", "jetzt, tagsüber und nachts, mit Hinweisen")}
+    ${setH("Wetter-Hinweise")}${[["regen", "☂️ Regen: Schirm"], ["schnee", "🌨️ Schnee"], ["gewitter", "⛈️ Gewitter"], ["frost", "❄️ Frost und Glätte"], ["sturm", "💨 Sturm"], ["wind", "🌬️ Wind"], ["hitze", "🥵 Hitze: trinken"], ["jacke", "🧥 Kalt: warme Jacke"], ["zwiebel", "🧣 Großer Temperatur-Unterschied"], ["uv", "🧴 Sonne: Sonnencreme"], ["nebel", "🌫️ Nebel"]].map(([k, l]) => setTgl("wxHint." + k, l, "")).join("")}
     <div class="set"><span>Wetter-Ort<small>${s.wxName === "deinem Standort" ? "dein Standort (gespeichert)" : s.wxName ? esc(s.wxName) : "noch nicht festgelegt"}</small></span><button class="mini" data-act="wxhere">${s.wxLat != null && s.wxName === "deinem Standort" ? "Standort neu bestimmen" : "Standort nutzen"}</button></div>
     <form class="shoprow" data-form="wxplace" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Oder Ort eintippen, z. B. Remseck" aria-label="Wetter-Ort"><button class="btn pri" style="flex:none">OK</button></form>
     ${setH("Briefing")}${setTgl("showBrief", "Neuestes Briefing auf „Heute“", "Tipp darauf öffnet direkt das PDF")}
     <p class="hint">Deine Briefings kommen automatisch als PDF: werktags 6–7 und 16–17 Uhr, am Wochenende 10–11 Uhr. Sie bleiben 7 Tage und werden dann gelöscht.</p>`;
   },
   kontakte() {
-    return `${setH("Anrufe")}${setSel("maxCalls", "Anrufe pro Tag", "höchstens so viele auf „Heute“", [[2, "2"], [3, "3"], [5, "5"], [99, "kein Limit"]])}
-    ${setSel("retryWorkdays", "Nicht erreicht", "neuer Versuch nach", [[1, "1 Werktag"], [2, "2 Werktagen"], [5, "1 Woche"]])}${setSel("giveUp", "Nerven aufhören", "nach so vielen Fehlversuchen hintereinander", [[0, "nie"], [3, "3 Versuchen"], [5, "5 Versuchen"], [8, "8 Versuchen"]])}
-    ${setSel("callFrom", "Anrufen ab", "Mo–Fr", [[7, "7 Uhr"], [8, "8 Uhr"], [9, "9 Uhr"], [10, "10 Uhr"]])}${setSel("callTo", "Anrufen bis", "Mo–Fr", [[17, "17 Uhr"], [18, "18 Uhr"], [19, "19 Uhr"], [20, "20 Uhr"]])}
-    ${setSel("msgFrom", "Nachrichten ab", "auch am Wochenende", [[7, "7 Uhr"], [8, "8 Uhr"], [9, "9 Uhr"]])}${setSel("msgTo", "Nachrichten bis", "auch am Wochenende", [[20, "20 Uhr"], [21, "21 Uhr"], [22, "22 Uhr"]])}
-    ${setH("Geburtstage")}${setSel("giftLead", "Geburtstage", "so früh auf „Heute“ zeigen", [[7, "7 Tage vorher"], [14, "14 Tage vorher"], [21, "21 Tage vorher"]])}
+    const ages = S.settings.roundAges || [];
+    return `${setH("Anrufe")}${setSel("maxCalls", "Anrufe pro Tag", "höchstens so viele auf „Heute“", [[1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"], [7, "7"], [10, "10"], [99, "kein Limit"]])}
+    ${setDays("callDays", "Anruftage", callDays())}
+    ${setSel("callFrom", "Anrufen ab", "an den Anruftagen", [[6, "6 Uhr"], [7, "7 Uhr"], [8, "8 Uhr"], [9, "9 Uhr"], [10, "10 Uhr"], [11, "11 Uhr"], [12, "12 Uhr"], [13, "13 Uhr"], [14, "14 Uhr"]])}${setSel("callTo", "Anrufen bis", "an den Anruftagen", [[12, "12 Uhr"], [13, "13 Uhr"], [14, "14 Uhr"], [15, "15 Uhr"], [16, "16 Uhr"], [17, "17 Uhr"], [18, "18 Uhr"], [19, "19 Uhr"], [20, "20 Uhr"], [21, "21 Uhr"], [22, "22 Uhr"]])}
+    ${setSel("retryWorkdays", "Nicht erreicht", "neuer Versuch nach", [[1, "1 Anruftag"], [2, "2 Anruftagen"], [3, "3 Anruftagen"], [5, "5 Anruftagen"], [10, "10 Anruftagen"]])}${setSel("giveUp", "Nerven aufhören", "nach so vielen Fehlversuchen hintereinander", [[0, "nie"], [2, "2 Versuchen"], [3, "3 Versuchen"], [4, "4 Versuchen"], [5, "5 Versuchen"], [8, "8 Versuchen"], [10, "10 Versuchen"]])}
+    ${setH("Nachrichten und Gruppen")}${setDays("msgDays", "Nachrichten-Tage", msgDays())}
+    ${setSel("msgFrom", "Nachrichten ab", "Gruppen, Geburtstage, Aufgaben", [[6, "6 Uhr"], [7, "7 Uhr"], [8, "8 Uhr"], [9, "9 Uhr"], [10, "10 Uhr"], [11, "11 Uhr"], [12, "12 Uhr"]])}${setSel("msgTo", "Nachrichten bis", "Gruppen, Geburtstage, Aufgaben", [[17, "17 Uhr"], [18, "18 Uhr"], [19, "19 Uhr"], [20, "20 Uhr"], [21, "21 Uhr"], [22, "22 Uhr"], [23, "23 Uhr"]])}
+    ${setH("Nerv-Modus für Kontakte")}${setTgl("nerv.anrufe", "Fällige Anrufe", "nerven, bis du angerufen hast")}${setTgl("nerv.geburtstage", "Geburtstage", "am Tag selbst, bis du gratuliert hast")}${setSel("nervEvery", "Erneut melden", "solange Mirella offen ist", [[5, "alle 5 Minuten"], [10, "alle 10 Minuten"], [15, "alle 15 Minuten"], [30, "alle 30 Minuten"], [60, "jede Stunde"], [120, "alle 2 Stunden"]])}
+    <button class="btn" data-act="setsec" data-k="nerv" style="width:100%;margin:6px 0">Alle Nerv-Einstellungen</button>
+    ${setH("Geburtstage")}${setSel("giftLead", "Geburtstage", "so früh auf „Heute“ zeigen", [[1, "1 Tag vorher"], [3, "3 Tage vorher"], [7, "7 Tage vorher"], [10, "10 Tage vorher"], [14, "14 Tage vorher"], [21, "21 Tage vorher"], [30, "30 Tage vorher"]])}
+    ${setSel("roundLead", "Runde Geburtstage", "so früh auf „Heute“ zeigen", [[0, "gar nicht"], [30, "1 Monat vorher"], [61, "2 Monate vorher"], [91, "3 Monate vorher"], [183, "6 Monate vorher"], [274, "9 Monate vorher"], [365, "1 Jahr vorher"]])}
+    <div class="set" style="display:block"><span>Welche gelten als rund?<small>${esc(ages.join(", ") || "keine")}</small></span><div class="daychips">${[18, 20, 25, 30, 40, 50, 60, 65, 70, 75, 80, 90, 100].map(a => `<button class="chip2" data-act="setage" data-a="${a}" aria-pressed="${ages.includes(a)}">${a}</button>`).join("")}</div></div>
     ${setH("Gruppen")}<div class="chips">${S.groups.map(g => `<span class="chip2" aria-pressed="false">${esc(g)}${BASEGROUPS.includes(g) ? "" : ` <button class="xbtn" data-act="delgroup" data-g="${esc(g)}" aria-label="${esc(g)} entfernen">✕</button>`}</span>`).join("")}</div>
     <form class="shoprow" data-form="group" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Eigene Gruppe, z. B. Paddeln" aria-label="Neue Gruppe"><button class="btn pri" style="flex:none">+</button></form>
     ${setH("Importieren und aufräumen")}
@@ -493,9 +506,9 @@ const SETS = {
     ${setSel("calStart", "Startansicht", "beim Öffnen des Kalenders", [["tag", "Tag"], ["woche", "Woche"], ["monat", "Monat"], ["liste", "Liste"]])}`;
   },
   nerv() {
-    return `<p class="hint" style="margin-top:0">Was hier eingeschaltet ist, lässt dich nicht in Ruhe: Beim Öffnen von Mirella kommt ein Fenster, das erst weggeht, wenn du „Erledigt“ oder „Später“ tippst, und solange Mirella offen ist, meldet sie sich mit Ton immer wieder. Anrufe nur Mo–Fr in den Anrufzeiten, Nachrichten und Geburtstage 8–21 Uhr.</p>
+    return `<p class="hint" style="margin-top:0">Was hier eingeschaltet ist, lässt dich nicht in Ruhe: Beim Öffnen von Mirella kommt ein Fenster, das erst weggeht, wenn du „Erledigt“ oder „Später“ tippst, und solange Mirella offen ist, meldet sie sich mit Ton immer wieder. Anrufe nur ${esc(dayLabel(callDays()))} von ${S.settings.callFrom} bis ${S.settings.callTo} Uhr, Nachrichten und Geburtstage ${esc(dayLabel(msgDays()))} von ${S.settings.msgFrom} bis ${S.settings.msgTo} Uhr (einstellbar unter Kontakte).</p>
     ${setH("Was soll nerven?")}${setTgl("nerv.anrufe", "Fällige Anrufe", "bis du angerufen hast")}${setTgl("nerv.aufgaben", "Aufgaben mit Nerv-Modus", "und alle mit Priorität Hoch")}${setTgl("nerv.geburtstage", "Geburtstage", "am Tag selbst, bis du gratuliert hast")}${setTgl("nerv.fristen", "Fristen", "Kündigungen, TÜV, Rechnungen, Ablauf von Dokumenten")}${setTgl("nerv.supplements", "Supplements", "morgens und abends, bis abgehakt")}
-    ${setH("Wie oft?")}${setSel("nervEvery", "Erneut melden", "solange Mirella offen ist", [[10, "alle 10 Minuten"], [15, "alle 15 Minuten"], [30, "alle 30 Minuten"], [60, "jede Stunde"]])}${setTgl("nervSound", "Mit Ton", "kurzer Ton beim Melden")}
+    ${setH("Wie oft?")}${setSel("nervEvery", "Erneut melden", "solange Mirella offen ist", [[5, "alle 5 Minuten"], [10, "alle 10 Minuten"], [15, "alle 15 Minuten"], [30, "alle 30 Minuten"], [60, "jede Stunde"], [120, "alle 2 Stunden"]])}${setTgl("nervSound", "Mit Ton", "kurzer Ton beim Melden")}
     <p class="hint">Richtig laut und auch bei geschlossener App geht das erst in der iPhone-App (TestFlight) mit echten Mitteilungen. Die Einstellungen hier gelten dann automatisch auch dort.</p>`;
   },
   konto() { return typeof syBlock === "function" ? syBlock().replace('<div class="sec sethead"><span class="label">Konto und Abgleich</span></div>', "") : '<p class="hint">Abgleich ist nicht geladen.</p>'; },
@@ -503,8 +516,7 @@ const SETS = {
     const last = S.settings.pcLast;
     return `${setH("Sicherung für den PC")}<p class="hint" style="margin-top:0">Ein ZIP mit allem: <b>Excel</b> mit allen Kontakten und Infos (plus Aufgaben, Einkauf, Verträge, Ausgaben), <b>alle PDFs und Fotos</b> sauber benannt und nach Bereich und Ordner sortiert, und die Datei zum Wiederherstellen. Funktioniert ohne Supabase und ohne Mirella.</p>
     <button class="btn pri" data-act="pcbackup" style="width:100%">💾 PC-Sicherung jetzt erstellen</button><p class="swipehint" id="pcb-state" style="text-align:left">${last ? "Letzte PC-Sicherung: " + esc(relDate(last)) : "Noch keine PC-Sicherung gemacht."}</p>
-    <p class="hint">Danach im Teilen-Fenster „In Dateien sichern“ › <b>OneDrive</b> › CoWork › Private App › 05_Sicherung wählen. Dann liegt sie automatisch auch auf deinem PC. Das Antippen musst du selbst machen, denn eine Web-App darf nicht von allein auf deinen PC schreiben. Mirella erinnert dich dafür.</p>
-    ${setSel("pcEvery", "Erinnern an die PC-Sicherung", "auf „Heute“", [[7, "jede Woche"], [14, "alle 2 Wochen"], [30, "jeden Monat"], [0, "nie"]])}
+    <p class="hint">Danach im Teilen-Fenster „In Dateien sichern“ › <b>OneDrive</b> › CoWork › Private App › 05_Sicherung wählen.</p>
     ${setH("Sicherungsdatei (nur für Mirella)")}<div class="row2" style="margin-top:0"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Sicherung laden</button></div>
     <p class="hint">Mit Anmeldung sichert Mirella jede Woche automatisch auf dem Server. Zusätzlich kannst du jederzeit eine Sicherungsdatei speichern, z. B. in iCloud Drive, und sie mit „Sicherung laden“ zurückholen.</p>`;
   },
@@ -580,13 +592,14 @@ let WX = null;
 try { WX = JSON.parse(localStorage.getItem("mirella.wx") || "null"); } catch (_) { }
 function wxHTML() {
   if (!WX || !WX.cur) return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:28px">🌡️</span><div><span style="font-size:14px">Wetter wird geladen …</span><small>Falls nichts kommt: Einstellungen › Wetter-Ort festlegen.</small></div></div></div>`;
-  const [ic, txt] = WXC(WX.cur.weather_code), dl = WX.daily, hint = [];
-  const hr = WX.hourly || {}, nowH = new Date().getHours();
-  let rainAt = null; (hr.time || []).forEach((t, i) => { const h = +t.slice(11, 13); if (rainAt === null && t.slice(0, 10) === today() && h >= nowH && hr.precipitation_probability[i] >= 50) rainAt = h; });
-  if (rainAt !== null) hint.push(rainAt <= nowH ? "Gerade Regen: Schirm mitnehmen." : `Ab ${rainAt} Uhr Regen: Schirm mitnehmen.`);
-  if (dl && dl.temperature_2m_max[0] < 8) hint.push("Kalt: warme Jacke.");
-  if (dl && dl.temperature_2m_min[0] <= 0) hint.push("Frost möglich: Scheibe kratzen einplanen.");
-  return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:30px">${ic}</span><div><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><small>${esc(txt)} ${WX.place && WX.place !== "deinem Standort" ? "in " + esc(WX.place) : "an deinem Standort"} · heute ${Math.round(dl.temperature_2m_min[0])}° bis ${Math.round(dl.temperature_2m_max[0])}°, Regen ${dl.precipitation_probability_max[0] ?? 0} %</small></div></div>${hint.length ? `<div class="chk" style="display:block;color:var(--ink-2);font-size:13.5px">${esc(hint.join(" "))}</div>` : ""}</div>`;
+  const [ic, txt] = WXC(WX.cur.weather_code), dl = WX.daily || {}, nowH = new Date().getHours();
+  const dn = L.wxDayNight(WX.hourly || {}, today(), nowH), on = S.settings.wxHint || {};
+  const r = n => n == null ? "–" : Math.round(n) + "°";
+  const dayMax = dn.dayMax != null ? dn.dayMax : (dl.temperature_2m_max || [])[0], nightMin = dn.nightMin != null ? dn.nightMin : (dl.temperature_2m_min || [])[0];
+  const hints = dn.hints.filter(h => on[h.k] === undefined || !!on[h.k]);
+  return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:30px">${ic}</span><div><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><small>${esc(txt)} ${WX.place && WX.place !== "deinem Standort" ? "in " + esc(WX.place) : "an deinem Standort"} · Regen ${(dl.precipitation_probability_max || [])[0] ?? 0} %</small></div></div>
+  <div class="wxdn"><div><span class="label">☀️ Tagsüber</span><b>${r(dn.dayMin)} bis ${r(dayMax)}</b></div><div><span class="label">🌙 Nachts</span><b>${r(nightMin)} bis ${r(dn.nightMax)}</b></div></div>
+  ${hints.length ? `<div class="wxhints">${hints.map(h => `<div>${h.ic} ${esc(h.t)}</div>`).join("")}</div>` : ""}</div>`;
 }
 /* Standort: einmal erlauben, dann dauerhaft gespeichert (kein erneutes Nachfragen) */
 function geoOnce() {
@@ -616,10 +629,10 @@ async function wxCoords() {
   const g = await wxCoords.p; return g.err ? null : g;
 }
 async function loadWeather(force) {
-  if (!force && WX && Date.now() - WX.t < 30 * 60e3) return;
+  if (!force && WX && WX.hourly && WX.hourly.temperature_2m && Date.now() - WX.t < 30 * 60e3) return;
   const c = await wxCoords(); if (!c) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<button class="btn" data-act="wxhere" style="width:100%">📍 Wetter: Standort für Mirella freigeben</button><div class="hint" style="margin-top:6px">Oder unter Einstellungen › Wetter einen Ort eintippen, dann braucht Mirella keinen Standort.</div>`; return; }
   try {
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&hourly=precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Europe%2FBerlin&forecast_days=1`);
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&hourly=temperature_2m,apparent_temperature,precipitation_probability,wind_gusts_10m,uv_index,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Europe%2FBerlin&forecast_days=2`);
     const j = await r.json(); if (!j.current) throw new Error();
     WX = { t: Date.now(), place: c.place, cur: j.current, daily: j.daily, hourly: j.hourly };
     try { localStorage.setItem("mirella.wx", JSON.stringify(WX)); } catch (_) { }
@@ -815,7 +828,17 @@ function shopView(all) {
   return `<form class="shoprow" data-form="shop" style="margin-bottom:8px"><input class="search" id="shopin" style="margin:0" placeholder="z. B. 2 Liter Milch, Butter" aria-label="Artikel" enterkeyhint="done"><button class="btn pri" style="flex:none" aria-label="Hinzufügen">+</button><button class="btn" type="button" data-act="shopphoto" style="flex:none" aria-label="Einkaufszettel fotografieren">📷</button></form>
     ${cur.length ? groups : empty("Die Einkaufsliste ist leer. Tipp oben ein, sprich es ein, oder fotografier deinen Einkaufszettel.")}
     ${got.length ? `<button class="btn pri" data-act="shopdone" style="width:100%;margin:10px 0 4px">Einkauf fertig (${got.length} im Wagen${open.length ? ", " + open.length + " bleiben" : ""})</button><p class="swipehint">Abgehaktes bleibt sichtbar, bis du hier tippst. Danach landet es in deinem Einkaufs-Verlauf.</p>` : ""}
-    ${shopExtras(open)}`;
+    ${shopExtras(open)}
+    ${shopHistory(all)}`;
+}
+/* Frühere Einkäufe: alles, was mit „Einkauf fertig“ abgeschlossen wurde, nach Tag */
+function shopHistory(all) {
+  const old = all.filter(t => t.arch && t.done), by = {};
+  old.forEach(t => { const d = t.doneAt || t.created || "früher"; (by[d] = by[d] || []).push(t); });
+  const days = Object.keys(by).sort().reverse();
+  if (!days.length) return "";
+  return `<div class="block" style="margin-top:12px"><button class="bh" data-act="shophist" style="width:100%;border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer"><h4>Frühere Einkäufe</h4><span class="label">${days.length} ${days.length === 1 ? "Einkauf" : "Einkäufe"} ${showShopHist ? "▾" : "▸"}</span></button>
+  ${showShopHist ? days.slice(0, showShopHist === 2 ? 999 : 8).map(d => `<div class="shophd"><span class="label">${d === "früher" ? "früher" : esc(fmtDate(d))}${d !== "früher" ? " · " + esc(relDate(d)) : ""}</span><span class="label">${by[d].length} Artikel</span></div>${by[d].map(t => `<div class="listrow"><span class="grow">${esc(t.t)}${L.qtyLabel(t) ? `<small>${esc(L.qtyLabel(t))}</small>` : ""}</span><button class="mini" data-act="shopagain" data-id="${t.id}" aria-label="${esc(t.t)} wieder auf die Liste">+ wieder</button></div>`).join("")}`).join("") + (days.length > 8 && showShopHist !== 2 ? `<button class="btn" data-act="shophistall" style="width:100%;margin-top:8px">Alle ${days.length} Einkäufe zeigen</button>` : "") : ""}</div>`;
 }
 /* Mirella merkt: kleine Auswertungen aus erledigten Aufgaben */
 function todoInsights(all) {
@@ -951,7 +974,7 @@ function callMenu(p) {
 let pendingCall = null;
 function callResult(p, autoDial) {
   openSheet(`<p class="stitle">Anruf mit ${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">Wie ist es gelaufen?</p>
-  <div style="display:grid;gap:8px"><button class="btn pri" data-act="callok" data-id="${p.id}">Erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Nicht erreicht (neuer Versuch in ${S.settings.retryWorkdays} ${S.settings.retryWorkdays == 1 ? "Werktag" : "Werktagen"})</button><button class="btn" data-act="snooze" data-id="${p.id}">Später</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
+  <div style="display:grid;gap:8px"><button class="btn pri" data-act="callok" data-id="${p.id}">Erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Nicht erreicht (neuer Versuch ${relDate(addCallDays(today(), +S.settings.retryWorkdays || 2))})</button><button class="btn" data-act="snooze" data-id="${p.id}">Später</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
   if (autoDial && p.tel) location.href = "tel:" + p.tel.replace(/[^\d+]/g, "");
 }
 function snoozeForm(p) {
@@ -1273,7 +1296,7 @@ function sickEnd() {
 }
 function logCall(p, ok, silent) {
   p.calls = p.calls || []; p.calls.push({ id: uid(), d: today(), ok });
-  p.snooze = ok ? null : addWorkdays(today(), +S.settings.retryWorkdays || 2);
+  p.snooze = ok ? null : addCallDays(today(), +S.settings.retryWorkdays || 2);
   if (ok) p.streakBase = 0;
   if (!silent) { save(); closeSheet(); render(true); toast(ok ? `${p.first || fullName(p)} erreicht. Nächster Anruf ${relDate(nextDue(p) || today())}` : gaveUp(p) ? `${failStreak(p)}-mal nicht erreicht: Mirella hört bei ${p.first || fullName(p)} auf zu nerven` : `Neuer Versuch ${relDate(p.snooze)}`); }
 }
@@ -1365,6 +1388,11 @@ const ACT = {
   delcall: el => { if (!ask("Diesen Anruf aus dem Verlauf löschen?")) return; const p = S.people.find(x => x.id === cur); p.calls = p.calls.filter(c => c.id !== el.dataset.id); save(); render(true); },
   allcalls: el => { showAllCalls = !showAllCalls; allCallsFor = el.dataset.id; render(true); },
   grpf: el => { grpFilter = el.dataset.g; render(true); },
+  setday: el => { const k = el.dataset.k, d = +el.dataset.d, cur = (k === "callDays" ? callDays() : msgDays()).slice(); const i = cur.indexOf(d); if (i >= 0) { if (cur.length === 1) { toast("Mindestens ein Tag muss bleiben"); return; } cur.splice(i, 1); } else cur.push(d); S.settings[k] = cur.sort(); save(); render(true); },
+  setage: el => { const a = +el.dataset.a, cur = (S.settings.roundAges || []).slice(); const i = cur.indexOf(a); if (i >= 0) cur.splice(i, 1); else cur.push(a); S.settings.roundAges = cur.sort((x, y) => x - y); save(); render(true); },
+  shophist: () => { showShopHist = showShopHist ? 0 : 1; render(true); },
+  shophistall: () => { showShopHist = 2; render(true); },
+  shopagain: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; if (!(t.qty ? addShop(t.t, t.qty, t.unit) : addShop(t.t))) { toast("Schon auf der Liste: " + t.t); return; } save(); render(true); toast(t.t + " wieder auf der Liste"); },
   showarch: () => { showArch = !showArch; render(true); },
   giveon: el => { const p = S.people.find(x => x.id === el.dataset.id); p.streakBase = failStreak(p); p.snooze = null; save(); render(true); toast(`${fullName(p)}: Mirella versucht es weiter im Rhythmus`); },
   archperson: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p || !ask(`${fullName(p)} archivieren? Mirella erinnert dann nicht mehr an Anrufe und Geburtstage. Notizen und Verlauf bleiben, du kannst jederzeit zurückholen.`)) return; p.arch = today(); draftClear(); save(); closeSheet(); if (view === "akte") view = "menschen"; render(true); toast("Archiviert: " + fullName(p)); },
@@ -1486,7 +1514,7 @@ document.addEventListener("submit", e => {
   if (f.dataset.form === "note") { S.notes.push({ id: uid(), area, t: v, d: today() }); save(); render(true); toast("Notiz gespeichert"); }
 });
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") { document.querySelectorAll(".pdfview,.imgfull").forEach(x => x.remove()); closeAll(true); return; }
+  if (e.key === "Escape") { document.querySelectorAll(".pdfview,.imgfull,.zv").forEach(x => x.remove()); closeAll(true); return; }
   if ((e.key === "Enter" || e.key === " ") && e.target.matches("[role=button][data-act]")) { e.preventDefault(); e.target.click(); }
 });
 function shiftMonth(k) { calM += k; if (calM < 0) { calM = 11; calY--; } if (calM > 11) { calM = 0; calY++; } selDate = iso(new Date(calY, calM, 1, 12)); if (today().startsWith(`${calY}-${pad(calM + 1)}`)) selDate = today(); render(); }
@@ -1506,7 +1534,7 @@ const unshift = () => { if (!document.activeElement || !document.activeElement.m
 window.addEventListener("scroll", unshift, { passive: true });
 document.addEventListener("focusout", () => setTimeout(unshift, 60));
 if (window.visualViewport) window.visualViewport.addEventListener("resize", () => setTimeout(unshift, 60));
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { unshift(); if (!$("#sheet").classList.contains("open") && !document.querySelector(".pdfview")) { render(true); loadWeather(); syncBriefings(); } } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { unshift(); if (!$("#sheet").classList.contains("open") && !document.querySelector(".pdfview,.zv")) { render(true); loadWeather(); syncBriefings(); } } });
 
 /* ---------- Start (wenn alle Teile geladen sind) ---------- */
 load();

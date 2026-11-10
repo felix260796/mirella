@@ -270,3 +270,7 @@ body{background:var(--phone);padding:0!important;overflow:hidden;-webkit-tap-hig
 .nextcall.due{border-color:var(--accent)}
 .nextcall.late{border-color:var(--late)}.nextcall.late b{color:var(--late)}
 .nextcall.late .nc-r b{color:var(--ink)}
+
+/* Einstellungen: deutlich sichtbare Abschnittsüberschriften */
+.sethead{margin:30px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+.sethead .label{font-family:var(--f-display);font-size:21px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink)}

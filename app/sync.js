@@ -175,16 +175,16 @@ async function syLogout() {
 /* Bereich in den Einstellungen */
 function syBlock() {
   const inp = 'class="search" style="margin:0"';
-  if (syOn()) return `<div class="sec"><span class="label">Konto und Abgleich</span></div>
+  if (syOn()) return `<div class="sec sethead"><span class="label">Konto und Abgleich</span></div>
     <p class="hint" style="margin-top:0">Angemeldet als <b>${esc(SY.auth.user.email)}</b>. Mirella gleicht automatisch zwischen deinen Geräten ab und legt jede Woche eine Sicherung auf dem Server ab (die letzten 8 bleiben).<br><span id="sy-status">${esc(SY.status || (SY.meta.last ? "Zuletzt abgeglichen " + new Date(SY.meta.last).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""))}</span></p>
     <div class="row2" style="margin-top:0"><button class="btn" data-act="synow">Jetzt abgleichen</button><button class="btn" data-act="syback">Sicherung zurückholen</button></div>
     <button class="btn" data-act="syout" style="width:100%;margin-top:8px">Abmelden</button>`;
-  return `<div class="sec"><span class="label">Konto und Abgleich</span></div>
+  return `<div class="sec sethead"><span class="label">Konto und Abgleich</span></div>
     <p class="hint" style="margin-top:0">Melde dich an, dann sind iPhone, iPad und PC immer auf dem gleichen Stand und deine Daten sind auf dem Server in Frankfurt gesichert.</p>
-    <form data-form="sylogin" style="margin-bottom:8px"><input ${inp} type="email" name="email" autocomplete="username" placeholder="Deine E-Mail" aria-label="E-Mail" style="margin:0 0 6px;width:100%"><input ${inp} type="password" name="pw" autocomplete="current-password" placeholder="Passwort" aria-label="Passwort" style="margin:0 0 6px;width:100%"><button class="btn pri" style="width:100%">Anmelden</button></form>}`;
+    <form data-form="sylogin" style="margin-bottom:8px"><input ${inp} type="email" name="email" autocomplete="username" placeholder="Deine E-Mail" aria-label="E-Mail" style="margin:0 0 6px;width:100%"><input ${inp} type="password" name="pw" autocomplete="current-password" placeholder="Passwort" aria-label="Passwort" style="margin:0 0 6px;width:100%"><button class="btn pri" style="width:100%">Anmelden</button></form>`;
 }
 const origEinst = R.einstellungen;
-R.einstellungen = function () { const h = origEinst.call(this); const i = h.indexOf('<div class="sec"><span class="label">Datensicherung</span></div>'); return i < 0 ? h + syBlock() : h.slice(0, i) + syBlock() + h.slice(i); };
+R.einstellungen = function () { const h = origEinst.call(this); const i = h.indexOf('<div class="sec sethead"><span class="label">Datensicherung</span></div>'); return i < 0 ? h + syBlock() : h.slice(0, i) + syBlock() + h.slice(i); };
 
 Object.assign(ACT, {
   synow: () => sync(true),

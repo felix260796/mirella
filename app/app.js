@@ -343,22 +343,22 @@ const R = {
     ${sel("maxCalls", "Anrufe pro Tag", "höchstens so viele auf „Heute“", [[2, "2"], [3, "3"], [5, "5"], [99, "kein Limit"]])}
     ${sel("retryWorkdays", "Nicht erreicht", "neuer Versuch nach", [[1, "1 Werktag"], [2, "2 Werktagen"], [5, "1 Woche"]])}
     ${sel("giftLead", "Geburtstage", "so früh auf „Heute“ zeigen", [[7, "7 Tage vorher"], [14, "14 Tage vorher"], [21, "21 Tage vorher"]])}
-    <div class="sec"><span class="label">Wetter</span></div>
+    <div class="sec sethead"><span class="label">Wetter</span></div>
     <div class="set"><span>Wetter-Ort<small>${s.wxName === "deinem Standort" ? "dein Standort (gespeichert)" : s.wxName ? esc(s.wxName) : "noch nicht festgelegt"}</small></span><button class="mini" data-act="wxhere">${s.wxLat != null && s.wxName === "deinem Standort" ? "Standort neu bestimmen" : "Standort nutzen"}</button></div>
     <form class="shoprow" data-form="wxplace" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Oder Ort eintippen, z. B. Remseck" aria-label="Wetter-Ort"><button class="btn pri" style="flex:none">OK</button></form>
-    <div class="sec"><span class="label">Ausgaben-Kategorien</span></div>
+    <div class="sec sethead"><span class="label">Ausgaben-Kategorien</span></div>
     <p class="hint" style="margin-top:0">${catList().map(esc).join(" · ")}</p>
     <form class="shoprow" data-form="cat" style="margin-bottom:8px"><input class="search" style="margin:0" placeholder="Eigene Kategorie, z. B. Haustier" aria-label="Neue Kategorie"><button class="btn pri" style="flex:none">+</button></form>
-    <div class="sec"><span class="label">Kontakte</span></div>
+    <div class="sec sethead"><span class="label">Kontakte</span></div>
     <button class="btn" data-act="dupscan" style="width:100%;margin-bottom:8px">Doppelte Kontakte suchen</button>
     <button class="btn" data-act="importvcf" style="width:100%">Kontakte importieren (vCard .vcf)</button>
     <p class="hint">Am PC auf icloud.com › Kontakte alle markieren und „vCard exportieren“, Datei aufs iPhone (z. B. per AirDrop oder Dateien-App) und hier auswählen. Namen, Telefonnummern und Geburtstage werden übernommen, Doppelte übersprungen.</p>
-    <div class="sec"><span class="label">Datensicherung</span></div>
+    <div class="sec sethead"><span class="label">Datensicherung</span></div>
     <div class="row2" style="margin-top:0"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Sicherung laden</button></div>
     <p class="hint">Zusätzlich kannst du jederzeit eine Sicherungsdatei speichern, z. B. in iCloud Drive, und sie mit „Sicherung laden“ zurückholen.</p>
-    <div class="sec"><span class="label">Was noch fehlt</span></div>
+    <div class="sec sethead"><span class="label">Was noch fehlt</span></div>
     <p class="hint">Push-Nachrichten, wenn die App geschlossen ist, und das automatische Lesen von Belegen per KI brauchen den Server und den Claude-Schlüssel. Bis dahin zeigt Mirella alles Fällige beim Öffnen.</p>
-    <div class="sec"><span class="label">Gefahrenzone</span></div>
+    <div class="sec sethead"><span class="label">Gefahrenzone</span></div>
     <button class="btn danger" data-act="wipe" style="width:100%">Alle Daten auf diesem Gerät löschen</button>
     <p class="swipehint">Mirella ${VERSION} · ${S.people.length} Kontakte · ${S.todos.length} Einträge · ${S.docs.length} Dokumente</p>`;
   }
@@ -504,7 +504,7 @@ function docRow(d) { return `<div class="listrow"><button data-act="viewphoto" d
 function docsHTML() {
   const by = {}; S.docs.forEach(d => (by[d.folder || "Sonstiges"] = by[d.folder || "Sonstiges"] || []).push(d));
   const keys = FOLDERS.filter(f => by[f]).concat(Object.keys(by).filter(k => !FOLDERS.includes(k)));
-  return `<div class="sec"><span class="label">Deine Ablage</span><span class="label">${S.docs.length}</span></div>${keys.length ? keys.map(k => `<div class="block"><h4>${esc(k)}</h4>${by[k].map(docRow).join("")}</div>`).join("") : empty("Noch keine Dokumente. Oben auf die Kamera tippen.")}`;
+  return `<div class="sec sethead"><span class="label">Deine Ablage</span><span class="label">${S.docs.length}</span></div>${keys.length ? keys.map(k => `<div class="block"><h4>${esc(k)}</h4>${by[k].map(docRow).join("")}</div>`).join("") : empty("Noch keine Dokumente. Oben auf die Kamera tippen.")}`;
 }
 function financeHTML() {
   const ym = today().slice(0, 7), month = S.expenses.filter(e => e.d.startsWith(ym)), sum = month.reduce((a, e) => a + +e.amount, 0);
@@ -514,7 +514,7 @@ function financeHTML() {
   return `<div class="block"><div class="catrow"><span>Ausgegeben im ${MN[new Date().getMonth()]}</span><b>${eur(sum)}</b></div>
   ${Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="catrow" style="margin-top:8px"><span>${esc(c)}</span><span>${eur(v)}</span></div><div class="bar"><i style="width:${Math.round(v / max * 100)}%"></i></div>`).join("") || '<div class="swipehint" style="text-align:left;margin:6px 0 0">Noch keine Ausgaben diesen Monat.</div>'}</div>
   <div class="row2" style="margin:0 0 6px"><button class="btn pri" data-act="photo" data-kind="beleg">📷 Beleg fotografieren</button><button class="btn" data-act="newexp">+ Ausgabe</button></div>
-  ${list.length ? `<div class="sec"><span class="label">Letzte Ausgaben</span></div>${list.map(e => `<div class="listrow">${e.photo ? `<button data-act="viewphoto" data-id="${e.photo}" style="border:0;padding:0;background:none" aria-label="Beleg ansehen"><img class="thumbimg" data-thumb="${e.photo}" alt=""></button>` : ""}<span class="grow">${esc(e.shop || e.cat)}<small>${esc(fmtDate(e.d))} · ${esc(e.cat)}</small></span><b style="font-weight:600">${eur(e.amount)}</b><button class="rowdel" data-act="delexp" data-id="${e.id}" aria-label="löschen">✕</button></div>`).join("")}` : ""}`;
+  ${list.length ? `<div class="sec sethead"><span class="label">Letzte Ausgaben</span></div>${list.map(e => `<div class="listrow">${e.photo ? `<button data-act="viewphoto" data-id="${e.photo}" style="border:0;padding:0;background:none" aria-label="Beleg ansehen"><img class="thumbimg" data-thumb="${e.photo}" alt=""></button>` : ""}<span class="grow">${esc(e.shop || e.cat)}<small>${esc(fmtDate(e.d))} · ${esc(e.cat)}</small></span><b style="font-weight:600">${eur(e.amount)}</b><button class="rowdel" data-act="delexp" data-id="${e.id}" aria-label="löschen">✕</button></div>`).join("")}` : ""}`;
 }
 function eventsRange(from, to) {
   const ev = {}, add = (d, k, t, act, id) => { if (d >= from && d <= to) (ev[d] = ev[d] || []).push({ k, t, act, id }); };

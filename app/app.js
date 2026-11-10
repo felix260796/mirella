@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.14";
+const VERSION = "0.14.1";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -517,6 +517,7 @@ const SETS = {
     return `${setH("Sicherung für den PC")}<p class="hint" style="margin-top:0">Ein ZIP mit allem: <b>Excel</b> mit allen Kontakten und Infos (plus Aufgaben, Einkauf, Verträge, Ausgaben), <b>alle PDFs und Fotos</b> sauber benannt und nach Bereich und Ordner sortiert, und die Datei zum Wiederherstellen. Funktioniert ohne Supabase und ohne Mirella.</p>
     <button class="btn pri" data-act="pcbackup" style="width:100%">💾 PC-Sicherung jetzt erstellen</button><p class="swipehint" id="pcb-state" style="text-align:left">${last ? "Letzte PC-Sicherung: " + esc(relDate(last)) : "Noch keine PC-Sicherung gemacht."}</p>
     <p class="hint">Danach im Teilen-Fenster „In Dateien sichern“ › <b>OneDrive</b> › CoWork › Private App › 05_Sicherung wählen.</p>
+    <p class="hint"><b>Automatisch jede Nacht:</b> Das kleine PC-Programm (im GitHub-Ordner tools/pc-sicherung, einmal <b>EINRICHTEN.cmd</b> doppelklicken) holt alles selbst vom Server in den Ordner 05_Sicherung. Dann musst du hier nichts mehr tun.</p>
     ${setH("Sicherungsdatei (nur für Mirella)")}<div class="row2" style="margin-top:0"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Sicherung laden</button></div>
     <p class="hint">Mit Anmeldung sichert Mirella jede Woche automatisch auf dem Server. Zusätzlich kannst du jederzeit eine Sicherungsdatei speichern, z. B. in iCloud Drive, und sie mit „Sicherung laden“ zurückholen.</p>`;
   },

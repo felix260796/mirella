@@ -332,7 +332,7 @@ const R = {
     for (const b of list) { const g = grp(b); if (g !== last) { body += `<div class="sec"><span class="label">${esc(g)}</span></div>`; last = g; } body += briefCard(b, true); }
     return `${subtop("Alle Bereiche", "drawer")}<p class="big" style="margin:0 0 4px">Briefings</p>
     <button class="btn pri" data-act="addbrief" style="width:100%;margin:8px 0">+ Briefing hinzufügen (PDF)</button>
-    <p class="hint">Deine Briefings aus Gmail kommen automatisch: werktags 6–7 und 16–17 Uhr, am Wochenende 10–11 Uhr. Antippen öffnet die Mail mit dem PDF. Eigene PDFs kannst du zusätzlich hier ablegen.</p>
+    <p class="hint">Deine Briefings aus Gmail kommen automatisch: werktags 6–7 und 16–17 Uhr, am Wochenende 10–11 Uhr. Antippen öffnet das PDF. Jedes Briefing bleibt 7 Tage hier und wird danach automatisch gelöscht, auch selbst abgelegte PDFs.</p>
     ${body || empty("Noch keine Briefings abgelegt.")}`;
   },
   einstellungen() {
@@ -408,8 +408,17 @@ async function syncBriefings() {
       if (ex) { Object.assign(ex, { d: it.d, time: it.time, kind: it.kind, url: it.url, pdf: it.pdf || ex.pdf }); delete ex.quote; continue; }
       S.briefings.push({ id: "gm_" + it.id, remote: true, d: it.d, time: it.time, kind: it.kind, title: "Briefing", url: it.url, pdf: it.pdf, name: "Briefing", read: false }); neu++;
     }
-    if (neu) { save(); if (!$("#sheet").classList.contains("open")) render(true); }
+    const ids = new Set((j.items || []).map(it => "gm_" + it.id));
+    const before = S.briefings.length;
+    S.briefings = S.briefings.filter(b => !b.remote || ids.has(b.id));
+    if (neu || S.briefings.length !== before) { save(); if (!$("#sheet").classList.contains("open")) render(true); }
   } catch (_) { }
+}
+/* Briefings bleiben eine Woche, danach räumt Mirella sie automatisch weg */
+function pruneBriefings() {
+  const old = S.briefings.filter(b => diffDays(b.d, today()) > 7); if (!old.length) return;
+  old.forEach(b => { if (!b.remote) photoDel(b.id).catch(() => { }); });
+  S.briefings = S.briefings.filter(b => !old.includes(b)); save();
 }
 
 /* ---------- Wetter (Open-Meteo, ohne Schlüssel) ---------- */
@@ -1136,6 +1145,6 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && !$
 load();
 render();
 loadWeather();
-syncBriefings();
+pruneBriefings(); syncBriefings();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => { });

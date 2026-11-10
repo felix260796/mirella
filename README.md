@@ -1,5 +1,15 @@
 # Mirella, die Sekretärin
 
+## Stand 0.12 (2026-11-10): Feinschliff nach dem ersten Ausprobieren
+- Oben links: Logo **und** Seitentitel öffnen die Einstellungen dieser Seite (größere Fläche, auch in jedem Bereich); „Zurück“ führt direkt zur Seite zurück.
+- Kontakt: Alter klein neben dem Geburtstag („36 Jahre alt“).
+- Nerv-Modus ist bei neuen Aufgaben standardmäßig an, großes Häkchenfeld; Abhak-Kästchen größer.
+- Einkaufs-Vorlagen direkt in der Einkaufsliste löschbar (✕, mit Rückfrage).
+- „Alle Bereiche“: Briefings ganz unten.
+- Verträge & Versicherungen: PDF hochladen oder Foto/Scan, fest mit dem Eintrag verknüpft.
+- Supplements stehen in den Tages-To-dos: morgens Hoch, mittags Mittel, abends Niedrig, steigen zur Einnahmezeit auf.
+- Schrift größer und kräftiger, Bereiche mit dezenten Farben, erledigte Häkchen grün.
+
 ## Stand 0.11 (2026-11-10): Mirella denkt mit wie eine Sekretärin
 - **Rubriken neu:** Wecker, Finanzen, Verträge & Versicherungen, Gesundheit, Zuhause, Auto & E-Bike, Arbeit, Sport & Hobby, Dokumente, Reisen, Briefings (ganz hinten). Jede Rubrik hat eigene Einträge (z. B. Vertrag, Versicherung, Fahrzeug, Zähler, Wohnung, Gerät, Arzt, wiederkehrender Termin, Supplement, Reise, Auslage zum Erstatten, Verein). Aus jedem Eintrag legt Mirella automatisch die passenden Erinnerungen an (Kündigungsfrist, TÜV, Inspektion, Reifen, Ablesen, Zahnreinigung, Nachbestellen, Packen, Check-in …), `app/bereiche.js`.
 - **Plus** öffnet zuerst eine Auswahl je Rubrik, keine Tastatur.

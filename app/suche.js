@@ -25,7 +25,7 @@ const HELP = [
   { q: "Wie packe ich für eine Reise?", k: ["reise", "urlaub", "packliste", "packen", "flug", "check-in", "reisepass"], a: "Reisen › Plus › Reise. Mirella legt eine Packliste an, erinnert 3 Tage vorher ans Packen, bei Flügen an den Online-Check-in und warnt, wenn dein Reisepass vorher abläuft.", go: ["area", "frei"] },
   { q: "Wie lege ich ein Fahrzeug an?", k: ["auto", "fahrzeug", "tüv", "hu", "inspektion", "reifen", "ebike", "e-bike", "fahrrad"], a: "Auto & E-Bike › Plus › Fahrzeug anlegen. TÜV-Monat, nächste Inspektion und Reifenwechsel eintragen; beim Firmenwagen erinnert Mirella nur an die Termine, die Wartung läuft über die Firma.", go: ["area", "auto"] },
   { q: "Wie kommen meine Kontakte vom iPhone rein?", k: ["import", "vcard", "icloud", "kontakte", "iphone"], a: "Einstellungen › Kontakte › Kontakte importieren (vCard). In der iPhone-App liest Mirella die Kontakte später direkt.", go: ["set", "kontakte"] },
-  { q: "Wie funktionieren die Briefings?", k: ["briefing", "briefings", "zeitung", "nachrichten", "pdf"], a: "Deine Briefings kommen automatisch als PDF auf „Heute“: werktags morgens und nachmittags, am Wochenende vormittags. Tipp darauf öffnet direkt das PDF. Nach 7 Tagen werden sie gelöscht.", go: ["go", "briefings"] }
+  { q: "Wie funktionieren die Briefings?", k: ["briefing", "briefings", "zeitung", "nachrichten", "pdf"], a: "Dein Briefing kommt einmal am Tag automatisch als PDF auf „Heute“: jeden Tag um 8 Uhr, spätestens bis 9 Uhr ist es da. Tipp darauf öffnet direkt das PDF. Nach 7 Tagen werden sie gelöscht.", go: ["go", "briefings"] }
 ];
 function searchAll(q) {
   const ql = q.trim().toLowerCase(); if (ql.length < 2) return [];

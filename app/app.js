@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.15";
+const VERSION = "0.15.1";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -434,7 +434,7 @@ const R = {
     for (const b of list) { const g = grp(b); if (g !== last) { body += `<div class="sec"><span class="label">${esc(g)}</span></div>`; last = g; } body += briefCard(b, true); }
     return `${subtop("Alle Bereiche", "drawer")}<p class="big" style="margin:0 0 4px">Briefings</p>
     <button class="btn pri" data-act="addbrief" style="width:100%;margin:8px 0">+ Briefing hinzufügen (PDF)</button>
-    <p class="hint">Deine Briefings aus Gmail kommen automatisch: werktags 6–7 und 16–17 Uhr, am Wochenende 10–11 Uhr. Antippen öffnet das PDF. Jedes Briefing bleibt 7 Tage hier und wird danach automatisch gelöscht, auch selbst abgelegte PDFs.</p>
+    <p class="hint">Dein Briefing kommt einmal am Tag automatisch, jeden Tag um 8 Uhr (spätestens bis 9 Uhr ist es hier). Antippen öffnet das PDF. Jedes Briefing bleibt 7 Tage hier und wird danach automatisch gelöscht, auch selbst abgelegte PDFs.</p>
     ${body || empty("Noch keine Briefings abgelegt.")}`;
   },
   einstellungen() {
@@ -478,7 +478,7 @@ const SETS = {
     <div class="set"><span>Wetter-Ort<small>${s.wxName === "deinem Standort" ? "dein Standort (gespeichert)" : s.wxName ? esc(s.wxName) : "noch nicht festgelegt"}</small></span><button class="mini" data-act="wxhere">${s.wxLat != null && s.wxName === "deinem Standort" ? "Standort neu bestimmen" : "Standort nutzen"}</button></div>
     <form class="shoprow" data-form="wxplace" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Oder Ort eintippen, z. B. Remseck" aria-label="Wetter-Ort"><button class="btn pri" style="flex:none">OK</button></form>
     ${setH("Briefing")}${setTgl("showBrief", "Neuestes Briefing auf „Heute“", "Tipp darauf öffnet direkt das PDF")}
-    <p class="hint">Deine Briefings kommen automatisch als PDF: werktags 6–7 und 16–17 Uhr, am Wochenende 10–11 Uhr. Sie bleiben 7 Tage und werden dann gelöscht.</p>`;
+    <p class="hint">Dein Briefing kommt einmal am Tag automatisch als PDF, jeden Tag um 8 Uhr (spätestens bis 9 Uhr ist es da). Sie bleiben 7 Tage und werden dann gelöscht.</p>`;
   },
   kontakte() {
     const ages = S.settings.roundAges || [];
@@ -533,9 +533,11 @@ const SETS = {
   }
 };
 function latestBriefing() { return S.briefings.slice().sort((a, b) => (b.d + (b.time || "")).localeCompare(a.d + (a.time || "")))[0] || null; }
+/* Seit 11.11.2026 gibt es nur noch ein Briefing pro Tag (8 Uhr, Mo–So); ältere Einträge behalten ihren Namen */
+function briefTitle(b) { return b.kind === "nachmittag" ? "Nachmittags-Briefing" : b.kind === "wochenende" ? "Wochenend-Briefing" : b.kind === "morgen" && b.d < "2026-11-11" ? "Morning Briefing" : "Tages-Briefing"; }
 function briefCard(b, del) {
-  if (b.remote) return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : b.kind === "wochenende" ? "Wochenend-Briefing" : "Morning Briefing")}</div><div class="s">${esc(briefWhen(b))} · ${b.pdf ? "PDF öffnen" : "PDF wird noch abgelegt"}</div></span>${b.read ? '<span class="pill">PDF</span>' : '<span class="pill acc">neu</span>'}</div>`;
-  return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : "Morning Briefing")}</div><div class="s">${esc(fmtDate(b.d))}${b.time ? " · " + esc(b.time) : ""} · ${esc(b.name)}</div></span>${b.read ? (del ? `<button class="rowdel" data-act="delbrief" data-id="${b.id}" aria-label="löschen">✕</button>` : '<span class="pill">PDF</span>') : '<span class="pill acc">neu</span>'}</div>`;
+  if (b.remote) return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(briefTitle(b))}</div><div class="s">${esc(briefWhen(b))} · ${b.pdf ? "PDF öffnen" : "PDF wird noch abgelegt"}</div></span>${b.read ? '<span class="pill">PDF</span>' : '<span class="pill acc">neu</span>'}</div>`;
+  return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(briefTitle(b))}</div><div class="s">${esc(fmtDate(b.d))}${b.time ? " · " + esc(b.time) : ""} · ${esc(b.name)}</div></span>${b.read ? (del ? `<button class="rowdel" data-act="delbrief" data-id="${b.id}" aria-label="löschen">✕</button>` : '<span class="pill">PDF</span>') : '<span class="pill acc">neu</span>'}</div>`;
 }
 async function addBriefings(files) {
   let n = 0;
@@ -543,8 +545,8 @@ async function addBriefings(files) {
     const m = f.name.match(/(\d{4})-(\d{2})-(\d{2})/) || f.name.match(/(\d{2})\.(\d{2})\.(\d{4})/);
     let d = m ? (m[1].length === 4 ? `${m[1]}-${m[2]}-${m[3]}` : `${m[3]}-${m[2]}-${m[1]}`) : iso(new Date(f.lastModified || Date.now()));
     const lm = new Date(f.lastModified || Date.now());
-    const kind = /nachmittag|abend|16/i.test(f.name) ? "nachmittag" : /morgen|morning|06/i.test(f.name) ? "morgen" : (lm.getHours() >= 12 ? "nachmittag" : "morgen");
-    const time = kind === "nachmittag" ? "16:00" : "06:00";
+    const kind = "tag";
+    const time = String(lm.getHours()).padStart(2, "0") + ":" + String(lm.getMinutes()).padStart(2, "0");
     const id = "br_" + uid();
     try { await photoPut(id, f); } catch (_) { toast("Konnte " + f.name + " nicht speichern"); continue; }
     S.briefings.push({ id, d, time, kind, name: f.name.replace(/\.pdf$/i, ""), type: f.type || "application/pdf", read: false }); n++;

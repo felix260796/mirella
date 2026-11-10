@@ -1,0 +1,31 @@
+/* Mirella – Farbschicht (Runde 6). Rückgängig machen: diese Datei und die Zeile in index.html entfernen,
+   dann ist alles wieder Schwarz-Weiß wie vorher. */
+:root{--c-heute:#D98E04;--c-kontakte:#2E7BBF;--c-todos:#2E8B4E;--c-kalender:#C2372D;--c-nerv:#E0672B;--c-konto:#0E8FB8;--c-sicherung:#138A8A;--c-info:#6B6B72}
+
+/* Leiste unten: der aktive Reiter in seiner Farbe */
+.tab[data-v="heute"][aria-current]{color:var(--c-heute)}
+.tab[data-v="menschen"][aria-current]{color:var(--c-kontakte)}
+.tab[data-v="todos"][aria-current]{color:var(--c-todos)}
+.tab[data-v="kalender"][aria-current]{color:var(--c-kalender)}
+
+/* Einstellungen: Symbole in Farbe, auf einem hellen Kreis */
+.drow[data-act="setsec"]>svg{box-sizing:content-box;padding:7px;border-radius:12px;background:color-mix(in srgb,var(--rc,var(--ink)) 12%,#fff);color:var(--rc,var(--ink))}
+.drow[data-k="heute"]{--rc:var(--c-heute)}.drow[data-k="kontakte"]{--rc:var(--c-kontakte)}.drow[data-k="todos"]{--rc:var(--c-todos)}.drow[data-k="kalender"]{--rc:var(--c-kalender)}
+.drow[data-k="nerv"]{--rc:var(--c-nerv)}.drow[data-k="konto"]{--rc:var(--c-konto)}.drow[data-k="sicherung"]{--rc:var(--c-sicherung)}.drow[data-k="info"]{--rc:var(--c-info)}
+.drow[data-k="wecker"]{--rc:#5B5BD6}.drow[data-k="geld"]{--rc:#2E8B4E}.drow[data-k="vertrag"]{--rc:#2E7BBF}.drow[data-k="gesund"]{--rc:#C2416B}.drow[data-k="haus"]{--rc:#C27A1A}
+.drow[data-k="auto"]{--rc:#4D6A84}.drow[data-k="arbeit"]{--rc:#7A4FB5}.drow[data-k="sport"]{--rc:#138A8A}.drow[data-k="doku"]{--rc:#8A6A3D}.drow[data-k="frei"]{--rc:#0E8FB8}
+
+/* Kontakte: Initialen auf zartem Blau */
+.av{background:#E6EFF8;color:#1F5A8C}
+
+/* Heute: Wetter leicht himmelblau, Geburtstags-Kacheln warm */
+.wxc{background:linear-gradient(135deg,#EEF6FC,#FFFFFF 70%);border-color:#D6E6F3}
+.kvgrid>div{background:#FBF3E6}
+
+/* Einkaufsmodus: Gruppen mit grüner Linie */
+.smgh{border-bottom-color:var(--c-todos)}
+.smbar i{background:var(--c-todos)}
+
+/* Überschriften auf „Heute“ mit kleinem Farbstrich */
+.sec .label:first-child{position:relative;padding-left:12px}
+.sec .label:first-child::before{content:"";position:absolute;left:0;top:.2em;bottom:.2em;width:4px;border-radius:2px;background:var(--c-heute)}

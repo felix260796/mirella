@@ -302,6 +302,21 @@ const L = (() => {
   /* ---------- Wetter: Tag/Nacht und Hinweise ----------
      hr: Open-Meteo hourly (time, temperature_2m, apparent_temperature, precipitation_probability, wind_gusts_10m, uv_index, weather_code)
      day: "JJJJ-MM-TT", nowH: Stunde jetzt. Tag = 7–20 Uhr, Nacht = 20 Uhr bis 7 Uhr am Folgetag. */
+  /* Regen-Zeiträume aus Stundenwerten: zusammenhängende Stunden mit >= minP % oder messbarem Regen */
+  function rainSpans(hr, fromIso, hours, minP) {
+    const t = hr.time || [], P = hr.precipitation_probability || [], M = hr.precipitation || [], out = [];
+    minP = minP == null ? 40 : minP;
+    let i0 = t.findIndex(x => x >= fromIso); if (i0 < 0) return out;
+    let cur = null;
+    for (let i = i0; i < Math.min(t.length, i0 + hours); i++) {
+      const wet = (P[i] || 0) >= minP || (M[i] || 0) >= 0.2;
+      if (wet) {
+        if (!cur) { cur = { from: t[i], to: t[i], maxP: 0, mm: 0 }; out.push(cur); }
+        cur.to = t[i]; cur.maxP = Math.max(cur.maxP, P[i] || 0); cur.mm = Math.round((cur.mm + (M[i] || 0)) * 10) / 10;
+      } else cur = null;
+    }
+    return out;
+  }
   function wxDayNight(hr, day, nowH) {
     const t = hr.time || [], next = addDays(day, 1), dayI = [], nightI = [];
     t.forEach((x, i) => { const d = x.slice(0, 10), h = +x.slice(11, 13); if (d === day && h >= 7 && h < 20) dayI.push(i); if ((d === day && h >= 20) || (d === next && h < 7)) nightI.push(i); });
@@ -309,7 +324,7 @@ const L = (() => {
     const rest = dayI.filter(i => +t[i].slice(11, 13) >= nowH);
     const hints = [], H = (k, ic, txt) => hints.push({ k, ic, t: txt });
     const look = rest.length ? rest : dayI;
-    const rainI = look.find(i => (hr.precipitation_probability || [])[i] >= 50);
+    const rainI = rest.find(i => (hr.precipitation_probability || [])[i] >= 50);
     const codes = look.map(i => (hr.weather_code || [])[i]);
     if (codes.some(c => c >= 95)) H("gewitter", "⛈️", "Gewitter möglich: draußen vorsichtig sein.");
     if (codes.some(c => (c >= 71 && c <= 77) || c === 85 || c === 86)) H("schnee", "🌨️", "Schnee: feste Schuhe, mehr Zeit für den Weg.");
@@ -318,7 +333,7 @@ const L = (() => {
     const nightMin = v("temperature_2m", nightI, Math.min);
     if (morningMin != null && morningMin <= 1 && nowH < 11) H("frost", "❄️", "Frost am Morgen: Glätte möglich, Scheibe kratzen einplanen.");
     else if (nightMin != null && nightMin <= 1) H("frost", "❄️", `Heute Nacht ${Math.round(nightMin)}°: morgen früh Glätte möglich.`);
-    const gust = v("wind_gusts_10m", look, Math.max);
+    const gust = v("wind_gusts_10m", rest, Math.max);
     if (gust != null && gust >= 60) H("sturm", "💨", `Sturmböen bis ${Math.round(gust)} km/h: Fenster und Balkon sichern.`);
     else if (gust != null && gust >= 45) H("wind", "🌬️", `Windig, Böen bis ${Math.round(gust)} km/h.`);
     const dMax = v("temperature_2m", dayI, Math.max), feel = v("apparent_temperature", look, Math.min);
@@ -340,6 +355,6 @@ const L = (() => {
     return list.map(h => ({ h, s: words.reduce((a, w) => a + (h.k.some(k => k.startsWith(w.slice(0, 5)) || w.startsWith(k.slice(0, 5))) ? 2 : 0) + (h.q.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.h);
   }
 
-  return { pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines, wxDayNight };
+  return { rainSpans, pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines, wxDayNight };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = L;

@@ -1,5 +1,11 @@
 # Mirella, die Sekretärin
 
+## Neu in 0.17 (Runde 7)
+- Ausführliche Wetterseite (`app/wetter.js`): jetzt, Regen als Satz mit Uhrzeit, Prozent und Millimetern, Stunde für Stunde (24 h), Wind, Luftfeuchte, UV, Sonne, 8 Tage. Öffnet beim Antippen des Wetters auf „Heute“ und über das Menü („Wetter“ ganz oben).
+- Wetter auf „Heute“: alle Hinweise direkt sichtbar, nichts mehr zum Ausklappen. Regen- und Sturm-Hinweis schauen nur noch auf die restlichen Stunden des Tages.
+- Fehler behoben: Spracheingabe ließ sich nicht speichern (Namensgleichheit `readItem` in app.js und bereiche.js).
+- Logik `L.rainSpans` mit Test.
+
 ## Stand 0.16 (2026-11-10): Runde 6
 
 - Heute: Telefon-Symbol beim Anruf wählt sofort die Nummer (danach fragt Mirella, wie es lief).

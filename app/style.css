@@ -2,7 +2,7 @@
 :root{
   color-scheme:light;
   --page:#ECECE8; --phone:#FAFAF7; --surface:#FFFFFF; --surface-2:#F0F0EC; --line:#E2E2DD;
-  --ink:#141416; --ink-2:#5C5C63; --ink-3:#8C8C93;
+  --ink:#141416; --ink-2:#45454B; --ink-3:#6B6B72;
   --accent:#141416; --accent-ink:#FFFFFF; --late:#C2372D; --ok:#2E8B4E;
   --f-display:"Fraunces",Georgia,serif; --f-body:"IBM Plex Sans",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
 }
@@ -112,7 +112,11 @@ h2{font-family:var(--f-display);font-weight:600;font-size:22px;margin:0 0 12px}
 .fld input,.fld select{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--ink);font:inherit;font-size:14px;margin:0}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .fgrid[hidden]{display:none}
-.tgl{display:flex;gap:8px;align-items:center;font-size:14px;margin:4px 0}
+.tgl{display:flex;gap:8px;align-items:center;font-size:15px;margin:4px 0}
+.tgl input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--ink,#111)}
+.tgl.big{gap:12px;padding:12px 14px;margin:10px 0;border:1.5px solid var(--line,#ddd);border-radius:14px;cursor:pointer}
+.tgl.big input[type=checkbox]{width:28px;height:28px}
+.tgl.big span{display:flex;flex-direction:column;gap:2px}.tgl.big small{font-size:13px;color:var(--ink-2)}
 .toast{position:absolute;left:50%;top:60px;transform:translateX(-50%);background:var(--surface-2);border:1px solid var(--line);padding:8px 14px;border-radius:99px;font-size:13px}
 /* Einstellungen */
 .set{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);gap:12px}
@@ -281,7 +285,9 @@ input,select,textarea,.set select,.pitem .ph select,.fld input,.fld select{font-
 .tleft{display:flex;align-items:center;gap:8px;min-width:0}
 .tleft .big{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .logobtn{background:none;border:0;padding:2px;cursor:pointer;display:grid;place-items:center;flex:none;border-radius:10px}
-.logobtn img{width:28px;height:auto;display:block}
+.tsetbtn{background:none;border:0;padding:6px 10px 6px 0;margin:-6px 0;min-height:48px;cursor:pointer;color:inherit;font:inherit;text-align:left;flex:1 1 auto;border-radius:12px}
+.tsetbtn:active{background:var(--line,#eee)}
+.logobtn img{width:30px;height:auto;display:block}
 .logobtn.big{padding:0;border-radius:50%}
 .tright{gap:6px}
 .brandbtn{padding-left:4px}
@@ -376,3 +382,34 @@ details.fold summary svg{flex:none}
 .scanbox img{width:auto;height:auto;max-width:100%;max-height:52vh}
 .nbox .stitle{font-family:var(--f-display);font-weight:600;font-size:22px;line-height:1.2}
 .morning .chk:first-child{border-top:0}
+
+/* v0.12 */
+.tplchip{display:inline-flex;align-items:stretch}
+.tplchip .chip2{border-top-right-radius:0;border-bottom-right-radius:0;margin-right:0}
+.tplx{border:1px solid var(--line);border-left:0;background:var(--surface);color:var(--ink-2);padding:0 12px;min-width:40px;border-radius:0 999px 999px 0;font-size:14px;cursor:pointer}
+.agechip{font-family:var(--f-body);font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink-2);margin-left:6px}
+/* v0.12: Schrift größer und kräftiger, dezente Farben */
+body{font-size:16px}
+.label{font-family:var(--f-body);font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--ink-2)}
+.swipehint{font-size:14.5px;font-weight:500;color:var(--ink-2)}
+.empty{font-size:15px;font-weight:500;color:var(--ink-2)}
+.hint{font-size:14px;color:var(--ink-2)}
+.card .s{font-size:14px;font-weight:500}
+.todo .tt{font-size:16px;font-weight:500}
+.todo .meta{font-size:13.5px;font-weight:500}
+.drow small{font-size:13.5px;font-weight:500}
+.tab{font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.tsetbtn.ahero{display:flex;gap:12px;align-items:center;width:100%;margin:0 0 14px;padding:6px 8px 6px 0}
+.ahero .s{font-size:14px;font-weight:500;color:var(--ink-2)}
+.setcue{color:var(--ink-3);font-size:18px;flex:none}
+/* Bereichsfarben: Symbol im getönten Kreis */
+.aic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;color:var(--ac);background:color-mix(in srgb,var(--ac) 13%,#fff)}
+.aic svg{width:22px;height:22px}
+.ahero .av{color:var(--ac);background:color-mix(in srgb,var(--ac) 13%,#fff)}
+.todo.done .tt{color:var(--ink-3)}
+.todo .box[aria-checked="true"]{background:var(--ok);border-color:var(--ok)}
+.supptodo .tt{font-weight:600}
+.morning{border-color:#2E8B4E;background:color-mix(in srgb,#2E8B4E 5%,#fff)}
+.todo .box{width:26px;height:26px;border-radius:8px;margin-top:0}
+.tgl.big b{font-family:var(--f-body);font-size:16px;font-weight:700}
+.tgl.big small{font-family:var(--f-body);font-weight:500;line-height:1.35}

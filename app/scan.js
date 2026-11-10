@@ -197,9 +197,15 @@ photoSave = async function () {
 };
 
 /* PDF oder Datei aus der Dateien-App */
+let pdfRef = "";
 async function addDocFile(file) {
-  const id = "ph_" + uid();
+  const id = "ph_" + uid(), refIt = pdfRef && S.items.find(x => x.id === pdfRef); pdfRef = "";
   try { await photoPut(id, file); } catch (_) { toast("Datei konnte nicht gespeichert werden"); return; }
+  if (refIt) {
+    const K = KINDS[refIt.kind], folder = refIt.kind === "versicherung" ? "Versicherung" : refIt.kind === "vertrag" ? "Vertrag" : "Sonstiges";
+    S.docs.push({ id, name: `${kindTitle(refIt.kind, refIt)} – ${file.name.replace(/\.[a-z0-9]+$/i, "")}`, area: K.area, folder, until: "", photo: id, created: today(), type: file.type || "application/pdf", ref: refIt.id });
+    save(); render(true); itemDetail(refIt); toast("Dokument hängt jetzt fest an „" + kindTitle(refIt.kind, refIt) + "“"); return;
+  }
   const g = L.classifyDoc(file.name.replace(/[_-]/g, " "), today());
   const ar = view === "bereich" && area && area !== "wecker" ? area : g.sure > 0 ? g.area : "doku";
   S.docs.push({ id, name: file.name.replace(/\.[a-z0-9]+$/i, ""), area: ar, folder: g.sure > 0 ? (FOLDERS.includes(g.type) ? g.type : "Brief") : "Sonstiges", until: "", photo: id, created: today(), type: file.type || "application/pdf" });
@@ -228,7 +234,8 @@ function docForm(d) {
 }
 
 Object.assign(ACT, {
-  pickpdf: () => { const f = $("#f-doc"); f.value = ""; f.click(); },
+  pickpdf: () => { pdfRef = ""; const f = $("#f-doc"); f.value = ""; f.click(); },
+  pdffor: el => { pdfRef = el.dataset.id; const f = $("#f-doc"); f.value = ""; f.click(); },
   scanok: () => scanDone(true),
   scanskip: () => scanDone(false),
   scanrot: () => rotate(),

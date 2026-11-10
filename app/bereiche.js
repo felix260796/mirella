@@ -313,7 +313,7 @@ function plusDo(k, key) {
     beleg: () => photoStart("beleg", "geld"), brief: () => photoStart("dokument", ar || null), lib: () => { photoCtx = { kind: "dokument", area: null }; closeSheet(); ACT.picklib(); },
     pdf: () => { closeSheet(); const f = $("#f-doc"); f.value = ""; f.click(); },
     note: () => { closeSheet(); setTimeout(() => { const i = document.querySelector('[data-form="note"] input'); i && i.focus(); }, 50); },
-    setgeld: () => { setSec = "geld"; view = "einstellungen"; closeAll(); render(); }
+    setgeld: () => { setFrom = { v: view, area, cur, t: "Finanzen" }; setSec = "geld"; view = "einstellungen"; closeAll(); render(); }
   }[k] || (() => toast("Kommt noch")))();
 }
 
@@ -323,7 +323,7 @@ let finM = today().slice(0, 7), finCat = "";
 R.bereich = function () {
   const A = areaById(area); if (!A) { view = "heute"; return R.heute(); }
   const head = `${subtop("Alle Bereiche", "drawer", `<button class="iconbtn camtop" data-act="photo" data-area="${A.id}" aria-label="Foto oder Brief an Mirella">${IC.cam}</button>`)}
-    <div class="ahero"><button class="logobtn big" data-act="tabset" data-k="${A.id}" aria-label="Einstellungen ${esc(A.n)}"><span class="av">${IC[A.ic]}</span></button><div style="min-width:0"><p class="big" style="margin:0;font-size:24px">${esc(A.n)}</p><div class="s" style="font-size:13px;color:var(--ink-2)">${esc(areaSummary(A.id))}</div></div></div>`;
+    <button class="ahero tsetbtn" data-act="tabset" data-k="${A.id}" data-t="${esc(A.n)}" aria-label="Einstellungen ${esc(A.n)}" style="--ac:${A.c || "var(--ink)"}"><span class="av">${IC[A.ic]}</span><span style="min-width:0;flex:1"><p class="big" style="margin:0;font-size:24px">${esc(A.n)}</p><span class="s" style="display:block">${esc(areaSummary(A.id))}</span></span><span class="setcue" aria-hidden="true">⚙</span></button>`;
   if (AREA_VIEW[A.id]) return head + AREA_VIEW[A.id]();
   const todos = S.todos.filter(t => t.area === A.id && t.list === "todo" && !t.done).sort((a, b) => (a.date || "9999") < (b.date || "9999") ? -1 : 1).sort(byPrio);
   const notes = S.notes.filter(n => n.area === A.id).sort((a, b) => a.d < b.d ? 1 : -1);
@@ -388,8 +388,9 @@ function itemDetail(it) {
     ${rows ? `<dl class="kv block">${rows}</dl>` : ""}${it.note ? `<p class="hint">${esc(it.note)}</p>` : ""}
     ${extra}
     <div class="block"><h4>Erinnerungen</h4>${todos.length ? todos.map(t => `<div class="listrow"><span class="grow">${esc(t.t)}<small>${esc(relDate(t.date))}${t.time ? " · " + t.time : ""}</small></span></div>`).join("") : '<div class="swipehint" style="text-align:left;margin:0">Gerade keine. Mirella legt sie an, sobald Daten fehlen oder Fristen nahen.</div>'}</div>
-    ${docs.length ? `<div class="block"><h4>Dokumente</h4>${docs.map(docRow).join("")}</div>` : ""}
-    <div class="row2"><button class="btn" data-act="docfor" data-id="${it.id}">📷 Dokument dazu</button><button class="btn pri" data-act="edititem" data-id="${it.id}">Bearbeiten</button></div>`);
+    <div class="block"><div class="bh"><h4>${it.kind === "versicherung" ? "Police &amp; Unterlagen" : it.kind === "vertrag" ? "Vertrag &amp; Unterlagen" : "Dokumente"}</h4><span class="label">${docs.length || ""}</span></div>${docs.length ? docs.map(docRow).join("") : `<div class="swipehint" style="text-align:left;margin:0">${it.kind === "vertrag" || it.kind === "versicherung" ? "Leg hier das PDF oder ein Foto vom Vertrag ab, dann hast du es immer mit dem Eintrag zusammen." : "Noch nichts abgelegt."}</div>`}
+    <div class="row2" style="margin-top:8px"><button class="btn" data-act="pdffor" data-id="${it.id}">📄 PDF hochladen</button><button class="btn" data-act="docfor" data-id="${it.id}">📷 Foto / Scan</button></div></div>
+    <div class="row2"><button class="btn pri" data-act="edititem" data-id="${it.id}" style="width:100%">Bearbeiten</button></div>`);
   loadThumbs();
 }
 
@@ -467,6 +468,25 @@ function suppToday(all) {
   return `<div class="sec"><span class="label">Supplements ${all ? "heute" : suppSlot()}</span><span class="label">${rows.filter(r => S.suppLog[r.k]).length}/${rows.length}</span></div><div class="morning">${rows.map(r => `<label class="chk${S.suppLog[r.k] ? " done" : ""}"><input type="checkbox" data-act="supp" data-k="${r.k}"${S.suppLog[r.k] ? " checked" : ""}><span>${esc(r.x.name)}${r.x.dose > 1 ? ` (${r.x.dose} Stück)` : ""}${all ? ` <small style="color:var(--ink-3)">${r.sl}</small>` : ""}</span></label>`).join("")}</div>`;
 }
 
+/* Supplements als Tages-To-dos: morgens Hoch, mittags Mittel, abends Niedrig; je näher (und später) die Zeit, desto höher */
+function suppTodos() {
+  const sup = S.items.filter(x => x.kind === "supplement"); if (!sup.length) return [];
+  S.suppLog = S.suppLog || {};
+  const t = today(), now = new Date(), hm = `${pad(now.getHours())}:${pad(now.getMinutes())}`, st = S.settings;
+  const minus = (a, m) => { const [h, mm] = (a || "00:00").split(":").map(Number), v = Math.max(0, h * 60 + mm - m); return `${pad(Math.floor(v / 60))}:${pad(v % 60)}`; };
+  const at = { morgens: st.suppMorning || "07:30", mittags: st.suppNoon || "12:30", abends: st.suppEvening || "21:00" };
+  return ["morgens", "mittags", "abends"].map(sl => {
+    const xs = sup.filter(x => x[sl]), open = xs.filter(x => !S.suppLog[t + "|" + sl + "|" + x.id]);
+    if (!open.length) return null;
+    const prio = sl === "morgens" ? 1 : sl === "mittags" ? (hm >= at.mittags ? 1 : 2) : (hm >= at.abends ? 1 : hm >= minus(at.abends, 120) ? 2 : 3);
+    return { supp: sl, id: "supp_" + sl, t: `Supplements ${sl}`, meta: open.map(x => x.name + (x.dose > 1 ? ` (${x.dose})` : "")).join(", ") + " · " + at[sl], date: t, time: at[sl], prio, list: "todo" };
+  }).filter(Boolean);
+}
+function suppTodoRow(t) {
+  const pr = prioOf(t);
+  return `<div class="todo prio supptodo" style="--pc:${pr[2]}"><button class="box" role="checkbox" aria-checked="false" aria-label="${esc(t.t)} genommen" data-act="supptodo" data-sl="${t.supp}"></button><div role="button" tabindex="0" data-act="area" data-id="gesund"><div class="tt">💊 ${esc(t.t)} <span class="ppill">${pr[1]}</span></div><div class="meta">${esc(t.meta)}</div></div></div>`;
+}
+
 /* ---------- Heute: was die Sekretärin dazu sagt ---------- */
 HOOKS.heute.push(() => {
   let h = suppToday(false);
@@ -520,10 +540,11 @@ Object.assign(ACT, {
   packtog: el => { const it = S.items.find(x => x.id === el.dataset.id), p = it.pack.find(x => x.id === el.dataset.p); p.done = !p.done; save(); itemDetail(it); },
   restock: el => { const it = S.items.find(x => x.id === el.dataset.id); KINDS.supplement.done(it); syncAuto(it); save(); itemDetail(it); render(true); },
   docfor: el => { const it = S.items.find(x => x.id === el.dataset.id); photoStart("dokument", KINDS[it.kind].area); photoCtx.ref = it.id; },
+  supptodo: el => { S.suppLog = S.suppLog || {}; const sl = el.dataset.sl, t = today(); S.items.filter(x => x.kind === "supplement" && x[sl]).forEach(x => { S.suppLog[t + "|" + sl + "|" + x.id] = 1; }); save(); render(true); toast(`Supplements ${sl} genommen`); },
   supp: el => { S.suppLog = S.suppLog || {}; const k = el.dataset.k; if (S.suppLog[k]) delete S.suppLog[k]; else S.suppLog[k] = 1; save(); render(true); },
   finm: el => { finM = addMonths(finM + "-15", +el.dataset.n).slice(0, 7); finCat = ""; render(true); },
   fincat: el => { finCat = finCat === el.dataset.c ? "" : el.dataset.c; render(true); },
-  setgo: el => { setSec = el.dataset.k; view = "einstellungen"; render(); },
+  setgo: el => { setFrom = view === "einstellungen" ? null : { v: view, area, cur, t: "Zurück" }; setSec = el.dataset.k; view = "einstellungen"; render(); },
   delcat: el => { const c = el.dataset.c; if (!ask(`Kategorie „${c}“ entfernen? Bestehende Ausgaben behalten sie.`)) return; S.settings.cats = (S.settings.cats || []).filter(x => x !== c); save(); render(true); }
 });
 document.addEventListener("change", e => {

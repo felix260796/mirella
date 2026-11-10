@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.11";
+const VERSION = "0.12";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -55,16 +55,16 @@ const IC = {
 };
 /* Reihenfolge = Wichtigkeit im Alltag; Dokumente, Reisen und Briefings bewusst hinten */
 const AREAS = [
-  { id: "wecker", n: "Wecker", ic: "wecker" },
-  { id: "geld", n: "Finanzen", ic: "geld" },
-  { id: "vertrag", n: "Verträge & Versicherungen", ic: "vertrag" },
-  { id: "gesund", n: "Gesundheit", ic: "gesund" },
-  { id: "haus", n: "Zuhause", ic: "haus" },
-  { id: "auto", n: "Auto & E-Bike", ic: "auto" },
-  { id: "arbeit", n: "Arbeit", ic: "arbeit" },
-  { id: "sport", n: "Sport & Hobby", ic: "sport" },
-  { id: "doku", n: "Dokumente", ic: "doku" },
-  { id: "frei", n: "Reisen", ic: "frei" }
+  { id: "wecker", n: "Wecker", ic: "wecker", c: "#5B5BD6" },
+  { id: "geld", n: "Finanzen", ic: "geld", c: "#2E8B4E" },
+  { id: "vertrag", n: "Verträge & Versicherungen", ic: "vertrag", c: "#2E7BBF" },
+  { id: "gesund", n: "Gesundheit", ic: "gesund", c: "#C2416B" },
+  { id: "haus", n: "Zuhause", ic: "haus", c: "#C27A1A" },
+  { id: "auto", n: "Auto & E-Bike", ic: "auto", c: "#4D6A84" },
+  { id: "arbeit", n: "Arbeit", ic: "arbeit", c: "#7A4FB5" },
+  { id: "sport", n: "Sport & Hobby", ic: "sport", c: "#138A8A" },
+  { id: "doku", n: "Dokumente", ic: "doku", c: "#8A6A3D" },
+  { id: "frei", n: "Reisen", ic: "frei", c: "#0E8FB8" }
 ];
 const areaById = id => AREAS.find(a => a.id === id);
 /* Andere Teile (bereiche.js, wecker.js …) hängen sich hier ein */
@@ -213,7 +213,7 @@ function addShop(t, qty, unit) {
 function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const w1 = new Date(d.getFullYear(), 0, 4, 12); return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
 
 /* ---------- Zustand ---------- */
-let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "";
+let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null;
 { const t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); selDate = today(); }
 
 /* ---------- Bausteine ---------- */
@@ -221,7 +221,7 @@ let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selD
 const setKeyFor = () => ({ heute: "heute", briefings: "heute", menschen: "kontakte", akte: "kontakte", todos: "todos", kalender: "kalender", bereich: area }[view] || "");
 function topbar(t, setKey) {
   const k = setKey || setKeyFor();
-  return `<div class="top"><span class="tleft">${k ? `<button class="logobtn" data-act="tabset" data-k="${esc(k)}" aria-label="Einstellungen für ${esc(t)}"><img src="./logo-final.svg" alt=""></button>` : ""}<p class="big">${esc(t)}</p></span><span class="tright"><button class="iconbtn camtop" data-act="search" aria-label="Suchen oder Mirella fragen">${IC.such}</button><button class="iconbtn camtop" data-act="photo" aria-label="Foto oder Brief an Mirella">${IC.cam}</button><button class="brandbtn" data-act="drawer" aria-label="Menü mit allen Bereichen öffnen"><b>Mirella</b><img src="./logo-final.svg" alt=""></button></span></div>`;
+  return `<div class="top">${k ? `<button class="tleft tsetbtn" data-act="tabset" data-k="${esc(k)}" data-t="${esc(t)}" aria-label="Einstellungen für ${esc(t)}"><span class="logobtn"><img src="./logo-final.svg" alt=""></span><p class="big">${esc(t)}</p></button>` : `<span class="tleft"><p class="big">${esc(t)}</p></span>`}<span class="tright"><button class="iconbtn camtop" data-act="search" aria-label="Suchen oder Mirella fragen">${IC.such}</button><button class="iconbtn camtop" data-act="photo" aria-label="Foto oder Brief an Mirella">${IC.cam}</button><button class="brandbtn" data-act="drawer" aria-label="Menü mit allen Bereichen öffnen"><b>Mirella</b><img src="./logo-final.svg" alt=""></button></span></div>`;
 }
 function subtop(backLabel, backAct, right = "") {
   return `<div class="top"><button class="back" data-act="${backAct}" style="margin:0">‹ ${esc(backLabel)}</button><span class="tright">${right}<button class="brandbtn" data-act="drawer" aria-label="Menü öffnen"><b>Mirella</b><img src="./logo-final.svg" alt=""></button></span></div>`;
@@ -311,7 +311,7 @@ const R = {
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${nextCallBlock(p)}
-    ${nb ? `<div class="block"><h4>Geburtstag</h4><div class="catrow"><span>${esc(fmtDate(nb))}${ageAt(p, nb) ? ", wird " + ageAt(p, nb) : ""}</span><span>in ${diffDays(today(), nb)} Tagen</span></div>${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
+    ${nb ? `<div class="block"><h4>Geburtstag${ageAt(p, nb) ? ` <small class="agechip">${nb === today() ? ageAt(p, nb) : ageAt(p, nb) - 1} Jahre alt</small>` : ""}</h4><div class="catrow"><span>${esc(fmtDate(nb))}${ageAt(p, nb) ? ", wird " + ageAt(p, nb) : ""}</span><span>in ${diffDays(today(), nb)} Tagen</span></div>${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
     ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
     ${list("Geschenkideen", "gifts", "Noch keine Ideen", "z. B. Kochkurs")}
@@ -321,11 +321,11 @@ const R = {
   todos() {
     const isShop = todoList === "einkauf";
     const all = S.todos.filter(t => t.list === todoList);
-    const open = all.filter(t => !t.done).sort((a, b) => ((a.date || "9999") + (a.time || "")) < ((b.date || "9999") + (b.time || "")) ? -1 : 1).sort(byPrio);
+    const open = all.filter(t => !t.done).concat(!isShop && typeof suppTodos === "function" ? suppTodos() : []).sort((a, b) => ((a.date || "9999") + (a.time || "")) < ((b.date || "9999") + (b.time || "")) ? -1 : 1).sort(byPrio);
     const done = all.filter(t => t.done).sort((a, b) => (a.doneAt || "") < (b.doneAt || "") ? 1 : -1);
     return `${topbar("To-dos")}<div class="seg"><button data-act="todolist" data-l="todo" aria-pressed="${!isShop}">Aufgaben</button><button data-act="todolist" data-l="einkauf" aria-pressed="${isShop}">Einkaufsliste</button></div>
     ${isShop ? `<form class="shoprow" data-form="shop" style="margin-bottom:8px"><input class="search" id="shopin" style="margin:0" placeholder="z. B. 2 Liter Milch, Butter" aria-label="Artikel" enterkeyhint="done"><button class="btn pri" style="flex:none">+</button></form>` : ""}
-    ${open.length ? open.map(todoRow).join("") : empty(isShop ? "Die Einkaufsliste ist leer." : "Keine offenen Aufgaben. Neu per + oder per Mikrofon.")}
+    ${open.length ? open.map(t => t.supp ? suppTodoRow(t) : todoRow(t)).join("") : empty(isShop ? "Die Einkaufsliste ist leer." : "Keine offenen Aufgaben. Neu per + oder per Mikrofon.")}
     ${isShop ? shopExtras(open) : ""}
     ${done.length ? `<div class="sec"><button class="mini" data-act="showdone">${showDone ? "Erledigte ausblenden" : "Erledigte zeigen (" + done.length + ")"}</button>${isShop ? `<button class="mini" data-act="cleardone">Erledigte löschen</button>` : ""}</div>${showDone ? done.slice(0, 50).map(todoRow).join("") : ""}` : ""}`;
   },
@@ -395,7 +395,7 @@ const R = {
   einstellungen() {
     if (setSec && SETS[setSec]) {
       const lab = setLabel(setSec);
-      return `${subtop("Einstellungen", "setsec\" data-k=\"")}<p class="big">${esc(lab)}</p>${SETS[setSec]()}`;
+      return `${setFrom ? subtop(setFrom.t, "setback") : subtop("Einstellungen", "setsec\" data-k=\"")}<p class="big">${esc(lab)}</p>${SETS[setSec]()}`;
     }
     const row = (k, ic, n, sub) => `<button class="drow" data-act="setsec" data-k="${k}">${ic}<span class="dt"><b>${esc(n)}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
     const ico = s2 => `<span class="setic">${s2}</span>`;
@@ -704,12 +704,13 @@ function closeSheet(byUser) {
 }
 function drawerHTML() {
   const nb = S.briefings.filter(b => !b.read).length;
-  return `<button class="drow" data-act="go" data-v="briefings">${IC.doku}<span class="dt"><b>Briefings</b><small>${S.briefings.length ? "Diese Woche: " + S.briefings.filter(b => isoWeek(b.d) === isoWeek(today()) && b.d.slice(0, 4) === today().slice(0, 4)).length + " · neuestes " + relDate(latestBriefing().d) : "Noch keine Briefings"}</small></span>${nb ? `<span class="pill acc">${nb}</span>` : ""}<span class="chev">›</span></button>` + AREAS.map(A => {
+  const brief = `<button class="drow" data-act="go" data-v="briefings">${IC.doku}<span class="dt"><b>Briefings</b><small>${S.briefings.length ? "Diese Woche: " + S.briefings.filter(b => isoWeek(b.d) === isoWeek(today()) && b.d.slice(0, 4) === today().slice(0, 4)).length + " · neuestes " + relDate(latestBriefing().d) : "Noch keine Briefings"}</small></span>${nb ? `<span class="pill acc">${nb}</span>` : ""}<span class="chev">›</span></button>`;
+  return AREAS.map(A => {
     const open = S.todos.filter(t => t.area === A.id && !t.done && t.list === "todo");
     const late = open.some(t => t.date && t.date < today());
     const sub = A.id === "doku" ? `${S.docs.length} Dokumente` : A.id === "geld" ? `${eur(S.expenses.filter(e => e.d.startsWith(today().slice(0, 7))).reduce((a, e) => a + +e.amount, 0))} diesen Monat` : open.length ? open[0].t : "Notizen, Erinnerungen, Fotos";
-    return `<button class="drow" data-act="area" data-id="${A.id}">${IC[A.ic]}<span class="dt"><b>${esc(A.n)}</b><small>${esc(sub)}</small></span>${open.length ? `<span class="pill ${late ? "late" : "acc"}">${open.length}</span>` : ""}<span class="chev">›</span></button>`;
-  }).join("");
+    return `<button class="drow" data-act="area" data-id="${A.id}"><span class="aic" style="--ac:${A.c}">${IC[A.ic]}</span><span class="dt"><b>${esc(A.n)}</b><small>${esc(sub)}</small></span>${open.length ? `<span class="pill ${late ? "late" : "acc"}">${open.length}</span>` : ""}<span class="chev">›</span></button>`;
+  }).join("") + brief;
 }
 function openDrawer() { closeSheet(); $("#dbody").innerHTML = drawerHTML(); $("#drawer").classList.add("open"); $("#drawer").setAttribute("aria-hidden", "false"); $("#scrim").classList.add("open"); }
 function closeDrawer() { $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true"); if (!$("#sheet").classList.contains("open")) $("#scrim").classList.remove("open"); }
@@ -736,7 +737,7 @@ function plusAction() {
 
 /* ---------- Formulare ---------- */
 function todoForm(t, preset = {}) {
-  const v = t || Object.assign({ t: "", date: "", time: "", rep: "nie", nerv: false, trig: "zeit", area: "", prio: "" }, preset);
+  const v = t || Object.assign({ t: "", date: "", time: "", rep: "nie", nerv: true, trig: "zeit", area: "", prio: "" }, preset);
   openSheet(`<div data-draft="todo:${t ? t.id : "new"}"><p class="stitle">${t ? "Aufgabe bearbeiten" : preset.area ? "Neue Erinnerung" : "Neue Aufgabe"}</p>
   <div class="fld"><label for="a-what">Was?</label><input id="a-what" value="${esc(v.t)}" placeholder="z. B. Waschmaschine ausräumen"></div>
   <div class="fld"><label>Priorität</label><div class="pick3" id="a-prio-pick">${[["", "Keine", ""], ...PRIOS].map(([k, n, c]) => `<button type="button" data-act="pickprio" data-p="${k}" aria-pressed="${String(v.prio || "") === String(k)}"${c ? ` style="--pc:${c}"` : ""}>${c ? '<i class="pdot"></i>' : ""}${n}</button>`).join("")}</div><input type="hidden" id="a-prio" value="${esc(v.prio || "")}"></div>
@@ -744,7 +745,7 @@ function todoForm(t, preset = {}) {
   <div class="fgrid" id="f-time"${v.trig === "verlassen" ? " hidden" : ""}><div class="fld"><label for="a-date">Datum (leer = ohne Termin)</label><input type="date" id="a-date" value="${esc(v.date || "")}"></div><div class="fld"><label for="a-time">Uhrzeit</label><input type="time" id="a-time" value="${esc(v.time || "")}"></div></div>
   <div class="fgrid"><div class="fld"><label for="a-rep">Wiederholen</label><select id="a-rep">${REPS.map(r => `<option${r === (v.rep || "nie") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
   <div class="fld"><label for="a-area">Bereich</label><select id="a-area"><option value="">kein Bereich</option>${AREAS.map(a => `<option value="${a.id}"${a.id === v.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div></div>
-  <label class="tgl"><input type="checkbox" id="a-nerv"${v.nerv ? " checked" : ""}> Nerv-Modus: meldet sich, bis es erledigt ist</label>
+  <label class="tgl big"><input type="checkbox" id="a-nerv"${v.nerv ? " checked" : ""}><span><b>Nerv-Modus</b><small>meldet sich, bis es erledigt ist. Zum Ausschalten Haken wegnehmen.</small></span></label>
   ${t && t.date ? `<button class="btn" data-act="ics" data-id="${t.id}" style="width:100%;margin-top:8px">⏰ Zusätzlich als Wecker in den iPhone-Kalender</button>` : ""}
   <div class="row2">${t ? `<button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savetodo" data-id="${t ? t.id : ""}">Speichern</button></div></div>`,
     () => { $("#a-trig").onchange = e => { $("#f-time").hidden = e.target.value === "verlassen"; }; });
@@ -769,7 +770,7 @@ function shopExtras(open) {
   const freq = Object.entries(S.shopFreq || {}).filter(([k]) => !openK.has(k.toLowerCase())).sort((a, b) => b[1] - a[1]).slice(0, 10);
   return `${freq.length ? `<div class="sec"><span class="label">Oft gekauft</span><span class="label">antippen = drauf</span></div><div class="chips">${freq.map(([k]) => `<button class="chip2" data-act="shopadd" data-t="${esc(k)}">+ ${esc(k)}</button>`).join("")}</div>` : ""}
   <div class="sec"><span class="label">Vorlagen</span><span class="label">für wiederkehrende Einkäufe</span></div>
-  ${S.shopTpl.length ? `<div class="chips">${S.shopTpl.map(t => `<button class="chip2" data-act="usetpl" data-id="${t.id}">🧺 ${esc(t.n)} (${t.items.length})</button>`).join("")}</div>` : '<p class="hint" style="margin-top:0">Lege z. B. „Wocheneinkauf“ oder „Grillen“ an: einmal die Liste füllen, dann als Vorlage speichern. Ein Tipp holt später alles wieder drauf.</p>'}
+  ${S.shopTpl.length ? `<div class="chips">${S.shopTpl.map(t => `<span class="tplchip"><button class="chip2" data-act="usetpl" data-id="${t.id}">🧺 ${esc(t.n)} (${t.items.length})</button><button class="tplx" data-act="deltpl" data-id="${t.id}" aria-label="Vorlage ${esc(t.n)} löschen">✕</button></span>`).join("")}</div>` : '<p class="hint" style="margin-top:0">Lege z. B. „Wocheneinkauf“ oder „Grillen“ an: einmal die Liste füllen, dann als Vorlage speichern. Ein Tipp holt später alles wieder drauf.</p>'}
   ${open.length ? `<button class="btn" data-act="savetpl" style="width:100%;margin-top:6px">Aktuelle Liste als Vorlage speichern</button>` : ""}`;
 }
 function personForm(p) {
@@ -1153,7 +1154,7 @@ function voiceSave() {
   let n = 0; const miss = [];
   for (const it of pending) {
     if (it.type === "shop" && it.t) { if (addShop(it.t)) n++; }
-    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, pid: it.pid || "", list: "todo", done: false, created: today(), date: it.trig === "verlassen" ? "" : it.date || "", time: it.time || "", trig: it.trig || "zeit", rep: "nie", area: "", nerv: false }); n++; }
+    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, pid: it.pid || "", list: "todo", done: false, created: today(), date: it.trig === "verlassen" ? "" : it.date || "", time: it.time || "", trig: it.trig || "zeit", rep: "nie", area: "", nerv: true }); n++; }
     else if (it.type === "note" || it.type === "call") {
       const p = S.people.find(x => x.id === it.pid); if (!p) { miss.push(it); continue; }
       if (it.type === "note" && it.t) { p.notes = p.notes || []; p.notes.unshift({ id: uid(), t: it.t, d: today() }); n++; }
@@ -1233,7 +1234,7 @@ const ACT = {
     openSheet(`<p class="stitle">Doppelte Kontakte</p>${pairs.length ? pairs.map(([a, b]) => `<div class="pitem"><div><b>${esc(fullName(a))}</b>${a.tel ? " · " + esc(a.tel) : ""}</div><div><b>${esc(fullName(b))}</b>${b.tel ? " · " + esc(b.tel) : ""}</div><div class="row2" style="margin-top:8px"><button class="btn pri" data-act="dodupmerge" data-a="${a.id}" data-b="${b.id}">Zusammenführen</button></div></div>`).join("") : empty("Keine doppelten Kontakte gefunden.")}<div class="row2"><button class="btn" data-close="sheet">Schließen</button></div>`);
   },
   dodupmerge: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b || !ask(`${fullName(b)} in ${fullName(a)} zusammenführen? Der zweite Eintrag wird dabei gelöscht.`)) return; mergeInto(a, b); S.people = S.people.filter(x => x !== b); save(); toast("Zusammengeführt: " + fullName(a)); ACT.dupscan(); },
-  go: el => { closeAll(); view = el.dataset.v; if (view === "einstellungen") setSec = el.dataset.k || ""; render(); },
+  go: el => { closeAll(); setFrom = null; view = el.dataset.v; if (view === "einstellungen") setSec = el.dataset.k || ""; render(); },
   drawer: () => openDrawer(),
   photo: el => photoStart(el.dataset.kind, el.dataset.area || (view === "bereich" ? area : null)),
   pickcam: () => { const f = $("#f-cam"); f.value = ""; f.click(); },
@@ -1269,8 +1270,9 @@ const ACT = {
   mpy: el => monthPicker(+el.dataset.y),
   mpset: el => { calY = +el.dataset.y; calM = +el.dataset.m; selDate = iso(new Date(calY, calM, 1, 12)); if (today().startsWith(`${calY}-${pad(calM + 1)}`)) selDate = today(); if (calView === "liste") calView = "monat"; closeSheet(); render(); },
   mptoday: () => { selDate = today(); calY = +selDate.slice(0, 4); calM = +selDate.slice(5, 7) - 1; closeSheet(); render(); },
-  tabset: el => { setSec = el.dataset.k; view = "einstellungen"; closeAll(); render(); },
-  setsec: el => { setSec = el.dataset.k || ""; render(); },
+  tabset: el => { setFrom = { v: view, area, cur, t: el.dataset.t || "Zurück" }; setSec = el.dataset.k; view = "einstellungen"; closeAll(); render(); },
+  setsec: el => { setFrom = null; setSec = el.dataset.k || ""; render(); },
+  setback: () => { const f = setFrom || { v: "heute" }; setFrom = null; setSec = ""; view = f.v; if (f.area) area = f.area; if (f.cur) cur = f.cur; render(); },
   cancel: () => { if (sheetDirty && $("#sheetbody [data-draft]") && !ask("Eingaben verwerfen?")) return; draftClear(); closeSheet(); },
   resumedraft: (el, e) => { if (e.target.closest('[data-act="dropdraft"]')) return; draftResume(); },
   dropdraft: (el, e) => { if (!ask("Unfertige Eingabe verwerfen?")) return; draftClear(); render(true); },

@@ -22,7 +22,7 @@ const contractFields = (arten, namePh) => [
   { k: "start", l: "Beginn", t: "date", half: 1 }, { k: "end", l: "Mindestlaufzeit bis", t: "date", half: 1 },
   { k: "renew", l: "Danach verlängert sich der Vertrag", t: "sel", o: RENEW, def: 12 },
   { k: "noticeN", l: "Kündigungsfrist", t: "num", half: 1, ph: "z. B. 3" }, { k: "noticeU", l: "Einheit", t: "sel", o: NOTICE_U, half: 1, def: "Monate" },
-  { k: "lead", l: "Erinnern vor Ablauf der Frist", t: "sel", o: [[14, "2 Wochen vorher"], [30, "4 Wochen vorher"], [60, "2 Monate vorher"]], def: () => S.settings.contractLead },
+  { k: "lead", l: "Erinnern vor Ablauf der Frist", t: "sel", o: [[14, "2 Wochen vorher"], [30, "1 Monat vorher"], [60, "2 Monate vorher"], [90, "3 Monate vorher"]], def: () => S.settings.contractLead },
   { k: "hotline", l: "Hotline / Kontakt", t: "tel", half: 1 }, { k: "web", l: "Kundenportal / Kündigungslink", half: 1, ph: "https://…" },
   { k: "note", l: "Notiz", t: "area" }
 ];
@@ -285,9 +285,9 @@ const PLUS = {
   heute: [["todo", "✓", "Aufgabe", "mit Datum, Priorität, Nerv-Modus"], ["shop", "🛒", "Einkaufsliste", "Artikel mit Menge"], ["person", "👤", "Kontakt", "mit Anruf-Rhythmus und Geburtstag"], ["wecker", "⏰", "Wecker", "nach Ankunftszeit und Verkehr"], ["exp", "€", "Ausgabe", "Betrag und Kategorie"], ["brief", "✉️", "Brief oder Dokument ablegen", "fotografieren, Mirella sortiert ein"]],
   kalender: [["todoD", "📅", "Termin oder Erinnerung", "an diesem Tag"], ["person", "🎂", "Geburtstag", "als Kontakt anlegen"], ["wecker", "⏰", "Wecker", "nach Ankunftszeit und Verkehr"]],
   wecker: [["wecker", "⏰", "Neuer Wecker", "Ziel und Ankunft eingeben, Mirella rechnet"], ["rem", "🔔", "Erinnerung", "zu einer Uhrzeit"]],
-  geld: [["beleg", "📷", "Beleg fotografieren", "Betrag und Kategorie eintragen"], ["exp", "€", "Ausgabe eintippen", "ohne Foto"], ["k:vertrag", "📄", "Fester Vertrag / Abo", "läuft als Fixkosten mit"], ["setgeld", "⚙", "Einkommen, Kategorien, Budgets", "in den Einstellungen"], ["rem", "🔔", "Erinnerung", "z. B. Überweisung"]],
+  geld: [["beleg", "📷", "Beleg fotografieren", "Betrag und Kategorie eintragen"], ["exp", "€", "Ausgabe eintippen", "ohne Foto"], ["k:vertrag", "📄", "Fester Vertrag / Abo", "läuft als Fixkosten mit"], ["goal", "🎯", "Sparziel", "z. B. Urlaub, Notgroschen"], ["setgeld", "⚙", "Einkommen, Kategorien, Budgets", "in den Einstellungen"], ["rem", "🔔", "Erinnerung", "z. B. Überweisung"]],
   vertrag: [["k:vertrag", "📄", "Vertrag", "Strom, Gas, Handy, Internet, Fitness, Abo"], ["k:versicherung", "🛡️", "Versicherung", "Haftpflicht, Hausrat, Kranken …"], ["brief", "✉️", "Brief ablegen", "z. B. Preiserhöhung, Kündigungsbestätigung"], ["rem", "🔔", "Erinnerung", "z. B. Tarif vergleichen"]],
-  gesund: [["k:arzt", "🩺", "Arzt / Ansprechpartner", "Telefon, Adresse, Online-Termin"], ["k:vorsorge", "🦷", "Wiederkehrender Termin", "z. B. Zahnreinigung alle 6 Monate"], ["k:supplement", "💊", "Supplement", "Einnahmezeiten und Nachbestellen"], ["remT", "📅", "Einzelner Arzttermin", "Datum und Uhrzeit"], ["brief", "📄", "Befund oder Rezept ablegen", "fotografieren"], ["note", "✎", "Notiz", ""]],
+  gesund: [["krank", "🤒", "Ich bin krank", "Anrufe pausieren, Arbeitgeber und Arzt"], ["k:arzt", "🩺", "Arzt / Ansprechpartner", "Telefon, Adresse, Online-Termin"], ["k:vorsorge", "🦷", "Wiederkehrender Termin", "z. B. Zahnreinigung alle 6 Monate"], ["k:supplement", "💊", "Supplement", "Einnahmezeiten und Nachbestellen"], ["remT", "📅", "Einzelner Arzttermin", "Datum und Uhrzeit"], ["brief", "📄", "Befund oder Rezept ablegen", "fotografieren"], ["note", "✎", "Notiz", ""]],
   haus: [["k:zaehler", "🔌", "Zähler", "ablesen mit Wiederholung"], ["k:wohnung", "🏠", "Wohnung & Vermieter", "Miete, Nebenkosten, Kontakt"], ["k:geraet", "🧺", "Gerät", "Garantie und Wartung"], ["remR", "🔁", "Wiederkehrende Aufgabe", "z. B. Rauchmelder testen, jährlich"], ["brief", "✉️", "Brief ablegen", "z. B. Nebenkostenabrechnung"], ["note", "✎", "Notiz", ""]],
   auto: [["k:fahrzeug", "🚗", "Fahrzeug anlegen", "Auto oder E-Bike, TÜV, Inspektion, Reifen"], ["tank", "⛽", "Tanken / Kosten", "als Ausgabe"], ["remT", "🔧", "Werkstatt-Termin", "Datum und Uhrzeit"], ["brief", "📄", "Brief / Rechnung ablegen", "Werkstatt, Bußgeld, Zulassung"], ["note", "✎", "Notiz", "z. B. km-Stand"]],
   arbeit: [["k:ansprech", "👔", "Ansprechpartner", ""], ["k:erstattung", "🧾", "Auslage zum Erstatten", "Mirella erinnert, bis das Geld da ist"], ["remT", "📅", "Termin", ""], ["brief", "📄", "Lohnabrechnung / Brief", "fotografieren und ablegen"], ["note", "✎", "Notiz", ""]],
@@ -309,6 +309,7 @@ function plusDo(k, key) {
     shop: () => { closeSheet(); todoList = "einkauf"; view = "todos"; render(); setTimeout(() => { const i = $("#shopin"); i && i.focus(); }, 50); },
     person: () => { if (view !== "menschen") { view = "menschen"; render(); } personForm(null); },
     wecker: () => typeof weckerForm === "function" ? weckerForm(null) : toast("Wecker nicht geladen"),
+    krank: () => sickForm(), goal: () => goalForm(null),
     exp: () => expenseForm(), tank: () => expenseForm({ cat: "Tanken & Auto" }),
     beleg: () => photoStart("beleg", "geld"), brief: () => photoStart("dokument", ar || null), lib: () => { photoCtx = { kind: "dokument", area: null }; closeSheet(); ACT.picklib(); },
     pdf: () => { closeSheet(); const f = $("#f-doc"); f.value = ""; f.click(); },
@@ -443,8 +444,31 @@ function financeHTML() {
     ${sorted.map(s2 => { const b = +bud[s2.c]; return `<div class="catrow" style="margin-top:8px"><span><i class="pdot" style="background:${s2.col}"></i> ${esc(s2.c)}</span><span>${eur(s2.v)}${b ? " / " + eur(b) : ""}</span></div><div class="bar"><i style="width:${Math.min(100, Math.round(s2.v / (b || sorted[0].v) * 100))}%;background:${b && s2.v > b ? "var(--late)" : s2.col}"></i></div>`; }).join("")}` : '<div class="swipehint" style="text-align:left;margin:0">Noch keine Ausgaben in diesem Monat. Beleg fotografieren oder per Sprache: „35 Euro beim REWE ausgegeben“.</div>'}</div>
   <div class="block"><div class="bh"><h4>Entwicklung</h4><span class="label">6 Monate</span></div><div class="hbars">${hist.map(h => `<div class="hb" title="${MN[+h.k.slice(5) - 1]}: ${eur(h.v)}"><span class="hv">${h.v ? Math.round(h.v) : ""}</span><i style="height:${Math.max(2, Math.round(h.v / maxH * 90))}px"${h.k === ym ? ' class="cur"' : ""}></i><small>${MN[+h.k.slice(5) - 1].slice(0, 3)}</small></div>`).join("")}</div>${avg ? `<p class="swipehint" style="text-align:left">Schnitt der Vormonate: ${eur(avg)}</p>` : ""}</div>
   ${fix.list.length ? `<div class="block"><div class="bh"><h4>Fixkosten im Monat</h4><b>${eur(fix.total)}</b></div>${fix.list.map(x => `<div class="listrow" role="button" data-act="openitem" data-id="${x.it.id}" style="cursor:pointer"><span class="grow">${esc(kindTitle(x.it.kind, x.it))}<small>${esc(x.it.art || KINDS[x.it.kind].n)}</small></span><span>${eur(x.m)}</span></div>`).join("")}<p class="swipehint" style="text-align:left">Im Jahr: ${eur(fix.total * 12)}</p></div>` : `<p class="hint">Trag deine Verträge unter „Verträge & Versicherungen“ ein, dann rechnet Mirella die Fixkosten automatisch mit.</p>`}
+  ${goalsHTML(left)}
   <div class="row2" style="margin:0 0 6px"><button class="btn pri" data-act="photo" data-kind="beleg">📷 Beleg fotografieren</button><button class="btn" data-act="newexp">+ Ausgabe</button></div>
   ${list.length ? `<div class="sec"><span class="label">${finCat ? esc(finCat) : "Ausgaben im " + MN[m - 1]}</span>${finCat ? `<button class="mini" data-act="fincat" data-c="">alle zeigen</button>` : `<span class="label">${list.length}</span>`}</div>${list.map(e => `<div class="listrow">${e.photo ? `<button data-act="viewphoto" data-id="${e.photo}" style="border:0;padding:0;background:none" aria-label="Beleg ansehen"><img class="thumbimg" data-thumb="${e.photo}" alt=""></button>` : ""}<span class="grow">${esc(e.shop || e.cat)}<small>${esc(fmtDate(e.d))} · ${esc(e.cat)}</small></span><b style="font-weight:600">${eur(e.amount)}</b><button class="rowdel" data-act="delexp" data-id="${e.id}" aria-label="löschen">✕</button></div>`).join("")}` : ""}`;
+}
+
+/* ---------- Sparziele ---------- */
+function goalsHTML(left) {
+  const gs = S.goals || [];
+  const rows = gs.map(g => {
+    const pct = g.target ? Math.min(100, Math.round(g.saved / g.target * 100)) : 0, rest = Math.max(0, g.target - g.saved);
+    let per = "";
+    if (g.until && rest) { const [y, m] = g.until.split("-").map(Number), [ty, tm] = today().slice(0, 7).split("-").map(Number); const mo = Math.max(1, (y - ty) * 12 + (m - tm)); per = ` · ${eur(rest / mo)} pro Monat bis ${MN[m - 1]} ${y}`; }
+    return `<div class="catrow" style="margin-top:8px"><span>${esc(g.n)}</span><span>${eur(g.saved)} / ${eur(g.target)}</span></div><div class="bar"><i style="width:${pct}%;background:${pct >= 100 ? "var(--ok, #2E8B4E)" : "var(--ink)"}"></i></div><div class="goalrow"><small>${pct >= 100 ? "Geschafft! 🎉" : `noch ${eur(rest)}${per}`}</small><button class="mini" data-act="goaladd" data-id="${g.id}">+ Einzahlen</button><button class="mini" data-act="goaledit" data-id="${g.id}">Ändern</button></div>`;
+  }).join("");
+  const need = gs.filter(g => g.until && g.target > g.saved).reduce((a, g) => { const [y, m] = g.until.split("-").map(Number), [ty, tm] = today().slice(0, 7).split("-").map(Number); return a + (g.target - g.saved) / Math.max(1, (y - ty) * 12 + (m - tm)); }, 0);
+  const tip = need && +S.settings.income ? `<p class="goaltip">Für alle Ziele brauchst du etwa ${eur(need)} im Monat${left > 0 ? `, übrig sind diesen Monat ${eur(left)}` : ""}.</p>` : "";
+  return `<div class="block"><div class="bh"><h4>Sparziele</h4><button class="mini" data-act="goalnew">+ Ziel</button></div>${rows || '<div class="swipehint" style="text-align:left;margin:0">Noch kein Sparziel. Zum Beispiel Urlaub, neues E-Bike oder ein Notgroschen von drei Monatsgehältern.</div>'}${tip}</div>`;
+}
+function goalForm(g) {
+  const v = g || { n: "", target: "", saved: 0, until: "" };
+  openSheet(`<p class="stitle">${g ? "Sparziel ändern" : "Neues Sparziel"}</p>
+  <div class="fld"><label for="g-n">Wofür?</label><input id="g-n" value="${esc(v.n)}" placeholder="z. B. Skiurlaub"></div>
+  <div class="fgrid"><div class="fld"><label for="g-t">Ziel in €</label><input id="g-t" inputmode="decimal" value="${v.target ? String(v.target).replace(".", ",") : ""}" placeholder="0"></div><div class="fld"><label for="g-s">Schon gespart</label><input id="g-s" inputmode="decimal" value="${v.saved ? String(v.saved).replace(".", ",") : ""}" placeholder="0"></div></div>
+  <div class="fld"><label for="g-u">Bis wann? (freiwillig)</label><input id="g-u" type="month" value="${esc(v.until || "")}"></div>
+  <div class="row2">${g ? `<button class="btn danger" data-act="goaldel" data-id="${g.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="goalsave" data-id="${g ? g.id : ""}">Speichern</button></div>`);
 }
 
 /* ---------- Dokumente: nach Bereich und Art geordnet ---------- */
@@ -517,7 +541,7 @@ Object.assign(SETS, {
     ${catList().map(c => `<div class="set"><span><i class="pdot" style="background:${S.settings.catColor && S.settings.catColor[c] != null ? catColor(c) : "var(--line)"}"></i> ${esc(c)}${(S.settings.cats || []).includes(c) ? ` <button class="xbtn" data-act="delcat" data-c="${esc(c)}" aria-label="${esc(c)} entfernen">✕</button>` : ""}</span><input class="setin" inputmode="decimal" data-budget="${esc(c)}" value="${bud[c] ? String(bud[c]).replace(".", ",") : ""}" placeholder="Budget €"></div>`).join("")}
     <form class="shoprow" data-form="cat" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Eigene Kategorie, z. B. Haustier" aria-label="Neue Kategorie"><button class="btn pri" style="flex:none">+</button></form>`;
   },
-  vertrag: () => `${setSel("contractLead", "Vor Kündigungsfristen erinnern", "gilt für neue Verträge", [[14, "2 Wochen vorher"], [30, "4 Wochen vorher"], [60, "2 Monate vorher"]])}${setTgl("nerv.fristen", "Nerv-Modus für Fristen", "meldet sich, bis du es erledigt hast")}`,
+  vertrag: () => `${setSel("contractLead", "Vor Kündigungsfristen erinnern", "gilt für neue Verträge", [[14, "2 Wochen vorher"], [30, "1 Monat vorher"], [60, "2 Monate vorher"], [90, "3 Monate vorher"]])}${setTgl("nerv.fristen", "Nerv-Modus für Fristen", "meldet sich, bis du es erledigt hast")}`,
   gesund: () => `${setH("Supplements")}${setTxt("suppMorning", "Morgens", "Uhrzeit der Erinnerung", "07:30", "time")}${setTxt("suppNoon", "Mittags", "", "12:30", "time")}${setTxt("suppEvening", "Abends", "", "21:00", "time")}${setTgl("nerv.supplements", "Nerv-Modus Supplements", "bis abgehakt")}`,
   haus: () => `${setSel("washMin", "„Waschmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"]])}<p class="hint">Sag einfach „Waschmaschine läuft“ ins Mikrofon.</p>`,
   auto: () => `${setSel("huLead", "Vor HU/TÜV erinnern", "", [[14, "2 Wochen vorher"], [28, "4 Wochen vorher"], [42, "6 Wochen vorher"]])}`,
@@ -529,6 +553,11 @@ Object.assign(SETS, {
 
 /* ---------- Klicks ---------- */
 Object.assign(ACT, {
+  goalnew: () => goalForm(null),
+  goaledit: el => goalForm((S.goals || []).find(g => g.id === el.dataset.id)),
+  goalsave: el => { const n = $("#g-n").value.trim(), t = parseAmount($("#g-t").value), sv = parseAmount($("#g-s").value) || 0; if (!n || !t) { toast("Bitte Name und Zielbetrag eintragen"); return; } S.goals = S.goals || []; const g = S.goals.find(x => x.id === el.dataset.id); const v = { n, target: t, saved: sv, until: $("#g-u").value || "" }; if (g) Object.assign(g, v); else S.goals.push({ id: uid(), ...v }); save(); closeSheet(); render(true); toast("Sparziel gespeichert: " + n); },
+  goaladd: el => { const g = (S.goals || []).find(x => x.id === el.dataset.id); if (!g) return; const a = parseAmount(prompt(`Wie viel legst du für „${g.n}“ zurück? (Minus zum Abheben)`) || ""); if (a == null) return; g.saved = Math.round((+g.saved + a) * 100) / 100; save(); render(true); toast(g.saved >= g.target ? `${g.n}: Ziel erreicht! 🎉` : `${g.n}: ${eur(g.saved)} von ${eur(g.target)}`); },
+  goaldel: el => { const g = (S.goals || []).find(x => x.id === el.dataset.id); if (!g || !ask(`Sparziel „${g.n}“ löschen?`)) return; S.goals = S.goals.filter(x => x !== g); save(); closeSheet(); render(true); },
   plus: el => plusDo(el.dataset.k, el.dataset.a),
   newitem: el => itemForm(el.dataset.k, null),
   openitem: el => { const it = S.items.find(x => x.id === el.dataset.id); if (it) itemDetail(it); },

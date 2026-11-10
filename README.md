@@ -1,5 +1,20 @@
 # Mirella, die Sekretärin
 
+## Stand 0.13 (2026-11-10): Einkaufsmodus, Anrufplan, PC-Sicherung
+- Schrift: Überschriften in der Serifenschrift groß und fett, Text klar davon abgesetzt; alles größer, „Mirella“ oben rechts markanter.
+- Anrufe auf „Heute“: Telefon-Symbol wählt direkt die Nummer, danach fragt Mirella, wie es lief. Antippen des Kontakts: erledigt, probiert, später, Kontaktprofil. Höchstens 3 pro Werktag (auch in der Kontaktliste: „morgen“ oder Datum), „Weitere Anrufe vorziehen“.
+- Kontakte: E-Mail und Telefon werden beim Eintippen geprüft (Tippfehler wie „gmial.com“, zu kurze Nummern). Runde Geburtstage ein halbes Jahr vorher auf „Heute“.
+- Dokumente an jeden Eintrag und jede Aufgabe (z. B. Rechnung zur Zahnreinigung), eigene Ordner anlegbar.
+- Einkauf: nach Warengruppen sortiert, Abgehaktes bleibt sichtbar bis „Einkauf fertig“, übliche Einheiten (Eier = Packung, Butter = Stück, lernt deine Änderungen), „Wohl bald wieder fällig“ nach deinem Rhythmus, Einkaufszettel fotografieren.
+- Aufgaben: Erledigtes bleibt (heute sichtbar, danach im Archiv), „Mirella merkt“ mit kleinen Auswertungen.
+- Verträge: Erinnerung 2 Wochen, 1, 2 oder 3 Monate vorher.
+- Einstellungen: „Zurück“ landet wieder an derselben Stelle.
+- Gesamtprüfung aller Wünsche seit dem ersten Entwurf, dabei nachgezogen:
+  - Kontakte archivieren (keine Anrufe, keine Geburtstage, Verlauf bleibt, zurückholbar). Nach 5 Fehlversuchen hintereinander hört Mirella auf zu nerven und fragt auf „Heute“: weiter versuchen oder archivieren (Einstellungen › Kontakte › „Nerven aufhören“).
+  - Krank-Modus: „Ich bin krank“ (Sprache oder Gesundheit › Plus) schiebt die Anrufe der Krankheitstage nach hinten und legt Arbeitgeber und Arzttermin als Aufgaben an; „Wieder gesund“ auf „Heute“.
+  - Sparziele unter Finanzen mit Fortschritt und Betrag pro Monat bis zum Zieldatum, auch in der Excel-Sicherung.
+- PC-Sicherung (export.js): ein ZIP mit Excel (alle Kontakte mit allen Infos, Aufgaben, Einkauf, Verträge, Dokumente, Ausgaben, Notizen), allen PDFs/Fotos nach Bereich/Ordner benannt und der Wiederherstellungs-Datei. Erinnerung auf „Heute“ (Standard wöchentlich).
+
 ## Stand 0.12 (2026-11-10): Feinschliff nach dem ersten Ausprobieren
 - Oben links: Logo **und** Seitentitel öffnen die Einstellungen dieser Seite (größere Fläche, auch in jedem Bereich); „Zurück“ führt direkt zur Seite zurück.
 - Kontakt: Alter klein neben dem Geburtstag („36 Jahre alt“).

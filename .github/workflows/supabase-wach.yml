@@ -1,0 +1,16 @@
+name: Supabase wach halten
+
+# Kostenlose Supabase-Projekte pausieren nach 7 Tagen ohne Nutzung.
+# Diese kleine Abfrage jeden Tag zählt als Nutzung, damit Mirella nie pausiert.
+on:
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -fsS "https://xcanrhlwcopamhnmmlja.supabase.co/rest/v1/mirella_state?select=user_id&limit=1" \
+            -H "apikey: sb_publishable_uxI3wI_MIx3CZOk-zoahpw_MBoVeQZc" && echo " ok"

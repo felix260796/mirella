@@ -541,3 +541,22 @@ h1,h2,.big,.mtitle,.brand b,.brandbtn b,.hero h3,.stitle,.block h4,.sethead2,.se
 .smrow.done .smt{text-decoration:line-through}
 .smrow.done .smbox{background:#2E8B4E;border-color:#2E8B4E}
 .hero.dead .bigcall,.hero.dead .callrow{display:none}
+.setbtn{display:inline-flex;align-items:center;gap:8px}
+.setcue{display:grid;place-items:center}.setcue svg{width:22px;height:22px}
+/* 0.16 */
+.hero{position:relative}
+.heroedit{position:absolute;top:0;right:0;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:99px;padding:6px 12px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.heroedit svg{width:16px;height:16px}
+.avbtn{position:relative;border:0;background:none;padding:0;margin:0 auto 10px;display:block;cursor:pointer;width:84px;height:84px}
+.avbtn .av{margin:0!important}
+.av{overflow:hidden}
+.avimg{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.avcam{position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;border:2px solid var(--page)}
+.avcam svg{width:15px;height:15px}
+.bdline.round{color:#C2372D;font-weight:700}
+.smgrp{margin-bottom:26px}
+.smgh{font-size:21px;font-weight:800;color:var(--ink);text-transform:none;letter-spacing:-.01em;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid var(--ink)}
+/* Datum und Uhrzeit gleich hoch wie die anderen Felder (iPhone macht leere Datumsfelder sonst schmal) */
+.fld input,.fld select{min-height:48px;box-sizing:border-box}
+.sheet input[type=date],.sheet input[type=time],.sheet input[type=month]{height:48px;min-width:0;line-height:26px;padding-top:10px;padding-bottom:10px}
+input[type=date]::-webkit-date-and-time-value,input[type=time]::-webkit-date-and-time-value{min-height:26px}

@@ -148,7 +148,7 @@ const KINDS = {
       { k: "reorder", l: "Nachbestellen, wenn es noch so viele Tage reicht", t: "num", def: 14, ph: "z. B. 10" },
       { k: "shop", l: "Wo bestellen (Link oder Laden)" }, { k: "note", l: "Notiz (z. B. mit Essen)", t: "area" }
     ],
-    sub: it => { const l = L.supplyLeft(it, today()); return [["morgens", "mittags", "abends"].filter(k => it[k]).join(" + ") || "keine Zeit", l ? `reicht noch ${l.days} Tage` : ""].filter(Boolean).join(" · "); },
+    sub: it => { const l = L.supplyLeft(it, today()); return [["morgens", "mittags", "abends"].filter(k => it[k]).join(" + ") || "keine Zeit", l ? `reicht noch ${pl(l.days, "Tag", "Tage")}` : ""].filter(Boolean).join(" · "); },
     auto: it => { const l = L.supplyLeft(it, today()); if (!l) return []; const d = addDays(today(), Math.max(0, l.days - (+it.reorder || 14))); return [{ key: "nachbest:" + it.stockDate, date: d, t: `${it.name} nachbestellen${it.shop ? " (" + it.shop + ")" : ""}`, nerv: !!S.settings.nerv.supplements }]; },
     onSave: (it, isNew, old) => { if (isNew || !old || String(old.stock) !== String(it.stock)) it.stockDate = today(); },
     done: it => { const n = parseAmount(prompt(`Wie viele Stück ${it.name} sind neu dazugekommen?`) || ""); if (n) { const l = L.supplyLeft(it, today()); it.stock = (l ? l.left : 0) + n; it.stockDate = today(); toast("Vorrat aktualisiert"); } }
@@ -358,7 +358,7 @@ function areaSummary(id) {
   const parts = [];
   if (id === "geld") { const m = monthSum(today().slice(0, 7)); parts.push(eur(m) + " ausgegeben diesen Monat"); }
   else if (id === "vertrag") { const f = fixCosts(); parts.push(`${items.length} ${items.length === 1 ? "Eintrag" : "Einträge"} · ${eur(f.total)} Fixkosten im Monat`); }
-  else if (id === "doku") parts.push(`${S.docs.length} Dokumente`);
+  else if (id === "doku") parts.push(pl(S.docs.length, "Dokument", "Dokumente"));
   else if (items.length) parts.push(items.length + (items.length === 1 ? " Eintrag" : " Einträge"));
   if (open) parts.push(open + " offen");
   return parts.join(" · ") || "Tipp auf + zum Anlegen";
@@ -373,7 +373,7 @@ function itemDetail(it) {
   if (it.kind === "reise") {
     extra = `<div class="block"><div class="bh"><h4>Packliste</h4><span class="label">${(it.pack || []).filter(p => p.done).length}/${(it.pack || []).length}</span></div>${(it.pack || []).map(p => `<label class="chk${p.done ? " done" : ""}"><input type="checkbox" data-act="packtog" data-id="${it.id}" data-p="${p.id}"${p.done ? " checked" : ""}><span>${esc(p.t)}</span></label>`).join("")}<form class="shoprow" data-form="pack" data-id="${it.id}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="Noch etwas einpacken …" aria-label="Packliste ergänzen"><button class="btn pri" style="flex:none">+</button></form></div>`;
   }
-  if (it.kind === "supplement") { const l = L.supplyLeft(it, today()); extra = `<div class="block"><h4>Vorrat</h4>${l ? `<div class="catrow"><span>noch ${Math.round(l.left)} Stück</span><b>reicht ${l.days} Tage</b></div>` : '<p class="hint">Vorrat eintragen, dann erinnert Mirella rechtzeitig ans Nachbestellen.</p>'}<div class="set" style="margin-top:8px"><span>Nachbestellen erinnern<small>wenn es noch so viele Tage reicht</small></span><span style="display:flex;align-items:center;gap:6px"><button class="iconbtn" data-act="reord" data-id="${it.id}" data-n="-1" aria-label="weniger">−</button><b style="min-width:58px;text-align:center">${+it.reorder || 14} Tage</b><button class="iconbtn" data-act="reord" data-id="${it.id}" data-n="1" aria-label="mehr">+</button></span></div><button class="btn" data-act="restock" data-id="${it.id}" style="width:100%;margin-top:8px">Nachgekauft: Vorrat auffüllen</button></div>`; }
+  if (it.kind === "supplement") { const l = L.supplyLeft(it, today()); extra = `<div class="block"><h4>Vorrat</h4>${l ? `<div class="catrow"><span>noch ${Math.round(l.left)} Stück</span><b>reicht ${pl(l.days, "Tag", "Tage")}</b></div>` : '<p class="hint">Vorrat eintragen, dann erinnert Mirella rechtzeitig ans Nachbestellen.</p>'}<div class="set" style="margin-top:8px"><span>Nachbestellen erinnern<small>wenn es noch so viele Tage reicht</small></span><span style="display:flex;align-items:center;gap:6px"><button class="iconbtn" data-act="reord" data-id="${it.id}" data-n="-1" aria-label="weniger">−</button><b style="min-width:58px;text-align:center">${pl(+it.reorder || 14, "Tag", "Tage")}</b><button class="iconbtn" data-act="reord" data-id="${it.id}" data-n="1" aria-label="mehr">+</button></span></div><button class="btn" data-act="restock" data-id="${it.id}" style="width:100%;margin-top:8px">Nachgekauft: Vorrat auffüllen</button></div>`; }
   const tel = it.tel || it.hotline || it.shopTel;
   const acts = [tel ? `<a class="mini" href="tel:${esc(tel.replace(/[^\d+]/g, ""))}" style="text-decoration:none">📞 Anrufen</a>` : "", it.web ? `<a class="mini" href="${esc(/^https?:/.test(it.web) ? it.web : "https://" + it.web)}" target="_blank" rel="noopener" style="text-decoration:none">Website</a>` : "", it.addr ? `<a class="mini" href="https://maps.apple.com/?q=${encodeURIComponent(it.addr)}" style="text-decoration:none">Karte</a>` : "", it.mail ? `<a class="mini" href="mailto:${esc(it.mail)}" style="text-decoration:none">E-Mail</a>` : ""].join("");
   const todos = S.todos.filter(t => t.ref === it.id && !t.done).sort((a, b) => (a.date || "") < (b.date || "") ? -1 : 1);
@@ -515,7 +515,7 @@ function suppTodoRow(t) {
 HOOKS.heute.push(() => {
   let h = suppToday(false);
   const t = today(), soon = S.items.filter(x => x.kind === "vertrag" || x.kind === "versicherung").map(x => ({ x, st: L.contractStatus(x, t) })).filter(o => o.st && o.st.deadline && o.st.days >= 0 && o.st.days <= 14);
-  if (soon.length) h += `<div class="sec"><span class="label">Kündigungsfristen</span></div>${soon.map(o => `<div class="card due" role="button" tabindex="0" data-act="openitem" data-id="${o.x.id}"><span class="av">${KINDS[o.x.kind].ic}</span><span style="min-width:0"><div class="t">${esc(o.x.name)}</div><div class="s">noch ${o.st.days} Tage: ${esc(o.st.text)}</div></span><span class="pill late">${o.st.days} T.</span></div>`).join("")}`;
+  if (soon.length) h += `<div class="sec"><span class="label">Kündigungsfristen</span></div>${soon.map(o => `<div class="card due" role="button" tabindex="0" data-act="openitem" data-id="${o.x.id}"><span class="av">${KINDS[o.x.kind].ic}</span><span style="min-width:0"><div class="t">${esc(o.x.name)}</div><div class="s">noch ${pl(o.st.days, "Tag", "Tage")}: ${esc(o.st.text)}</div></span><span class="pill late">${o.st.days} T.</span></div>`).join("")}`;
   const trip = S.items.filter(x => x.kind === "reise" && x.von && x.von >= t && diffDays(t, x.von) <= 7)[0];
   if (trip) h += `<div class="sec"><span class="label">Bald unterwegs</span></div>${itemCard(trip)}`;
   return h;

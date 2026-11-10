@@ -429,6 +429,9 @@ function Do-Remove {
 }
 
 # ---------- Start ----------
+# Doppelklick ohne Einrichtung: gleich einrichten
+if (-not $Einrichten -and -not $Entfernen -and -not (Test-Path $CfgFile) -and [Environment]::UserInteractive) { $Einrichten = $true }
+if ($Einrichten) { try { if (-not (Test-Path $AppDir)) { New-Item -ItemType Directory -Path $AppDir -Force | Out-Null }; Start-Transcript -Path (Join-Path $AppDir 'einrichten-protokoll.txt') -Force | Out-Null } catch { } }
 try {
   if ($Einrichten) { Do-Setup; Write-Host ''; Read-Host '  Fertig. Enter drücken zum Schließen' | Out-Null }
   elseif ($Entfernen) { Do-Remove; Read-Host '  Enter drücken zum Schließen' | Out-Null }

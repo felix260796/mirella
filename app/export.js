@@ -125,7 +125,7 @@ if (typeof window !== "undefined") {
       st("Sicherung wird erstellt …"); toast("PC-Sicherung wird erstellt …");
       const r = await buildBackup(st), name = `Mirella-PC-Sicherung_${today()}.zip`, file = new File([r.blob], name, { type: "application/zip" });
       S.settings.pcLast = today(); save();
-      st(`Fertig: ${S.people.length} Kontakte, ${r.docs} Dokumente. Jetzt im Teilen-Fenster „In Dateien sichern“ › OneDrive › CoWork › Private App › 05_Sicherung.`);
+      st(`Fertig: ${pl(S.people.length, "Kontakt", "Kontakte")}, ${pl(r.docs, "Dokument", "Dokumente")}. Jetzt im Teilen-Fenster „In Dateien sichern“ › OneDrive › CoWork › Private App › 05_Sicherung.`);
       if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e.name === "AbortError") return; } }
       const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
     } catch (e) { st("Das hat nicht geklappt: " + (e.message || e)); }

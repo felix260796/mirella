@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.14.1";
+const VERSION = "0.15";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -24,6 +24,7 @@ const addWorkdays = (s, n) => { let d = s; while (n > 0) { d = addDays(d, 1); co
 const fmtDate = s => { if (!s) return ""; const d = D(s); return `${WD[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() : ""}`; };
 const relDate = s => { const n = diffDays(today(), s); if (n === 0) return "heute"; if (n === 1) return "morgen"; if (n === -1) return "gestern"; if (n > 1 && n < 7) return WDL[D(s).getDay()]; if (n < 0) return `vor ${-n} Tagen`; return fmtDate(s); };
 const agoText = s => { if (!s) return "noch nie"; const n = diffDays(s, today()); if (n <= 0) return "heute"; if (n === 1) return "gestern"; if (n < 14) return `vor ${n} Tagen`; if (n < 60) return `vor ${Math.round(n / 7)} Wochen`; if (n < 365) return `vor ${Math.round(n / 30)} Monaten`; const y = Math.floor(n / 365); return y === 1 ? "vor über einem Jahr" : `vor ${y} Jahren`; };
+const pl = (n, one, many) => n + " " + (n === 1 ? one : many);
 const eur = n => (+n || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
 
 /* ---------- Daten ---------- */
@@ -151,7 +152,7 @@ function failStreak(p) { let n = 0; for (const c of (p.calls || []).slice().sort
 /* Nerven hört auf: nach so vielen Fehlversuchen hintereinander (Einstellung), bis du „weiter versuchen“ oder „archivieren“ wählst */
 function gaveUp(p) { const g = +S.settings.giveUp || 0; return g > 0 && failStreak(p) - (+p.streakBase || 0) >= g; }
 function nextDue(p) {
-  if (p.arch || gaveUp(p)) return null;
+  if (p.arch || p.death || gaveUp(p)) return null;
   if (noCycle(p.cyc)) return null;
   const last = lastCall(p);
   let due;
@@ -185,7 +186,7 @@ function pullPool() { const m = callPlanMap(), t = today(); return S.people.filt
 function planLabel(p) { const m = callPlanMap()[p.id]; if (!m) return null; const n = diffDays(today(), m); return n <= 0 ? "heute" : n === 1 ? "morgen" : fmtDate(m).replace(/^(\w+)\.?,? /, "$1. "); }
 function callState(p) { const d = nextDue(p); if (!d) return "none"; const n = diffDays(today(), d); return n < 0 ? "late" : n === 0 ? "due" : n <= 3 ? "soon" : "ok"; }
 function nextBirthday(p) {
-  if (!p.bday || p.arch) return null;
+  if (!p.bday || p.arch || p.death) return null;
   const [, m, d] = p.bday.split("-").map(Number); if (!m || !d) return null;
   const t = today(), y = +t.slice(0, 4);
   let s = `${y}-${pad(m)}-${pad(d)}`; if (s < t) s = `${y + 1}-${pad(m)}-${pad(d)}`;
@@ -297,10 +298,11 @@ const R = {
     const asks = [];
     S.people.forEach(p => !p.arch && (p.ask || []).forEach(a => { if (!a.done) asks.push([p, a]); }));
     const counts = [];
-    if (dueCalls.length) counts.push(dueCalls.length === 1 ? "1 Anruf" : dueCalls.length + " Anrufe");
-    if (dueTodos.length) counts.push(dueTodos.length === 1 ? "1 Aufgabe" : dueTodos.length + " Aufgaben");
-    if (bdays.some(([, b]) => b === t)) counts.push("ein Geburtstag");
-    const summary = counts.length ? `Heute stehen ${counts.length > 1 ? counts.slice(0, -1).join(", ") + " und " + counts.slice(-1) : counts[0]} an.` : (S.people.length || S.todos.length ? "Heute ist nichts fällig. Genieß den Tag." : "Leg los: Tipp unten aufs Mikrofon und sag zum Beispiel „Milch auf die Einkaufsliste“.");
+    if (dueCalls.length) counts.push(dueCalls.length === 1 ? "ein Anruf" : dueCalls.length + " Anrufe");
+    if (dueTodos.length) counts.push(dueTodos.length === 1 ? "eine Aufgabe" : dueTodos.length + " Aufgaben");
+    const nB = bdays.filter(([, b]) => b === t).length; if (nB) counts.push(nB === 1 ? "ein Geburtstag" : nB + " Geburtstage");
+    const one = counts.length === 1 && /^ein/.test(counts[0]);
+    const summary = counts.length ? `Heute ${one ? "steht" : "stehen"} ${counts.length > 1 ? counts.slice(0, -1).join(", ") + " und " + counts.slice(-1) : counts[0]} an.` : (S.people.length || S.todos.length ? "Heute ist nichts fällig. Genieß den Tag." : "Leg los: Tipp unten aufs Mikrofon und sag zum Beispiel „Milch auf die Einkaufsliste“.");
     let h2 = `${topbar("Heute")}<div class="date">${WDL[d.getDay()]}, ${d.getDate()}. ${MN[d.getMonth()]} · KW ${isoWeek(t)}</div><p class="big">${greet}${S.settings.name ? ", " + esc(S.settings.name) : ""}. ${summary}</p>`;
     const dr = draftGet();
     if (dr) h2 += `<div class="card due" role="button" tabindex="0" data-act="resumedraft"><span class="av">✎</span><span style="min-width:0"><div class="t">Unfertig: ${esc(dr.title || "Eingabe")}</div><div class="s">Antippen und weiter ausfüllen</div></span><button class="rowdel" data-act="dropdraft" aria-label="Verwerfen">✕</button></div>`;
@@ -316,14 +318,17 @@ const R = {
     if (dueCalls.length || doneCalls) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length ? dueCalls.length + " heute" : ""}${doneCalls ? (dueCalls.length ? " · " : "") + doneCalls + " erledigt" : ""}</span></div>${dueCalls.map(p => personCard(p, true)).join("")}${!dueCalls.length ? `<div class="swipehint" style="text-align:left">Für heute alle Anrufe geschafft. 👍</div>` : ""}${pool.length && dueCalls.length < 2 ? `<button class="btn" data-act="pullcalls" style="width:100%;margin-top:6px">Weitere Anrufe vorziehen (${Math.min(pool.length, +S.settings.maxCalls || 3)} von ${pool.length})</button>` : ""}`;
     const quit = S.people.filter(p => !p.arch && gaveUp(p));
     if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card"><span class="av">${esc(initials(p))}</span><span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
-    if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : "in " + n + " Tagen · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
-    const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
+    if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : (n === 1 ? "morgen" : "in " + n + " Tagen") + " · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
+    const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && !p.death && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
     if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
+    const md = t.slice(5), mem = [];
+    S.people.forEach(p => { if (!p.death || p.arch) return; if (p.death.slice(5) === md) mem.push([p, "Todestag"]); if (p.bday && p.bday.slice(5) === md) mem.push([p, "Geburtstag"]); });
+    if (mem.length) h2 += `<div class="sec"><span class="label">In Gedenken</span></div>${mem.map(([p, k]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🕯️</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">heute ${k}</div></span></div>`).join("")}`;
     if (dueTodos.length) h2 += `<div class="sec"><span class="label">Aufgaben</span><span class="label">${dueTodos.length}</span></div>${dueTodos.sort(byPrio).map(todoRow).join("")}`;
     h2 += HOOKS.heute.map(f => f()).join("");
     if (asks.length) h2 += `<div class="sec"><span class="label">Nachfragen</span></div>${asks.slice(0, 5).map(([p, a]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(a.t)}</div></span></div>`).join("")}`;
     if (docs.length) h2 += `<div class="sec"><span class="label">Dokumente laufen ab</span></div>${docs.map(x => `<div class="card" role="button" tabindex="0" data-act="area" data-id="doku"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(x.name)}</div><div class="s">gültig bis ${esc(fmtDate(x.until))}</div></span>${x.until < t ? '<span class="pill late">abgelaufen</span>' : '<span class="pill">bald</span>'}</div>`).join("")}`;
-    if (shop) h2 += `<div class="sec"><span class="label">Einkaufsliste</span></div><div class="card" role="button" tabindex="0" data-act="shoplist"><span class="av">🛒</span><span><div class="t">${shop} ${shop === 1 ? "Sache" : "Sachen"} offen</div><div class="s">Antippen zum Einkaufen</div></span></div>`;
+    if (shop) h2 += `<div class="sec"><span class="label">Einkaufsliste</span></div><div class="card" role="button" tabindex="0" data-act="shoplist"><span class="av">🛒</span><span><div class="t">${shop} ${shop === 1 ? "Sache" : "Sachen"} offen</div><div class="s">Antippen für die Liste</div></span><button class="mini" data-act="shopmode" data-on="1">Einkaufen gehen</button></div>`;
     return h2;
   },
   menschen() {
@@ -342,19 +347,19 @@ const R = {
     const p = S.people.find(x => x.id === cur); if (!p) { view = "menschen"; return R.menschen(); }
     if (allCallsFor !== p.id) showAllCalls = false;
     const st = callState(p), due = nextDue(p), nb = nextBirthday(p);
-    const list = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="swipehint" style="text-align:left;margin:0 0 6px">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
+    const list = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="emptyline">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
     const calls = (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1);
     return `${subtop("Kontakte", "go\" data-v=\"menschen", `<button class="mini" data-act="editperson" data-id="${p.id}">Bearbeiten</button>`)}
-    <div class="hero"><span class="av">${esc(initials(p))}</span><h3>${esc(fullName(p))}</h3><p>${esc([p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>
+    <div class="hero${p.death ? " dead" : ""}"><span class="av">${esc(initials(p))}</span><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
-    ${p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
-    ${nb ? `<div class="block"><h4>Geburtstag</h4>${(() => { const a = ageAt(p, nb), n = diffDays(today(), nb), isT = nb === today(); return `<div class="bdbig">${a ? `<div class="bdnow">${isT ? a : a - 1} Jahre alt</div>` : ""}<div class="bdnext">${isT ? `🎂 Heute ${a ? a + " Jahre" : "Geburtstag"}!` : `${a ? `wird <b>${a} Jahre</b>` : "Geburtstag"} am ${esc(fmtDate(nb))}`}</div>${isT ? "" : `<div class="bdin">${n === 1 ? "morgen" : "in " + n + " Tagen"}</div>`}</div>`; })()}${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
+    ${p.death ? "" : p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
+    ${bdayBlock(p, nb)}
     ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
     ${list("Geschenkideen", "gifts", "Noch keine Ideen", "z. B. Kochkurs")}
-    <div class="block"><div class="bh"><h4>Zuletzt angerufen</h4><span class="label">${calls.length ? calls.length + (calls.length === 1 ? " Anruf" : " Anrufe") : ""}</span></div>${calls.length ? (showAllCalls ? calls : calls.slice(0, 3)).map(c => `<div class="listrow"><span class="grow">${esc(fmtDate(c.d))}${c.t ? " · " + esc(c.t) : ""}<small>${c.ok ? "erreicht" : "nicht erreicht"} · ${esc(agoText(c.d))}</small></span><button class="rowdel" data-act="delcall" data-id="${c.id}" aria-label="löschen">✕</button></div>`).join("") + (calls.length > 3 ? `<button class="mini" data-act="allcalls" data-id="${p.id}" style="margin-top:8px">${showAllCalls ? "Nur die letzten 3" : "Alle anzeigen (" + calls.length + ")"}</button>` : "") : '<div class="swipehint" style="text-align:left;margin:0">Noch kein Anruf eingetragen</div>'}</div>
-    ${p.addr || p.email ? `<div class="block"><h4>Kontakt</h4>${p.email ? `<div class="listrow"><span class="grow">${esc(p.email)}<small>E-Mail</small></span></div>` : ""}${p.addr ? `<div class="listrow"><span class="grow">${esc(p.addr)}<small>Adresse</small></span><a class="mini" href="https://maps.apple.com/?q=${encodeURIComponent(p.addr)}" style="text-decoration:none">Karte</a></div>` : ""}</div>` : ""}`;
+    <div class="block"><div class="bh"><h4>Zuletzt angerufen</h4><span class="label">${calls.length ? calls.length + (calls.length === 1 ? " Anruf" : " Anrufe") : ""}</span></div>${calls.length ? (showAllCalls ? calls : calls.slice(0, 3)).map(c => `<div class="listrow"><span class="grow">${esc(fmtDate(c.d))}${c.t ? " · " + esc(c.t) : ""}<small>${c.ok ? "erreicht" : "nicht erreicht"} · ${esc(agoText(c.d))}</small></span><button class="rowdel" data-act="delcall" data-id="${c.id}" aria-label="löschen">✕</button></div>`).join("") + (calls.length > 3 ? `<button class="mini" data-act="allcalls" data-id="${p.id}" style="margin-top:8px">${showAllCalls ? "Nur die letzten 3" : "Alle anzeigen (" + calls.length + ")"}</button>` : "") : '<div class="emptyline">Noch kein Anruf eingetragen</div>'}</div>
+    ${contactBlock(p)}`;
   },
   todos() {
     const isShop = todoList === "einkauf";
@@ -589,7 +594,7 @@ function pruneBriefings() {
 
 /* ---------- Wetter (Open-Meteo, ohne Schlüssel) ---------- */
 const WXC = c => c === 0 ? ["☀️", "klar"] : c <= 2 ? ["🌤️", "leicht bewölkt"] : c === 3 ? ["☁️", "bewölkt"] : c <= 48 ? ["🌫️", "Nebel"] : c <= 57 ? ["🌦️", "Nieselregen"] : c <= 67 ? ["🌧️", "Regen"] : c <= 77 ? ["🌨️", "Schnee"] : c <= 82 ? ["🌧️", "Schauer"] : c <= 86 ? ["🌨️", "Schneeschauer"] : ["⛈️", "Gewitter"];
-let WX = null;
+let WX = null, wxOpen = false;
 try { WX = JSON.parse(localStorage.getItem("mirella.wx") || "null"); } catch (_) { }
 function wxHTML() {
   if (!WX || !WX.cur) return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:28px">🌡️</span><div><span style="font-size:14px">Wetter wird geladen …</span><small>Falls nichts kommt: Einstellungen › Wetter-Ort festlegen.</small></div></div></div>`;
@@ -598,9 +603,10 @@ function wxHTML() {
   const r = n => n == null ? "–" : Math.round(n) + "°";
   const dayMax = dn.dayMax != null ? dn.dayMax : (dl.temperature_2m_max || [])[0], nightMin = dn.nightMin != null ? dn.nightMin : (dl.temperature_2m_min || [])[0];
   const hints = dn.hints.filter(h => on[h.k] === undefined || !!on[h.k]);
-  return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:30px">${ic}</span><div><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><small>${esc(txt)} ${WX.place && WX.place !== "deinem Standort" ? "in " + esc(WX.place) : "an deinem Standort"} · Regen ${(dl.precipitation_probability_max || [])[0] ?? 0} %</small></div></div>
-  <div class="wxdn"><div><span class="label">☀️ Tagsüber</span><b>${r(dn.dayMin)} bis ${r(dayMax)}</b></div><div><span class="label">🌙 Nachts</span><b>${r(nightMin)} bis ${r(dn.nightMax)}</b></div></div>
-  ${hints.length ? `<div class="wxhints">${hints.map(h => `<div>${h.ic} ${esc(h.t)}</div>`).join("")}</div>` : ""}</div>`;
+  // kompakt: eine Zeile Wetter, eine Zeile Tag/Nacht, Hinweise zusammengefasst (antippen = alle)
+  const more = hints.length > 1;
+  return `<div class="wxc"${more ? ' role="button" tabindex="0" data-act="wxmore"' : ""}><div class="wxrow"><span class="wxic">${ic}</span><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><span class="wxtxt"><span>${esc(txt)} · Regen ${(dl.precipitation_probability_max || [])[0] ?? 0} %</span><small>☀️ ${r(dn.dayMin)} bis ${r(dayMax)}  ·  🌙 ${r(nightMin)} bis ${r(dn.nightMax)}</small></span></div>
+  ${hints.length ? (wxOpen || !more ? `<div class="wxhints">${hints.map(h => `<div>${h.ic} ${esc(h.t)}</div>`).join("")}</div>` : `<div class="wxhint1"><span>${hints[0].ic} ${esc(hints[0].t)}</span><span class="wxplus">+${hints.length - 1} ${hints.length === 2 ? "Hinweis" : "Hinweise"} ${hints.slice(1).map(h => h.ic).join("")}</span></div>`) : ""}</div>`;
 }
 /* Standort: einmal erlauben, dann dauerhaft gespeichert (kein erneutes Nachfragen) */
 function geoOnce() {
@@ -657,6 +663,28 @@ function icsFor(t) {
   return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mirella//DE", "BEGIN:VEVENT", "UID:" + t.id + "@mirella", "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", "DTSTART;TZID=Europe/Berlin:" + st, "DTEND;TZID=Europe/Berlin:" + en, "SUMMARY:" + e("Mirella: " + t.t), "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + e(t.t), "TRIGGER:-PT0M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
 }
 function icsOpen(t) { if (!t.date) { toast("Erst ein Datum eintragen"); return; } location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(icsFor(t)); }
+/* Datum ausgeschrieben: „20. März 1999“ (ohne Jahr, wenn unbekannt) */
+function longDate(s) { if (!s) return ""; const [y, m, d] = s.split("-").map(Number); return `${d}. ${MN[m - 1]}${y && y !== 1604 ? " " + y : ""}`; }
+function bdayBlock(p, nb) {
+  if (p.death) {
+    if (!p.bday && !p.death) return "";
+    return `<div class="block"><h4>Lebensdaten</h4><div class="kvgrid"><div><span class="k">Geboren</span><b>${p.bday ? "* " + esc(longDate(p.bday)) : "–"}</b></div><div><span class="k">Gestorben</span><b>† ${esc(longDate(p.death))}</b></div></div></div>`;
+  }
+  if (!nb) return "";
+  const a = ageAt(p, nb), n = diffDays(today(), nb), isT = nb === today();
+  const line = isT ? `🎂 Heute ${a ? "wird " + (p.first || "") + " " + a + " Jahre alt" : "ist Geburtstag"}!` : `${a ? `Wird ${a} Jahre alt` : "Nächster Geburtstag"} am ${esc(fmtDate(nb))}, ${n === 1 ? "morgen" : "in " + n + " Tagen"}`;
+  return `<div class="block"><h4>Geburtstag</h4><div class="kvgrid"><div><span class="k">Geboren</span><b>${esc(longDate(p.bday))}</b></div>${a ? `<div><span class="k">Alter</span><b>${isT ? a : a - 1} Jahre</b></div>` : ""}</div><div class="bdline${isT ? " today" : ""}">${line}</div>${p.gift ? `<div class="bdline">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>`;
+}
+/* Kontaktdaten: jede Zeile gleich aufgebaut (Bezeichnung, Wert, Knopf) */
+function contactBlock(p) {
+  const rows = [];
+  if (p.tel) rows.push(["Telefon", esc(p.tel), `<a class="mini" href="tel:${esc(p.tel.replace(/[^\d+]/g, ""))}">Anrufen</a>`]);
+  if (p.email) rows.push(["E-Mail", esc(p.email), `<a class="mini" href="mailto:${esc(p.email)}">Schreiben</a>`]);
+  if (p.addr) rows.push(["Adresse", esc(p.addr), `<a class="mini" href="https://maps.apple.com/?q=${encodeURIComponent(p.addr)}">Karte</a>`]);
+  if (p.nick) rows.push(["Spitzname", esc(p.nick), ""]);
+  if (!rows.length) return "";
+  return `<div class="block"><h4>Kontakt</h4>${rows.map(([k, v, b]) => `<div class="kvrow"><span class="k">${k}</span><span class="v">${v}</span>${b}</div>`).join("")}</div>`;
+}
 function nextCallBlock(p) {
   const due = nextDue(p), st = callState(p), last = lastCall(p), lastAny = lastCall(p, false);
   if (!due) return `<div class="nextcall"><div><div class="label">Nächster Anruf</div><b>kein fester Rhythmus</b><small>Unter „Bearbeiten“ einen Rhythmus wählen, dann plant Mirella die Anrufe.</small></div></div>`;
@@ -680,7 +708,8 @@ function eventsRange(from, to, all) {
     while (d && d <= to && guard++ < 400) { add(d, c, t.area ? areaById(t.area)?.n.split(" ")[0] || "Erinnerung" : "To-do", t.t, "edittodo", t.id, t.time); if (!t.rep || t.rep === "nie") break; d = stepRep(d, t.rep); }
   }
   for (const p of S.people) {
-    if (p.bday) { const [, m, dd] = p.bday.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", "Geburtstag", fullName(p) + (ageAt(p, `${y}-${m}-${dd}`) ? " wird " + ageAt(p, `${y}-${m}-${dd}`) : ""), "person", p.id); }
+    if (p.bday) { const [, m, dd] = p.bday.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", p.death ? "Gedenken" : "Geburtstag", fullName(p) + (p.death ? " · Geburtstag" : ageAt(p, `${y}-${m}-${dd}`) ? " wird " + ageAt(p, `${y}-${m}-${dd}`) : ""), "person", p.id); }
+    if (p.death) { const [, m, dd] = p.death.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", "Gedenken", fullName(p) + " · Todestag", "person", p.id); }
     const due = nextDue(p); if (due) add(due < today() ? today() : due, "anruf", "Anruf", fullName(p), "person", p.id);
     for (const c of p.calls || []) add(c.d, "anruf", "Anruf", fullName(p) + (c.ok ? " · erreicht" : " · nicht erreicht"), "person", p.id);
   }
@@ -762,7 +791,7 @@ function drawerHTML() {
   return AREAS.map(A => {
     const open = S.todos.filter(t => t.area === A.id && !t.done && t.list === "todo");
     const late = open.some(t => t.date && t.date < today());
-    const sub = A.id === "doku" ? `${S.docs.length} Dokumente` : A.id === "geld" ? `${eur(S.expenses.filter(e => e.d.startsWith(today().slice(0, 7))).reduce((a, e) => a + +e.amount, 0))} diesen Monat` : open.length ? open[0].t : "Notizen, Erinnerungen, Fotos";
+    const sub = A.id === "doku" ? pl(S.docs.length, "Dokument", "Dokumente") : A.id === "geld" ? `${eur(S.expenses.filter(e => e.d.startsWith(today().slice(0, 7))).reduce((a, e) => a + +e.amount, 0))} diesen Monat` : open.length ? open[0].t : "Notizen, Erinnerungen, Fotos";
     return `<button class="drow" data-act="area" data-id="${A.id}"><span class="aic" style="--ac:${A.c}">${IC[A.ic]}</span><span class="dt"><b>${esc(A.n)}</b><small>${esc(sub)}</small></span>${open.length ? `<span class="pill ${late ? "late" : "acc"}">${open.length}</span>` : ""}<span class="chev">›</span></button>`;
   }).join("") + brief;
 }
@@ -820,15 +849,33 @@ function saveTodo(id) {
 }
 const todoSeg = isShop => `<div class="seg"><button data-act="todolist" data-l="todo" aria-pressed="${!isShop}">Aufgaben</button><button data-act="todolist" data-l="einkauf" aria-pressed="${isShop}">Einkaufsliste</button></div>`;
 /* Einkaufsliste nach Warengruppen; Abgehaktes bleibt sichtbar, bis „Einkauf fertig“ */
+let shopMode = false, shopLock = null;
+function wakeLock(on) {
+  try { if (on && navigator.wakeLock && !shopLock) navigator.wakeLock.request("screen").then(l => { shopLock = l; l.addEventListener("release", () => { shopLock = null; }); }).catch(() => { }); else if (!on && shopLock) { shopLock.release(); shopLock = null; } } catch (_) { }
+}
+document.addEventListener("visibilitychange", () => { if (shopMode && document.visibilityState === "visible") wakeLock(true); });
+/* Einkaufsmodus: nur die Liste, große Zeilen, ganze Zeile antippen = in den Wagen, Bildschirm bleibt an */
+function shopModeView(cur) {
+  const order = L.SHOPGROUPS.map(g => g[0]).concat("Sonstiges"), by = {};
+  cur.forEach(t => { const g = L.shopGroup(t.t); (by[g.n] = by[g.n] || { ic: g.ic, l: [] }).l.push(t); });
+  const got = cur.filter(t => t.done).length, all = cur.length, pct = all ? Math.round(100 * got / all) : 0;
+  const groups = order.filter(n => by[n]).map(n => { const g = by[n], l = g.l.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+    return `<div class="smgrp"><div class="smgh">${g.ic} ${esc(n)}</div>${l.map(t => `<button class="smrow${t.done ? " done" : ""}" data-act="toggle" data-id="${t.id}" aria-pressed="${!!t.done}"><span class="smbox">${t.done ? "✓" : ""}</span><span class="smt">${L.qtyLabel(t) ? `<b>${esc(L.qtyLabel(t))}</b> ` : ""}${esc(t.t)}</span></button>`).join("")}</div>`; }).join("");
+  return `<div class="smhead"><div><b>🛒 Einkaufsmodus</b><small>${got} von ${all} im Wagen</small></div><button class="mini" data-act="shopmode" data-on="0">Beenden</button></div>
+  <div class="smbar"><i style="width:${pct}%"></i></div>
+  ${all ? groups : empty("Die Einkaufsliste ist leer.")}
+  ${got ? `<button class="btn pri" data-act="shopdone" style="width:100%;margin:14px 0 4px;padding:16px">Einkauf fertig (${got} im Wagen${all - got ? ", " + (all - got) + (all - got === 1 ? " bleibt" : " bleiben") + " auf der Liste" : ""})</button>` : `<p class="swipehint">Tipp eine Zeile an, wenn die Sache im Wagen liegt. Der Bildschirm bleibt dabei an.</p>`}`;
+}
 function shopView(all) {
   const cur = all.filter(t => !t.arch), open = cur.filter(t => !t.done), got = cur.filter(t => t.done);
+  if (shopMode) return shopModeView(cur);
   const order = L.SHOPGROUPS.map(g => g[0]).concat("Sonstiges"), by = {};
   cur.forEach(t => { const g = L.shopGroup(t.t); (by[g.n] = by[g.n] || { ic: g.ic, l: [] }).l.push(t); });
   const groups = order.filter(n => by[n]).map(n => { const g = by[n], l = g.l.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0)), o = l.filter(t => !t.done).length;
     return `<div class="shopgrp${o ? "" : " alldone"}"><div class="sgh"><span>${g.ic} ${esc(n)}</span><span class="sgn">${o ? o + " offen" : "✓ alles"}</span></div>${l.map(todoRow).join("")}</div>`; }).join("");
-  return `<form class="shoprow" data-form="shop" style="margin-bottom:8px"><input class="search" id="shopin" style="margin:0" placeholder="z. B. 2 Liter Milch, Butter" aria-label="Artikel" enterkeyhint="done"><button class="btn pri" style="flex:none" aria-label="Hinzufügen">+</button><button class="btn" type="button" data-act="shopphoto" style="flex:none" aria-label="Einkaufszettel fotografieren">📷</button></form>
+  return `${cur.length ? `<button class="btn pri shopgo" data-act="shopmode" data-on="1">🛒 Einkaufen gehen<small>Einkaufsmodus: große Liste zum Abhaken</small></button>` : ""}<form class="shoprow" data-form="shop" style="margin-bottom:8px"><input class="search" id="shopin" style="margin:0" placeholder="z. B. 2 Liter Milch, Butter" aria-label="Artikel" enterkeyhint="done"><button class="btn pri" style="flex:none" aria-label="Hinzufügen">+</button><button class="btn" type="button" data-act="shopphoto" style="flex:none" aria-label="Einkaufszettel fotografieren">📷</button></form>
     ${cur.length ? groups : empty("Die Einkaufsliste ist leer. Tipp oben ein, sprich es ein, oder fotografier deinen Einkaufszettel.")}
-    ${got.length ? `<button class="btn pri" data-act="shopdone" style="width:100%;margin:10px 0 4px">Einkauf fertig (${got.length} im Wagen${open.length ? ", " + open.length + " bleiben" : ""})</button><p class="swipehint">Abgehaktes bleibt sichtbar, bis du hier tippst. Danach landet es in deinem Einkaufs-Verlauf.</p>` : ""}
+    ${got.length ? `<button class="btn pri" data-act="shopdone" style="width:100%;margin:10px 0 4px">Einkauf fertig (${got.length} im Wagen${open.length ? ", " + open.length + (open.length === 1 ? " bleibt" : " bleiben") : ""})</button><p class="swipehint">Abgehaktes bleibt sichtbar, bis du hier tippst. Danach landet es in deinem Einkaufs-Verlauf.</p>` : ""}
     ${shopExtras(open)}
     ${shopHistory(all)}`;
 }
@@ -886,6 +933,7 @@ function personForm(p) {
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.bday))}" autocomplete="off"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
   <label class="tgl"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
   <div class="fld" style="margin-top:8px;position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
+  <div class="fld"><label for="c-death">Verstorben am (nur falls zutreffend)</label><input id="c-death" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.death || ""))}" autocomplete="off"></div>
   <div id="dup-warn"></div>
   ${p ? "" : `<div class="fld"><label for="c-last-call">Zuletzt angerufen (wenn bekannt)</label><input id="c-last-call" type="date"></div>`}
   ${p ? `<button class="btn" data-act="${p.arch ? "unarchperson" : "archperson"}" data-id="${p.id}" style="width:100%;margin-bottom:8px">${p.arch ? "Aus dem Archiv zurückholen" : "Archivieren (nicht mehr erinnern, Verlauf bleibt)"}</button>` : ""}<div class="row2">${p ? `<button class="btn danger" data-act="delperson" data-id="${p.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="saveperson" data-id="${p ? p.id : ""}">Speichern</button></div>
@@ -894,6 +942,7 @@ function personForm(p) {
       addrSuggest($("#c-addr"), $("#addr-sug"));
       const chk = () => { const wm = L.checkEmail($("#c-mail").value), wt = L.checkTel($("#c-cc").value, $("#c-tel").value); $("#w-mail").hidden = !wm; $("#w-mail").textContent = wm ? "⚠ " + wm : ""; $("#w-tel").hidden = !wt; $("#w-tel").textContent = wt ? "⚠ " + wt : ""; };
       ["#c-mail", "#c-tel"].forEach(q => $(q).addEventListener("blur", chk)); $("#c-cc").addEventListener("change", chk); if ($("#c-mail").value || $("#c-tel").value) chk();
+      $("#c-death").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
       $("#c-bday").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
       $("#sheetbody [data-draft]").addEventListener("draftapplied", () => { $("#c-grps").innerHTML = grpChips($("#c-grp").value); });
     });
@@ -940,14 +989,16 @@ function mergeInto(t, src) {
   if (src.id) S.todos.forEach(x => { if (x.pid === src.id) x.pid = t.id; });
 }
 function readPersonForm() {
-  const bd = L.parseBday($("#c-bday").value);
-  return { first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim() };
+  const bd = L.parseBday($("#c-bday").value), dd = L.parseBday($("#c-death").value);
+  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim() };
 }
 function savePerson(id) {
   const data = readPersonForm(), first = data.first, last = data.last;
   if (!first && !last) { toast("Bitte einen Namen eintragen"); return; }
   if (data.bdayBad) { toast("Geburtstag bitte als TT.MM.JJJJ, z. B. 07041964"); return; }
-  delete data.bdayBad;
+  if (data.deathBad) { toast("Todestag bitte als TT.MM.JJJJ, z. B. 14022019"); return; }
+  delete data.bdayBad; delete data.deathBad;
+  if (data.death) { data.cyc = "nie"; data.gift = false; }
   const warn = [L.checkEmail(data.email), L.checkTel($("#c-cc").value, $("#c-tel").value)].filter(Boolean);
   if (warn.length && !savePerson.force && !ask(warn.join("\n") + "\n\nTrotzdem so speichern?")) return;
   if (data.group && !S.groups.includes(data.group)) S.groups.push(data.group);
@@ -1355,7 +1406,7 @@ const ACT = {
   dupforce: el => { savePerson.force = true; savePerson(el.dataset.id); },
   dupmerge: el => {
     const t = S.people.find(x => x.id === el.dataset.id), selfId = el.dataset.self;
-    const data = readPersonForm(); delete data.bdayBad;
+    const data = readPersonForm(); delete data.bdayBad; delete data.deathBad;
     if (selfId) { const me = S.people.find(x => x.id === selfId); Object.assign(me, data); mergeInto(t, me); S.people = S.people.filter(x => x !== me); } else mergeInto(t, data);
     draftClear(); save(); closeSheet(); cur = t.id; view = "akte"; render(); toast("Zusammengeführt: " + fullName(t));
   },
@@ -1365,7 +1416,7 @@ const ACT = {
     openSheet(`<p class="stitle">Doppelte Kontakte</p>${pairs.length ? pairs.map(([a, b]) => `<div class="pitem"><div><b>${esc(fullName(a))}</b>${a.tel ? " · " + esc(a.tel) : ""}</div><div><b>${esc(fullName(b))}</b>${b.tel ? " · " + esc(b.tel) : ""}</div><div class="row2" style="margin-top:8px"><button class="btn pri" data-act="dodupmerge" data-a="${a.id}" data-b="${b.id}">Zusammenführen</button></div></div>`).join("") : empty("Keine doppelten Kontakte gefunden.")}<div class="row2"><button class="btn" data-close="sheet">Schließen</button></div>`);
   },
   dodupmerge: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b || !ask(`${fullName(b)} in ${fullName(a)} zusammenführen? Der zweite Eintrag wird dabei gelöscht.`)) return; mergeInto(a, b); S.people = S.people.filter(x => x !== b); save(); toast("Zusammengeführt: " + fullName(a)); ACT.dupscan(); },
-  go: el => { closeAll(); setFrom = null; view = el.dataset.v; if (view === "einstellungen") setSec = el.dataset.k || ""; render(); },
+  go: el => { closeAll(); setFrom = null; if (shopMode) { shopMode = false; wakeLock(false); } view = el.dataset.v; if (view === "einstellungen") setSec = el.dataset.k || ""; render(); },
   drawer: () => openDrawer(),
   photo: el => photoStart(el.dataset.kind, el.dataset.area || (view === "bereich" ? area : null)),
   pickcam: () => { const f = $("#f-cam"); f.value = ""; f.click(); },
@@ -1434,11 +1485,13 @@ const ACT = {
   deltodo: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t || !ask(`„${t.t}“ löschen?`)) return; S.todos = S.todos.filter(x => x !== t); draftClear(); save(); closeSheet(); render(true); toast("Gelöscht"); },
   savetodo: el => saveTodo(el.dataset.id),
   newtodo: el => todoForm(null, { date: el.dataset.d || "", area: el.dataset.area || "" }),
-  todolist: el => { todoList = el.dataset.l; showDone = false; render(); },
+  todolist: el => { if (shopMode) { shopMode = false; wakeLock(false); } todoList = el.dataset.l; showDone = false; render(); },
   showdone: () => { showDone = !showDone; render(true); },
-  shopdone: () => { const got = S.todos.filter(t => t.list === "einkauf" && t.done && !t.arch); got.forEach(t => { t.arch = 1; }); save(); render(true); toast(`Einkauf erledigt: ${got.length} Artikel im Verlauf gespeichert`); },
+  shopdone: () => { const got = S.todos.filter(t => t.list === "einkauf" && t.done && !t.arch); got.forEach(t => { t.arch = 1; }); if (shopMode) { shopMode = false; wakeLock(false); } save(); render(true); toast(`Einkauf erledigt: ${got.length} Artikel im Verlauf gespeichert`); },
   cleardone: () => { const n = S.todos.filter(t => t.list === "einkauf" && t.done).length; if (!ask(`${n} erledigte Artikel von der Liste löschen?`)) return; S.todos = S.todos.filter(t => !(t.list === "einkauf" && t.done)); save(); render(true); },
   shoplist: () => { todoList = "einkauf"; view = "todos"; render(); },
+  shopmode: el => { shopMode = el.dataset.on === "1"; wakeLock(shopMode); todoList = "einkauf"; view = "todos"; render(); $("#screen").scrollTop = 0; },
+  wxmore: () => { wxOpen = !wxOpen; const el = $("#wx"); if (el) el.innerHTML = wxHTML(); },
   mstep: el => shiftMonth(+el.dataset.n),
   calview: el => { calView = el.dataset.cv; if (calView === "monat") { calY = +selDate.slice(0, 4); calM = +selDate.slice(5, 7) - 1; } render(); },
   selday: el => { selDate = el.dataset.d; render(true); },
@@ -1462,7 +1515,7 @@ document.addEventListener("click", e => {
   if (c) { c.dataset.close === "drawer" ? closeDrawer() : closeSheet(true); return; }
   if (e.target.id === "scrim") { closeAll(true); return; }
   const tab = e.target.closest(".tab");
-  if (tab) { if (tab.dataset.v === "kalender" && view !== "kalender") { calView = S.settings.calStart || "monat"; selDate = today(); calY = +selDate.slice(0, 4); calM = +selDate.slice(5, 7) - 1; } view = tab.dataset.v; q = ""; grpFilter = ""; closeAll(true); render(); return; }
+  if (tab) { if (shopMode && tab.dataset.v !== "todos") { shopMode = false; wakeLock(false); } if (tab.dataset.v === "kalender" && view !== "kalender") { calView = S.settings.calStart || "monat"; selDate = today(); calY = +selDate.slice(0, 4); calM = +selDate.slice(5, 7) - 1; } view = tab.dataset.v; q = ""; grpFilter = ""; closeAll(true); render(); return; }
   if (e.target.closest("#mic")) { if ($("#sheet").classList.contains("open") && $("#v-text")) { closeSheet(); return; } voiceStart(); return; }
   if (e.target.closest("#plus")) { plusAction(); return; }
   const a = e.target.closest("[data-act]");
@@ -1495,7 +1548,7 @@ document.addEventListener("change", e => {
         if (d0) { mergeInto(d0, c); skipped++; continue; }
         S.people.push({ id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [], cyc: "nie", group: "", gift: false, addr: "", ...c }); added++;
       }
-      save(); view = "menschen"; render(); toast(`${added} Kontakte übernommen${skipped ? ", " + skipped + " schon vorhanden (ergänzt)" : ""}. Anruf-Rhythmus je Person unter „Bearbeiten“.`);
+      save(); view = "menschen"; render(); toast(`${pl(added, "Kontakt", "Kontakte")} übernommen${skipped ? ", " + skipped + " schon vorhanden (ergänzt)" : ""}. Anruf-Rhythmus je Person unter „Bearbeiten“.`);
     }).catch(() => toast("Datei konnte nicht gelesen werden"));
   }
 });

@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos: IndexedDB "mirella" / "photos".
    Später ersetzt der Supabase-Sync (v0.7) die lokale Speicherung. */
 "use strict";
-const VERSION = "0.9.1";
+const VERSION = "0.9.2";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -344,7 +344,7 @@ const R = {
     ${sel("retryWorkdays", "Nicht erreicht", "neuer Versuch nach", [[1, "1 Werktag"], [2, "2 Werktagen"], [5, "1 Woche"]])}
     ${sel("giftLead", "Geburtstage", "so früh auf „Heute“ zeigen", [[7, "7 Tage vorher"], [14, "14 Tage vorher"], [21, "21 Tage vorher"]])}
     <div class="sec"><span class="label">Wetter</span></div>
-    <div class="set"><span>Wetter-Ort<small>${s.wxName ? esc(s.wxName) : "aktueller Standort"}</small></span><button class="mini" data-act="wxhere">Standort nutzen</button></div>
+    <div class="set"><span>Wetter-Ort<small>${s.wxName === "deinem Standort" ? "dein Standort (gespeichert)" : s.wxName ? esc(s.wxName) : "noch nicht festgelegt"}</small></span><button class="mini" data-act="wxhere">${s.wxLat != null && s.wxName === "deinem Standort" ? "Standort neu bestimmen" : "Standort nutzen"}</button></div>
     <form class="shoprow" data-form="wxplace" style="margin:8px 0"><input class="search" style="margin:0" placeholder="Oder Ort eintippen, z. B. Remseck" aria-label="Wetter-Ort"><button class="btn pri" style="flex:none">OK</button></form>
     <div class="sec"><span class="label">Ausgaben-Kategorien</span></div>
     <p class="hint" style="margin-top:0">${catList().map(esc).join(" · ")}</p>
@@ -407,21 +407,28 @@ function wxHTML() {
   if (rainAt !== null) hint.push(rainAt <= nowH ? "Gerade Regen: Schirm mitnehmen." : `Ab ${rainAt} Uhr Regen: Schirm mitnehmen.`);
   if (dl && dl.temperature_2m_max[0] < 8) hint.push("Kalt: warme Jacke.");
   if (dl && dl.temperature_2m_min[0] <= 0) hint.push("Frost möglich: Scheibe kratzen einplanen.");
-  return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:30px">${ic}</span><div><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><small>${esc(txt)} in ${esc(WX.place || "deiner Nähe")} · heute ${Math.round(dl.temperature_2m_min[0])}° bis ${Math.round(dl.temperature_2m_max[0])}°, Regen ${dl.precipitation_probability_max[0] ?? 0} %</small></div></div>${hint.length ? `<div class="chk" style="display:block;color:var(--ink-2);font-size:13.5px">${esc(hint.join(" "))}</div>` : ""}</div>`;
+  return `<div class="morning" style="border-color:var(--line)"><div class="wx"><span style="font-size:30px">${ic}</span><div><span class="tmp">${Math.round(WX.cur.temperature_2m)}°</span><small>${esc(txt)} ${WX.place && WX.place !== "deinem Standort" ? "in " + esc(WX.place) : "an deinem Standort"} · heute ${Math.round(dl.temperature_2m_min[0])}° bis ${Math.round(dl.temperature_2m_max[0])}°, Regen ${dl.precipitation_probability_max[0] ?? 0} %</small></div></div>${hint.length ? `<div class="chk" style="display:block;color:var(--ink-2);font-size:13.5px">${esc(hint.join(" "))}</div>` : ""}</div>`;
 }
+/* Standort: einmal erlauben, dann dauerhaft gespeichert (kein erneutes Nachfragen) */
+function geoOnce() {
+  return new Promise(res => {
+    if (!navigator.geolocation) return res({ err: "none" });
+    navigator.geolocation.getCurrentPosition(pos => {
+      S.settings.wxLat = +pos.coords.latitude.toFixed(3); S.settings.wxLon = +pos.coords.longitude.toFixed(3); S.settings.wxName = "deinem Standort"; S.settings.geoAsked = true; save();
+      res({ lat: S.settings.wxLat, lon: S.settings.wxLon, place: S.settings.wxName });
+    }, e => { S.settings.geoAsked = true; save(); res({ err: e && e.code === 1 ? "denied" : "fail" }); }, { timeout: 10000, maximumAge: 24 * 3600e3 });
+  });
+}
+const GEO_HELP = "Standort ist für Mirella gesperrt. iPhone: Einstellungen › Datenschutz & Sicherheit › Ortungsdienste › Safari-Websites › „Beim Verwenden der App“. Dann in Safari auf „aA“ › Website-Einstellungen › Standort › „Erlauben“. Oder in Mirella unter Einstellungen einfach einen Ort eintippen.";
 async function wxCoords() {
   if (S.settings.wxLat != null) return { lat: S.settings.wxLat, lon: S.settings.wxLon, place: S.settings.wxName };
-  let c = null; try { c = JSON.parse(localStorage.getItem("mirella.geo") || "null"); } catch (_) { }
-  if (c && Date.now() - c.t < 6 * 3600e3) return c;
-  if (!navigator.geolocation) return null;
-  return new Promise(res => navigator.geolocation.getCurrentPosition(pos => {
-    const g = { lat: +pos.coords.latitude.toFixed(3), lon: +pos.coords.longitude.toFixed(3), place: "deiner Nähe", t: Date.now() };
-    try { localStorage.setItem("mirella.geo", JSON.stringify(g)); } catch (_) { } res(g);
-  }, () => res(null), { timeout: 8000, maximumAge: 3600e3 }));
+  if (S.settings.geoAsked) return null; // nur ein einziges Mal automatisch fragen
+  wxCoords.p = wxCoords.p || geoOnce();
+  const g = await wxCoords.p; return g.err ? null : g;
 }
 async function loadWeather(force) {
   if (!force && WX && Date.now() - WX.t < 30 * 60e3) return;
-  const c = await wxCoords(); if (!c) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<div class="hint">Für das Wetter: Standort erlauben oder in den Einstellungen einen Ort eintragen.</div>`; return; }
+  const c = await wxCoords(); if (!c) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<div class="hint">Für das Wetter: Wappen oben rechts › Einstellungen › Wetter › „Standort nutzen“ oder einen Ort eintippen.</div>`; return; }
   try {
     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&hourly=precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Europe%2FBerlin&forecast_days=1`);
     const j = await r.json(); if (!j.current) throw new Error();
@@ -977,7 +984,7 @@ const ACT = {
   openbrief: (el, e) => { if (e.target.closest('[data-act="delbrief"]')) return; openBrief(el.dataset.id); },
   delbrief: async (el, e) => { e.stopPropagation(); if (!confirm("Briefing löschen?")) return; await photoDel(el.dataset.id); S.briefings = S.briefings.filter(b => b.id !== el.dataset.id); save(); render(true); },
   addbrief: () => { const f = $("#f-brief"); f.value = ""; f.click(); },
-  wxhere: () => { S.settings.wxLat = null; S.settings.wxLon = null; S.settings.wxName = ""; save(); try { localStorage.removeItem("mirella.geo"); } catch (_) { } WX = null; render(true); loadWeather(true); toast("Wetter nach Standort"); },
+  wxhere: async () => { toast("Standort wird bestimmt …"); const g = await geoOnce(); if (g.err) { openSheet(`<p class="stitle">Standort nicht freigegeben</p><p class="hint">${esc(g.err === "denied" ? GEO_HELP : "Standort konnte gerade nicht bestimmt werden. Bitte nochmal versuchen oder einen Ort eintippen.")}</p><div class="row2"><button class="btn" data-close="sheet">OK</button></div>`); return; } WX = null; render(true); loadWeather(true); toast("Standort gespeichert, Mirella fragt nicht mehr nach"); },
   dupforce: el => { savePerson.force = true; savePerson(el.dataset.id); },
   dupmerge: el => {
     const t = S.people.find(x => x.id === el.dataset.id), selfId = el.dataset.self;

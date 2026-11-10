@@ -445,16 +445,19 @@ function geoOnce() {
     }, e => { S.settings.geoAsked = true; save(); res({ err: e && e.code === 1 ? "denied" : "fail" }); }, { timeout: 10000, maximumAge: 24 * 3600e3 });
   });
 }
-const GEO_HELP = "Standort ist für Mirella gesperrt. iPhone: Einstellungen › Datenschutz & Sicherheit › Ortungsdienste › Safari-Websites › „Beim Verwenden der App“. Dann in Safari auf „aA“ › Website-Einstellungen › Standort › „Erlauben“. Oder in Mirella unter Einstellungen einfach einen Ort eintippen.";
+const GEO_HELP = "Standort ist für Mirella gesperrt. iPhone: Einstellungen › Datenschutz & Sicherheit › Ortungsdienste › Safari-Websites › „Beim Verwenden der App“. Dann in Safari auf „aA“ › Website-Einstellungen › Standort › „Erlauben“. Die App auf dem Home-Bildschirm hat ihre eigene Freigabe, getrennt von Safari. Fragt sie nicht nach: in Mirella zuerst Einstellungen › „Sicherung speichern“, dann das Mirella-Icon löschen, die Seite in Safari neu „Zum Home-Bildschirm“ hinzufügen, Sicherung laden und hier nochmal tippen. Oder unter Einstellungen einfach einen Ort eintippen.";
 async function wxCoords() {
   if (S.settings.wxLat != null) return { lat: S.settings.wxLat, lon: S.settings.wxLon, place: S.settings.wxName };
-  if (S.settings.geoAsked) return null; // nur ein einziges Mal automatisch fragen
+  if (S.settings.geoAsked) { // nicht erneut nachfragen, außer iOS meldet die Freigabe inzwischen als erteilt
+    let st = null; try { st = navigator.permissions ? (await navigator.permissions.query({ name: "geolocation" })).state : null; } catch (_) { }
+    if (st !== "granted") return null;
+  }
   wxCoords.p = wxCoords.p || geoOnce();
   const g = await wxCoords.p; return g.err ? null : g;
 }
 async function loadWeather(force) {
   if (!force && WX && Date.now() - WX.t < 30 * 60e3) return;
-  const c = await wxCoords(); if (!c) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<div class="hint">Für das Wetter: Wappen oben rechts › Einstellungen › Wetter › „Standort nutzen“ oder einen Ort eintippen.</div>`; return; }
+  const c = await wxCoords(); if (!c) { const el = $("#wx"); if (el && (!WX || !WX.cur)) el.innerHTML = `<button class="btn" data-act="wxhere" style="width:100%">📍 Wetter: Standort für Mirella freigeben</button><div class="hint" style="margin-top:6px">Oder unter Einstellungen › Wetter einen Ort eintippen, dann braucht Mirella keinen Standort.</div>`; return; }
   try {
     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&hourly=precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Europe%2FBerlin&forecast_days=1`);
     const j = await r.json(); if (!j.current) throw new Error();

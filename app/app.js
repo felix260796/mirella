@@ -365,7 +365,7 @@ const R = {
 };
 function latestBriefing() { return S.briefings.slice().sort((a, b) => (b.d + (b.time || "")).localeCompare(a.d + (a.time || "")))[0] || null; }
 function briefCard(b, del) {
-  if (b.remote) return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : b.kind === "wochenende" ? "Wochenend-Briefing" : "Morning Briefing")}</div><div class="s">${esc(briefWhen(b))} · PDF in Gmail</div></span>${b.read ? '<span class="pill">Gmail</span>' : '<span class="pill acc">neu</span>'}</div>`;
+  if (b.remote) return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : b.kind === "wochenende" ? "Wochenend-Briefing" : "Morning Briefing")}</div><div class="s">${esc(briefWhen(b))} · ${b.pdf ? "PDF öffnen" : "PDF in Gmail"}</div></span>${b.read ? `<span class="pill">${b.pdf ? "PDF" : "Gmail"}</span>` : '<span class="pill acc">neu</span>'}</div>`;
   return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(b.kind === "nachmittag" ? "Nachmittags-Briefing" : "Morning Briefing")}</div><div class="s">${esc(fmtDate(b.d))}${b.time ? " · " + esc(b.time) : ""} · ${esc(b.name)}</div></span>${b.read ? (del ? `<button class="rowdel" data-act="delbrief" data-id="${b.id}" aria-label="löschen">✕</button>` : '<span class="pill">PDF</span>') : '<span class="pill acc">neu</span>'}</div>`;
 }
 async function addBriefings(files) {
@@ -384,7 +384,7 @@ async function addBriefings(files) {
 }
 async function openBrief(id) {
   const b = S.briefings.find(x => x.id === id); if (!b) return;
-  if (b.remote) { b.read = true; save(); render(true); window.open(b.url, "_blank", "noopener"); return; }
+  if (b.remote) { b.read = true; save(); render(true); window.open(b.pdf ? "./" + b.pdf : b.url, "_blank", "noopener"); return; }
   const blob = await photoGet(id).catch(() => null); if (!blob) { toast("Datei nicht gefunden"); return; }
   b.read = true; save();
   const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: b.type }));
@@ -405,8 +405,8 @@ async function syncBriefings() {
     const j = await r.json(); let neu = 0;
     for (const it of j.items || []) {
       const ex = S.briefings.find(b => b.id === "gm_" + it.id);
-      if (ex) { Object.assign(ex, { d: it.d, time: it.time, kind: it.kind, url: it.url }); delete ex.quote; continue; }
-      S.briefings.push({ id: "gm_" + it.id, remote: true, d: it.d, time: it.time, kind: it.kind, title: "Briefing", url: it.url, name: "Briefing", read: false }); neu++;
+      if (ex) { Object.assign(ex, { d: it.d, time: it.time, kind: it.kind, url: it.url, pdf: it.pdf || ex.pdf }); delete ex.quote; continue; }
+      S.briefings.push({ id: "gm_" + it.id, remote: true, d: it.d, time: it.time, kind: it.kind, title: "Briefing", url: it.url, pdf: it.pdf, name: "Briefing", read: false }); neu++;
     }
     if (neu) { save(); if (!$("#sheet").classList.contains("open")) render(true); }
   } catch (_) { }

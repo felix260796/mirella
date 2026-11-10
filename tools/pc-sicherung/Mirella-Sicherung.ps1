@@ -76,7 +76,12 @@ function Load-Config {
   if (Test-Path $CfgFile) { return $JS.DeserializeObject([IO.File]::ReadAllText($CfgFile, $Utf8)) }
   return @{}
 }
-function Save-Config($cfg) { [IO.File]::WriteAllText($CfgFile, $JS.Serialize($cfg), $Utf8) }
+function Save-Config($cfg) {
+  # PowerShell verpackt Werte manchmal (PSObject); nur die reinen Werte speichern
+  $o = @{}
+  foreach ($k in @($cfg.Keys)) { $v = $cfg[$k]; if ($null -ne $v -and $v.PSObject) { $v = $v.PSObject.BaseObject }; $o[[string]$k] = $v }
+  [IO.File]::WriteAllText($CfgFile, $JS.Serialize($o), $Utf8)
+}
 
 # ---------- Supabase ----------
 function New-Web([string]$token) {
@@ -345,7 +350,7 @@ function Run-Backup {
     if (Test-Path $fail) { Remove-Item $fail -Force }
     $msg = "Fertig: $(@(Arr $S 'people').Count) Kontakte, $(@(Arr $S 'docs').Count) Dokumente, $($files.Count) Dateien. Ordner: $dir"
     Log $msg
-    $cfg['letzte'] = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Save-Config $cfg
+    $cfg['letzte'] = [string](Get-Date -Format 'yyyy-MM-dd HH:mm'); Save-Config $cfg
     return $msg
   } catch {
     $m = "$($_.Exception.Message)"

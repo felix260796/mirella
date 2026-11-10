@@ -5,9 +5,9 @@
     Mirella_Daten_<Datum>.xlsx  alle Kontakte, Aufgaben, Einkäufe, Verträge, Dokumente, Ausgaben, Sparziele, Notizen
     Dokumente\                  alle PDFs und Fotos, nach Bereich und Ordner sortiert
     Belege\                     Kassenbons zu den Ausgaben
-    Wiederherstellen\           Datei für Mirella › Einstellungen › Sicherung › „Sicherung laden“
+    Wiederherstellen\           Datei für Mirella › Einstellungen › Sicherung › 'Sicherung laden'
 
-  Hängt nur an Supabase (Login, Tabelle mirella_state, Speicher „mirella“), nicht an der Web-App.
+  Hängt nur an Supabase (Login, Tabelle mirella_state, Speicher 'mirella'), nicht an der Web-App.
   Die iPhone-App nutzt dieselben Daten, die Sicherung läuft dann unverändert weiter.
 
   Aufruf:
@@ -76,7 +76,12 @@ function Load-Config {
   if (Test-Path $CfgFile) { return $JS.DeserializeObject([IO.File]::ReadAllText($CfgFile, $Utf8)) }
   return @{}
 }
-function Save-Config($cfg) { [IO.File]::WriteAllText($CfgFile, $JS.Serialize($cfg), $Utf8) }
+function Save-Config($cfg) {
+  # PowerShell verpackt Werte manchmal (PSObject); nur die reinen Werte speichern
+  $o = @{}
+  foreach ($k in @($cfg.Keys)) { $v = $cfg[$k]; if ($null -ne $v -and $v.PSObject) { $v = $v.PSObject.BaseObject }; $o[[string]$k] = $v }
+  [IO.File]::WriteAllText($CfgFile, $JS.Serialize($o), $Utf8)
+}
 
 # ---------- Supabase ----------
 function New-Web([string]$token) {
@@ -320,7 +325,7 @@ function Run-Backup {
       @{ name = 'Kontakte'; rows = $kon }, @{ name = 'Aufgaben'; rows = $auf }, @{ name = 'Einkauf'; rows = $ein }, @{ name = 'Verträge & Bereiche'; rows = $ber },
       @{ name = 'Dokumente'; rows = $docRows }, @{ name = 'Ausgaben'; rows = $ausg }, @{ name = 'Sparziele'; rows = $zie }, @{ name = 'Notizen'; rows = $not })
 
-    # Wiederherstellungs-Datei im Format der App (Einstellungen › Sicherung › „Sicherung laden“)
+    # Wiederherstellungs-Datei im Format der App (Einstellungen › Sicherung › 'Sicherung laden')
     MkDir (Join-Path $tmp 'Wiederherstellen')
     $jw = New-Object IO.StreamWriter((Join-Path $tmp "Wiederherstellen\Mirella-Sicherung_$day.json"), $false, $Utf8)
     $jw.Write('{"app":"Mirella","version":"PC-Sicherung","exported":' + $JS.Serialize((Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")) + ',"data":' + $JS.Serialize($S) + ',"photos":{')
@@ -332,12 +337,12 @@ function Run-Backup {
     }
     $jw.Write('}}'); $jw.Close()
 
-    [IO.File]::WriteAllText((Join-Path $tmp 'LIESMICH.txt'), "Mirella-Sicherung vom $(De $day), automatisch vom PC geholt`r`n`r`nMirella_Daten_$day.xlsx: alle Kontakte, Aufgaben, Einkäufe, Verträge und Einträge, Dokumente, Ausgaben, Sparziele und Notizen. Jede Tabelle hat ein eigenes Blatt.`r`nDokumente\: alle PDFs und Fotos, nach Bereich und Ordner sortiert, Dateiname = Ablagedatum + Name.`r`nBelege\: Fotos von Kassenbons zu den Ausgaben.`r`nWiederherstellen\: diese Datei in Mirella unter Einstellungen › Sicherung › „Sicherung laden“ auswählen, dann ist alles wieder da.`r`n`r`nExcel und PDFs lassen sich auch ohne Mirella öffnen.`r`n", $Utf8)
+    [IO.File]::WriteAllText((Join-Path $tmp 'LIESMICH.txt'), "Mirella-Sicherung vom $(De $day), automatisch vom PC geholt`r`n`r`nMirella_Daten_$day.xlsx: alle Kontakte, Aufgaben, Einkäufe, Verträge und Einträge, Dokumente, Ausgaben, Sparziele und Notizen. Jede Tabelle hat ein eigenes Blatt.`r`nDokumente\: alle PDFs und Fotos, nach Bereich und Ordner sortiert, Dateiname = Ablagedatum + Name.`r`nBelege\: Fotos von Kassenbons zu den Ausgaben.`r`nWiederherstellen\: diese Datei in Mirella unter Einstellungen › Sicherung › 'Sicherung laden' auswählen, dann ist alles wieder da.`r`n`r`nExcel und PDFs lassen sich auch ohne Mirella öffnen.`r`n", $Utf8)
 
     if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
     Rename-Item -LiteralPath $tmp (Split-Path $dir -Leaf)
 
-    # alte Tages-Ordner aufräumen (nur eigene „Mirella_JJJJ-MM-TT“-Ordner)
+    # alte Tages-Ordner aufräumen (nur eigene 'Mirella_JJJJ-MM-TT'-Ordner)
     if ($keep -gt 0) {
       $old = Get-ChildItem -LiteralPath $ziel -Directory | Where-Object { $_.Name -match '^Mirella_\d{4}-\d{2}-\d{2}$' } | Sort-Object Name -Descending | Select-Object -Skip $keep
       foreach ($o in $old) { Remove-Item -LiteralPath $o.FullName -Recurse -Force; Log "Alte Sicherung $($o.Name) entfernt." }
@@ -345,7 +350,7 @@ function Run-Backup {
     if (Test-Path $fail) { Remove-Item $fail -Force }
     $msg = "Fertig: $(@(Arr $S 'people').Count) Kontakte, $(@(Arr $S 'docs').Count) Dokumente, $($files.Count) Dateien. Ordner: $dir"
     Log $msg
-    $cfg['letzte'] = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Save-Config $cfg
+    $cfg['letzte'] = [string](Get-Date -Format 'yyyy-MM-dd HH:mm'); Save-Config $cfg
     return $msg
   } catch {
     $m = "$($_.Exception.Message)"
@@ -379,9 +384,14 @@ function Do-Setup {
   # 1. Zugang
   $ok = $false
   for ($try = 1; $try -le 3 -and -not $ok; $try++) {
-    $gc = @{ Message = 'Mirella: E-Mail und Passwort, genau wie beim Anmelden in der App' }; if (G $cfg 'email') { $gc.UserName = S (G $cfg 'email') }
-    $cred = Get-Credential @gc
-    if (-not $cred) { throw 'Abgebrochen.' }
+    # Eingabe direkt hier im Fenster (das Windows-Anmeldefenster taucht oft nicht auf)
+    $mail = S (G $cfg 'email')
+    $in = Read-Host ('  Mirella-E-Mail' + $(if ($mail) { " (Enter = $mail)" } else { '' }))
+    if ($in.Trim()) { $mail = $in.Trim() }
+    if (-not $mail) { Write-Host '  Bitte eine E-Mail eingeben.' -ForegroundColor Yellow; continue }
+    $cfg['email'] = $mail
+    $pw = Read-Host '  Mirella-Passwort (man sieht beim Tippen nur Sternchen)' -AsSecureString
+    $cred = New-Object System.Management.Automation.PSCredential($mail, $pw)
     try { $a = Sb-Login $cred.UserName $cred.GetNetworkCredential().Password; $ok = $true }
     catch { Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow }
   }
@@ -429,6 +439,9 @@ function Do-Remove {
 }
 
 # ---------- Start ----------
+# Doppelklick ohne Einrichtung: gleich einrichten
+if (-not $Einrichten -and -not $Entfernen -and -not (Test-Path $CfgFile) -and [Environment]::UserInteractive) { $Einrichten = $true }
+if ($Einrichten) { try { if (-not (Test-Path $AppDir)) { New-Item -ItemType Directory -Path $AppDir -Force | Out-Null }; Start-Transcript -Path (Join-Path $AppDir 'einrichten-protokoll.txt') -Force | Out-Null } catch { } }
 try {
   if ($Einrichten) { Do-Setup; Write-Host ''; Read-Host '  Fertig. Enter drücken zum Schließen' | Out-Null }
   elseif ($Entfernen) { Do-Remove; Read-Host '  Enter drücken zum Schließen' | Out-Null }

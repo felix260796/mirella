@@ -1,5 +1,15 @@
 # Mirella, die Sekretärin
 
+## Stand 0.15 (2026-11-10): eine Schrift, ruhigere Akte, Einkaufsmodus
+
+- Schrift: überall dieselbe, ruhige Systemschrift (auf dem iPhone San Francisco, am PC Segoe UI); keine Zierschrift mehr, nichts wird mehr künstlich fett und unscharf.
+- Deutsch: „Heute steht eine Aufgabe an“ statt „stehen“, Einzahl/Mehrzahl auch bei Tagen, Dokumenten und Kontakten.
+- Wetter auf „Heute“ kompakt: eine Zeile Wetter mit Tag- und Nachttemperatur, der wichtigste Hinweis, die übrigen per Antippen.
+- Akte: Geburtstag als ruhige Kacheln „Geboren“ und „Alter“ plus eine Zeile „Wird 28 Jahre alt am …“; nächster Anruf kleiner; leere Listen („Noch keine Notizen“) klein und kursiv, deutlich unter der Überschrift; Kontaktdaten (Telefon, E-Mail, Adresse, Spitzname) alle gleich aufgebaut mit Knopf rechts.
+- Todestag: „Verstorben am“ im Kontakt. Dann „Lebensdaten“ mit Geboren und Gestorben nebeneinander, keine Anrufe, kein Alter, keine Geburtstagserinnerung; am Geburts- und Todestag ein stiller Eintrag „In Gedenken“ auf „Heute“ und im Kalender.
+- Einkaufsmodus: großer Knopf „Einkaufen gehen“ oben auf der Einkaufsliste (und auf „Heute“). Nur die Liste, große Zeilen, ganze Zeile antippen = im Wagen, Fortschrittsbalken, Bildschirm bleibt an, „Einkauf fertig“ unten.
+- PC-Sicherung: Fenster bleibt beim Einrichten offen (Fehler sichtbar), Doppelklick auf das Programm ohne Einrichtung startet die Einrichtung.
+
 ## Stand 0.14.1 (2026-11-10): automatische PC-Sicherung
 
 - Neues PC-Programm in `tools/pc-sicherung`: einmal **EINRICHTEN.cmd** doppelklicken, Mirella-E-Mail und Passwort eingeben, fertig. Jede Nacht um 2 Uhr holt es Excel, alle PDFs und Fotos und die Wiederherstellungs-Datei vom Server in `05_Sicherung` (die letzten 14 Tage bleiben liegen). Anleitung: `tools/pc-sicherung/LIESMICH.md`.

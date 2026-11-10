@@ -177,7 +177,7 @@ Object.assign(ACT, {
   newwecker: () => weckerForm(null),
   openwecker: el => weckerForm(S.alarms.find(x => x.id === el.dataset.id)),
   calcwecker: async el => {
-    const w = readWecker(el.dataset.id); if (!w.to) { toast("Bitte eintragen, wo du hin musst"); return; } if (!w.date || !w.arrive) { toast("Bitte Datum und Ankunft eintragen"); return; }
+    const w = readWecker(el.dataset.id); if (!w.to) { toast("Bitte eintragen, wo du hinmusst"); return; } if (!w.date || !w.arrive) { toast("Bitte Datum und Ankunft eintragen"); return; }
     const res = $("#w-res"); res.innerHTML = '<div class="hint">Mirella rechnet die Route …</div>';
     try { await planAlarm(w); wDraft = w; res.innerHTML = resHTML(w); res.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
     catch (e) { res.innerHTML = `<div class="hint" style="border:1px solid var(--late)">${esc(e.message || "Route konnte nicht berechnet werden")}${/^Start/.test(e.message) ? "" : ". Prüfe die Adresse oder die Internetverbindung."}</div>`; }

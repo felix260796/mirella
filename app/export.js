@@ -94,11 +94,11 @@ if (typeof window !== "undefined") {
     // Belege zu Ausgaben
     for (const e of S.expenses) if (e.photo) { const b = await photoGet(e.photo).catch(() => null); if (b) { const p = uniq(`Belege/${e.d} ${ZX.fname(e.shop || "Beleg")} ${String(e.amount).replace(".", ",")} EUR.${extOf(b, {})}`); files.push({ name: p, data: new Uint8Array(await b.arrayBuffer()) }); e._file = p; } }
     progress && progress("Excel wird erstellt …");
-    const kontakte = [["Vorname", "Nachname", "Spitzname", "Gruppe", "Telefon", "E-Mail", "Adresse", "Geburtstag", "Alter", "Anrufen", "zuletzt erreicht", "nächster Anruf", "Anrufe gesamt", "Anrufverlauf", "Offene Nachfragen", "Geschenk-Erinnerung"]]
+    const kontakte = [["Vorname", "Nachname", "Spitzname", "Gruppe", "Telefon", "E-Mail", "Adresse", "Geburtstag", "Alter", "Anrufen", "zuletzt erreicht", "nächster Anruf", "Anrufe gesamt", "Anrufverlauf", "Offene Nachfragen", "Geschenk-Erinnerung", "Archiv"]]
       .concat(S.people.slice().sort((a, b) => fullName(a).localeCompare(fullName(b), "de")).map(p => {
         const nb = nextBirthday(p), age = nb ? ageAt(p, nb) : null;
         return [p.first || "", p.last || "", p.nick || "", p.group || "", p.tel || "", p.email || "", p.addr || "", de(p.bday), age ? (nb === today() ? age : age - 1) : "", cycLabel(p.cyc), de(lastCall(p)), de(nextDue(p)), (p.calls || []).length,
-          (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1).map(c => de(c.d) + (c.ok ? " erreicht" : " nicht erreicht")).join("\n"), (p.ask || []).filter(a => !a.done).map(a => a.t).join("\n"), p.gift ? "ja" : ""];
+          (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1).map(c => de(c.d) + (c.ok ? " erreicht" : " nicht erreicht")).join("\n"), (p.ask || []).filter(a => !a.done).map(a => a.t).join("\n"), p.gift ? "ja" : "", p.arch ? "archiviert" : ""];
       }));
     const prio = t => (PRIOS.find(p => p[0] === +t.prio) || [0, ""])[1];
     const aufgaben = [["Aufgabe", "Status", "erledigt am", "Datum", "Uhrzeit", "Wiederholen", "Priorität", "Bereich", "Nerv-Modus", "angelegt", "automatisch von Mirella"]]
@@ -110,7 +110,8 @@ if (typeof window !== "undefined") {
     const ausgaben = [["Datum", "Betrag €", "Wo / wofür", "Kategorie", "Beleg-Datei"]].concat(S.expenses.slice().sort((a, b) => a.d < b.d ? 1 : -1).map(e => [de(e.d), +e.amount || 0, e.shop || "", e.cat || "", e._file || ""]));
     const notizen = [["Datum", "Bereich", "Notiz"]].concat(S.notes.map(n => [de(n.d), (areaById(n.area) || {}).n || "", n.t || ""]));
     S.expenses.forEach(e => delete e._file);
-    const sheets = [{ name: "Kontakte", rows: kontakte }, { name: "Aufgaben", rows: aufgaben }, { name: "Einkauf", rows: einkauf }, { name: "Verträge & Bereiche", rows: bereiche }, { name: "Dokumente", rows: docRows }, { name: "Ausgaben", rows: ausgaben }, { name: "Notizen", rows: notizen }];
+    const ziele = [["Sparziel", "Ziel €", "gespart €", "bis"]].concat((S.goals || []).map(g => [g.n, +g.target || 0, +g.saved || 0, g.until || ""]));
+    const sheets = [{ name: "Kontakte", rows: kontakte }, { name: "Aufgaben", rows: aufgaben }, { name: "Einkauf", rows: einkauf }, { name: "Verträge & Bereiche", rows: bereiche }, { name: "Dokumente", rows: docRows }, { name: "Ausgaben", rows: ausgaben }, { name: "Sparziele", rows: ziele }, { name: "Notizen", rows: notizen }];
     files.unshift({ name: `Mirella_Daten_${today()}.xlsx`, data: ZX.xlsx(sheets) });
     progress && progress("Wiederherstellungs-Datei …");
     const photos = {}; try { const all = await photoAll(); for (const [k, b] of Object.entries(all)) photos[k] = await blobToDataURL(b); } catch (_) { }

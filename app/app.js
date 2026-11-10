@@ -78,7 +78,7 @@ function blank() {
   return {
     v: 1,
     settings: {
-      name: "Felix", maxCalls: 3, retryWorkdays: 2, giftLead: 14, callFrom: 8, callTo: 18, callWeekdays: true, msgFrom: 8, msgTo: 21,
+      name: "Felix", maxCalls: 3, retryWorkdays: 2, giveUp: 5, giftLead: 14, callFrom: 8, callTo: 18, callWeekdays: true, msgFrom: 8, msgTo: 21,
       cats: [], wxName: "", wxLat: null, wxLon: null, showBrief: 1, showWx: 1,
       nerv: { anrufe: 1, aufgaben: 1, geburtstage: 1, fristen: 1, supplements: 1 }, nervEvery: 30, nervSound: 1,
       calFilter: { geb: 1, erin: 1, todo: 1, anruf: 1 }, calStart: "monat",
@@ -86,7 +86,7 @@ function blank() {
       homeAddr: "", homeLat: null, homeLon: null, prepMin: 30, bufMin: 10, alarmCount: 3, alarmGap: 5, gmapsKey: ""
     },
     briefings: [],
-    people: [], todos: [], expenses: [], docs: [], notes: [], items: [], alarms: [], shopTpl: [], shopFreq: {}, shopUnits: {}, folders: [], groups: BASEGROUPS.slice()
+    people: [], todos: [], expenses: [], goals: [], sick: null, docs: [], notes: [], items: [], alarms: [], shopTpl: [], shopFreq: {}, shopUnits: {}, folders: [], groups: BASEGROUPS.slice()
   };
 }
 let S;
@@ -146,7 +146,12 @@ const dataURLToBlob = async u => (await fetch(u)).blob();
 const fullName = p => [p.first, p.last].filter(Boolean).join(" ") || "Ohne Namen";
 const initials = p => ((p.first || "")[0] || "" + "") .toUpperCase() + ((p.last || "")[0] || "").toUpperCase() || "?";
 function lastCall(p, okOnly = true) { const c = (p.calls || []).filter(x => !okOnly || x.ok).sort((a, b) => a.d < b.d ? 1 : -1)[0]; return c ? c.d : null; }
+/* Fehlversuche in Folge (neueste zuerst, bis zum letzten Erreichen) */
+function failStreak(p) { let n = 0; for (const c of (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : 0)) { if (c.ok) break; n++; } return n; }
+/* Nerven hört auf: nach so vielen Fehlversuchen hintereinander (Einstellung), bis du „weiter versuchen“ oder „archivieren“ wählst */
+function gaveUp(p) { const g = +S.settings.giveUp || 0; return g > 0 && failStreak(p) - (+p.streakBase || 0) >= g; }
 function nextDue(p) {
+  if (p.arch || gaveUp(p)) return null;
   if (noCycle(p.cyc)) return null;
   const last = lastCall(p);
   let due;
@@ -173,7 +178,7 @@ function pullPool() { const m = callPlanMap(), t = today(); return S.people.filt
 function planLabel(p) { const m = callPlanMap()[p.id]; if (!m) return null; const n = diffDays(today(), m); return n <= 0 ? "heute" : n === 1 ? "morgen" : fmtDate(m).replace(/^(\w+)\.?,? /, "$1. "); }
 function callState(p) { const d = nextDue(p); if (!d) return "none"; const n = diffDays(today(), d); return n < 0 ? "late" : n === 0 ? "due" : n <= 3 ? "soon" : "ok"; }
 function nextBirthday(p) {
-  if (!p.bday) return null;
+  if (!p.bday || p.arch) return null;
   const [, m, d] = p.bday.split("-").map(Number); if (!m || !d) return null;
   const t = today(), y = +t.slice(0, 4);
   let s = `${y}-${pad(m)}-${pad(d)}`; if (s < t) s = `${y + 1}-${pad(m)}-${pad(d)}`;
@@ -231,7 +236,7 @@ function addShop(t, qty, unit) {
 function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const w1 = new Date(d.getFullYear(), 0, 4, 12); return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
 
 /* ---------- Zustand ---------- */
-let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0;
+let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false;
 { const t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); selDate = today(); }
 
 /* ---------- Bausteine ---------- */
@@ -283,7 +288,7 @@ const R = {
     const docs = S.docs.filter(x => x.until && diffDays(t, x.until) <= 60).sort((a, b) => a.until < b.until ? -1 : 1);
     const shop = S.todos.filter(x => x.list === "einkauf" && !x.done).length;
     const asks = [];
-    S.people.forEach(p => (p.ask || []).forEach(a => { if (!a.done) asks.push([p, a]); }));
+    S.people.forEach(p => !p.arch && (p.ask || []).forEach(a => { if (!a.done) asks.push([p, a]); }));
     const counts = [];
     if (dueCalls.length) counts.push(dueCalls.length === 1 ? "1 Anruf" : dueCalls.length + " Anrufe");
     if (dueTodos.length) counts.push(dueTodos.length === 1 ? "1 Aufgabe" : dueTodos.length + " Aufgaben");
@@ -292,6 +297,7 @@ const R = {
     let h2 = `${topbar("Heute")}<div class="date">${WDL[d.getDay()]}, ${d.getDate()}. ${MN[d.getMonth()]} · KW ${isoWeek(t)}</div><p class="big">${greet}${S.settings.name ? ", " + esc(S.settings.name) : ""}. ${summary}</p>`;
     const dr = draftGet();
     if (dr) h2 += `<div class="card due" role="button" tabindex="0" data-act="resumedraft"><span class="av">✎</span><span style="min-width:0"><div class="t">Unfertig: ${esc(dr.title || "Eingabe")}</div><div class="s">Antippen und weiter ausfüllen</div></span><button class="rowdel" data-act="dropdraft" aria-label="Verwerfen">✕</button></div>`;
+    if (S.sick && S.sick.to >= t) h2 += `<div class="card due"><span class="av">🤒</span><span style="min-width:0;flex:1"><div class="t">Gute Besserung!</div><div class="s" style="white-space:normal">Anrufe sind pausiert bis ${esc(fmtDate(S.sick.to))}, kurier dich aus.</div><div class="actrow"><button class="mini" data-act="wellagain">Wieder gesund</button></div></span></div>`;
     h2 += HOOKS.heuteTop.map(f => f()).join("");
     if (S.settings.showWx) h2 += `<div id="wx">${wxHTML()}</div>`;
     const br = S.settings.showBrief ? latestBriefing() : null;
@@ -301,6 +307,8 @@ const R = {
     }
     if (leave.length) h2 += `<div class="sec"><span class="label">Bevor du losgehst</span></div><div class="morning">${leave.map(x => `<label class="chk"><input type="checkbox" data-act="toggle" data-id="${x.id}"><span>${esc(x.t)}</span></label>`).join("")}</div>`;
     if (dueCalls.length || doneCalls) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length ? dueCalls.length + " heute" : ""}${doneCalls ? (dueCalls.length ? " · " : "") + doneCalls + " erledigt" : ""}</span></div>${dueCalls.map(p => personCard(p, true)).join("")}${!dueCalls.length ? `<div class="swipehint" style="text-align:left">Für heute alle Anrufe geschafft. 👍</div>` : ""}${pool.length && dueCalls.length < 2 ? `<button class="btn" data-act="pullcalls" style="width:100%;margin-top:6px">Weitere Anrufe vorziehen (${Math.min(pool.length, +S.settings.maxCalls || 3)} von ${pool.length})</button>` : ""}`;
+    const quit = S.people.filter(p => !p.arch && gaveUp(p));
+    if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card"><span class="av">${esc(initials(p))}</span><span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
     if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">${esc(initials(p))}</span><span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : "in " + n + " Tagen · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
     const rounds = S.people.map(p => [p, L.roundBday(p.bday, t)]).filter(([p, r]) => r && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
     if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
@@ -315,14 +323,15 @@ const R = {
   },
   menschen() {
     const ql = q.trim().toLowerCase();
-    let list = S.people.filter(p => (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "")).toLowerCase().includes(ql)));
+    let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "")).toLowerCase().includes(ql)));
     const grps = S.groups.filter(g => S.people.some(p => p.group === g));
     const rank = p => { const d = nextDue(p); return d || "9999"; };
     list = list.sort((a, b) => rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : fullName(a).localeCompare(fullName(b), "de"));
     return `${topbar("Kontakte")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Gruppe oder Nummer" aria-label="Suchen" value="${esc(q)}">
     ${grps.length ? `<div class="chips"><button class="chip2" data-act="grpf" data-g="" aria-pressed="${!grpFilter}">Alle</button>${grps.map(g => `<button class="chip2" data-act="grpf" data-g="${esc(g)}" aria-pressed="${grpFilter === g}">${esc(g)}</button>`).join("")}</div>` : ""}
     <div class="sec"><span class="label">Wer zuerst dran ist</span><span class="label">${list.length}</span></div>
-    ${list.length ? list.map(p => personCard(p, false)).join("") : empty(S.people.length ? "Niemand gefunden." : "Noch keine Kontakte. Tipp auf +, oder importiere sie in den Einstellungen (vCard).")}`;
+    ${list.length ? list.map(p => personCard(p, false)).join("") : empty(S.people.length ? "Niemand gefunden." : "Noch keine Kontakte. Tipp auf +, oder importiere sie in den Einstellungen (vCard).")}
+    ${(() => { const ar = S.people.filter(p => p.arch && (!ql || fullName(p).toLowerCase().includes(ql))).sort((a, b) => fullName(a).localeCompare(fullName(b), "de")); return ar.length ? `<div class="sec"><button class="mini" data-act="showarch" style="border:0;background:none;padding:0"><span class="label">Archiv (${ar.length}) ${showArch ? "▾" : "▸"}</span></button></div>${showArch ? ar.map(p => `<div class="listrow"><span class="grow" role="button" data-act="person" data-id="${p.id}" style="cursor:pointer">${esc(fullName(p))}<small>archiviert${p.arch && p.arch !== 1 ? " am " + esc(fmtDate(p.arch)) : ""} · keine Anrufe, keine Geburtstage</small></span><button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>`).join("") : ""}` : ""; })()}`;
   },
   akte() {
     const p = S.people.find(x => x.id === cur); if (!p) { view = "menschen"; return R.menschen(); }
@@ -334,7 +343,7 @@ const R = {
     <div class="hero"><span class="av">${esc(initials(p))}</span><h3>${esc(fullName(p))}</h3><p>${esc([p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
-    ${nextCallBlock(p)}
+    ${p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
     ${nb ? `<div class="block"><h4>Geburtstag${ageAt(p, nb) ? ` <small class="agechip">${nb === today() ? ageAt(p, nb) : ageAt(p, nb) - 1} Jahre alt</small>` : ""}</h4><div class="catrow"><span>${esc(fmtDate(nb))}${ageAt(p, nb) ? ", wird " + ageAt(p, nb) : ""}</span><span>in ${diffDays(today(), nb)} Tagen</span></div>${p.gift ? `<div class="swipehint" style="text-align:left;margin:6px 0 0">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>` : ""}
     ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
@@ -462,7 +471,7 @@ const SETS = {
   },
   kontakte() {
     return `${setH("Anrufe")}${setSel("maxCalls", "Anrufe pro Tag", "höchstens so viele auf „Heute“", [[2, "2"], [3, "3"], [5, "5"], [99, "kein Limit"]])}
-    ${setSel("retryWorkdays", "Nicht erreicht", "neuer Versuch nach", [[1, "1 Werktag"], [2, "2 Werktagen"], [5, "1 Woche"]])}
+    ${setSel("retryWorkdays", "Nicht erreicht", "neuer Versuch nach", [[1, "1 Werktag"], [2, "2 Werktagen"], [5, "1 Woche"]])}${setSel("giveUp", "Nerven aufhören", "nach so vielen Fehlversuchen hintereinander", [[0, "nie"], [3, "3 Versuchen"], [5, "5 Versuchen"], [8, "8 Versuchen"]])}
     ${setSel("callFrom", "Anrufen ab", "Mo–Fr", [[7, "7 Uhr"], [8, "8 Uhr"], [9, "9 Uhr"], [10, "10 Uhr"]])}${setSel("callTo", "Anrufen bis", "Mo–Fr", [[17, "17 Uhr"], [18, "18 Uhr"], [19, "19 Uhr"], [20, "20 Uhr"]])}
     ${setSel("msgFrom", "Nachrichten ab", "auch am Wochenende", [[7, "7 Uhr"], [8, "8 Uhr"], [9, "9 Uhr"]])}${setSel("msgTo", "Nachrichten bis", "auch am Wochenende", [[20, "20 Uhr"], [21, "21 Uhr"], [22, "22 Uhr"]])}
     ${setH("Geburtstage")}${setSel("giftLead", "Geburtstage", "so früh auf „Heute“ zeigen", [[7, "7 Tage vorher"], [14, "14 Tage vorher"], [21, "21 Tage vorher"]])}
@@ -855,7 +864,7 @@ function personForm(p) {
   <div class="fld" style="margin-top:8px;position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
   <div id="dup-warn"></div>
   ${p ? "" : `<div class="fld"><label for="c-last-call">Zuletzt angerufen (wenn bekannt)</label><input id="c-last-call" type="date"></div>`}
-  <div class="row2">${p ? `<button class="btn danger" data-act="delperson" data-id="${p.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="saveperson" data-id="${p ? p.id : ""}">Speichern</button></div>
+  ${p ? `<button class="btn" data-act="${p.arch ? "unarchperson" : "archperson"}" data-id="${p.id}" style="width:100%;margin-bottom:8px">${p.arch ? "Aus dem Archiv zurückholen" : "Archivieren (nicht mehr erinnern, Verlauf bleibt)"}</button>` : ""}<div class="row2">${p ? `<button class="btn danger" data-act="delperson" data-id="${p.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="saveperson" data-id="${p ? p.id : ""}">Speichern</button></div>
   <p class="swipehint">Deine Eingaben werden laufend gemerkt. Schließt sich das Fenster, ist beim nächsten Öffnen alles wieder da.</p></div>`,
     () => {
       addrSuggest($("#c-addr"), $("#addr-sug"));
@@ -1204,6 +1213,7 @@ function voiceReview() {
   recStop();
   const txt = ($("#v-text").value || "").trim();
   if (!txt) { toast("Noch nichts gesagt oder getippt"); return; }
+  if (/^(ich bin|bin) (heute |jetzt |leider )*(krank|erkältet|krankgeschrieben)\b/i.test(txt)) { voiceReview.lastTxt = txt; return sickForm(); }
   pending = understand(txt);
   if (!pending.length) pending = [{ type: "todo", t: cap(txt), date: "", time: "", trig: "" }];
   reviewRender(txt);
@@ -1243,10 +1253,29 @@ function voiceSave() {
   if (miss.length) { toast("Bitte bei " + miss.length + " Eintrag" + (miss.length > 1 ? "en" : "") + " noch Person bzw. Betrag wählen"); return; }
   save(); closeSheet(); render(true); toast(n === 1 ? "1 Eintrag gespeichert" : n + " Einträge gespeichert");
 }
+/* Krank-Modus: Anrufe pausieren, an Arbeitgeber und Arzt denken */
+function sickForm() {
+  openSheet(`<p class="stitle">Gute Besserung! Wie lange ungefähr?</p><p class="hint" style="margin-top:0">Mirella schiebt deine Anrufe so lange nach hinten und legt dir die wichtigen Schritte als Aufgaben an.</p><div style="display:grid;gap:8px">${[[1, "Heute"], [3, "Ein paar Tage (3 Werktage)"], [5, "Eine Woche"], [10, "Zwei Wochen"]].map(([n, l]) => `<button class="btn" data-act="dosick" data-n="${n}">${l} <small style="font-weight:400;color:var(--ink-3)">· bis ${fmtDate(addWorkdays(today(), n - 1))}</small></button>`).join("")}<button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
+}
+function sickStart(n) {
+  const t = today(), to = addWorkdays(t, Math.max(0, n - 1)), back = addWorkdays(to, 1);
+  let moved = 0;
+  S.people.forEach(p => { const d = nextDue(p); if (d && d <= to) { p.snooze = back; p.sickSnooze = back; moved++; } });
+  const add = (txt, prio) => { if (!S.todos.some(x => x.list === "todo" && !x.done && x.t === txt)) S.todos.push({ id: uid(), t: txt, list: "todo", done: false, created: t, date: t, area: "gesund", prio: prio || 2 }); };
+  const wd = new Date().getDay(); if (wd > 0 && wd < 6) add("Arbeitgeber Bescheid geben, dass ich krank bin", 1);
+  add(n >= 3 ? "Arzttermin ausmachen (Krankschreibung ab dem 4. Tag nötig)" : "Arzt anrufen, falls es nicht besser wird");
+  S.sick = { from: t, to };
+  save(); closeSheet(); render(); toast(`Gute Besserung! ${moved ? moved + (moved === 1 ? " Anruf" : " Anrufe") + " verschoben auf " + fmtDate(back) : "Keine Anrufe in der Zeit"}`);
+}
+function sickEnd() {
+  S.people.forEach(p => { if (p.sickSnooze) { if (p.snooze === p.sickSnooze) p.snooze = null; delete p.sickSnooze; } });
+  S.sick = null; save(); render(); toast("Schön, dass es dir besser geht. Anrufe laufen wieder normal");
+}
 function logCall(p, ok, silent) {
   p.calls = p.calls || []; p.calls.push({ id: uid(), d: today(), ok });
   p.snooze = ok ? null : addWorkdays(today(), +S.settings.retryWorkdays || 2);
-  if (!silent) { save(); closeSheet(); render(true); toast(ok ? `${p.first || fullName(p)} erreicht. Nächster Anruf ${relDate(nextDue(p) || today())}` : `Neuer Versuch ${relDate(p.snooze)}`); }
+  if (ok) p.streakBase = 0;
+  if (!silent) { save(); closeSheet(); render(true); toast(ok ? `${p.first || fullName(p)} erreicht. Nächster Anruf ${relDate(nextDue(p) || today())}` : gaveUp(p) ? `${failStreak(p)}-mal nicht erreicht: Mirella hört bei ${p.first || fullName(p)} auf zu nerven` : `Neuer Versuch ${relDate(p.snooze)}`); }
 }
 
 /* ---------- vCard / Sicherung ---------- */
@@ -1336,6 +1365,13 @@ const ACT = {
   delcall: el => { if (!ask("Diesen Anruf aus dem Verlauf löschen?")) return; const p = S.people.find(x => x.id === cur); p.calls = p.calls.filter(c => c.id !== el.dataset.id); save(); render(true); },
   allcalls: el => { showAllCalls = !showAllCalls; allCallsFor = el.dataset.id; render(true); },
   grpf: el => { grpFilter = el.dataset.g; render(true); },
+  showarch: () => { showArch = !showArch; render(true); },
+  giveon: el => { const p = S.people.find(x => x.id === el.dataset.id); p.streakBase = failStreak(p); p.snooze = null; save(); render(true); toast(`${fullName(p)}: Mirella versucht es weiter im Rhythmus`); },
+  archperson: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p || !ask(`${fullName(p)} archivieren? Mirella erinnert dann nicht mehr an Anrufe und Geburtstage. Notizen und Verlauf bleiben, du kannst jederzeit zurückholen.`)) return; p.arch = today(); draftClear(); save(); closeSheet(); if (view === "akte") view = "menschen"; render(true); toast("Archiviert: " + fullName(p)); },
+  unarchperson: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; delete p.arch; p.streakBase = failStreak(p); save(); closeSheet(); render(true); toast("Zurückgeholt: " + fullName(p)); },
+  krank: () => sickForm(),
+  dosick: el => sickStart(+el.dataset.n),
+  wellagain: () => sickEnd(),
   pickgrp: el => { $("#c-grp").value = el.dataset.g; $$("#c-grps [data-act=pickgrp]").forEach(b => b.setAttribute("aria-pressed", b === el)); draftSave(); },
   newgrp: () => { const g = (prompt("Name der neuen Gruppe, z. B. Paddeln") || "").trim(); if (!g) return; if (!S.groups.includes(g)) S.groups.push(g); save(); $("#c-grp").value = g; $("#c-grps").innerHTML = grpChips(g); draftSave(); },
   delgroup: el => { const g = el.dataset.g, n = S.people.filter(p => p.group === g).length; if (!ask(`Gruppe „${g}“ entfernen?${n ? ` ${n} Kontakt${n > 1 ? "e verlieren" : " verliert"} die Gruppe.` : ""}`)) return; S.groups = S.groups.filter(x => x !== g); S.people.forEach(p => { if (p.group === g) p.group = ""; }); save(); render(true); },

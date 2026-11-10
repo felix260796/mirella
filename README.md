@@ -9,6 +9,10 @@
 - Aufgaben: Erledigtes bleibt (heute sichtbar, danach im Archiv), „Mirella merkt“ mit kleinen Auswertungen.
 - Verträge: Erinnerung 2 Wochen, 1, 2 oder 3 Monate vorher.
 - Einstellungen: „Zurück“ landet wieder an derselben Stelle.
+- Gesamtprüfung aller Wünsche seit dem ersten Entwurf, dabei nachgezogen:
+  - Kontakte archivieren (keine Anrufe, keine Geburtstage, Verlauf bleibt, zurückholbar). Nach 5 Fehlversuchen hintereinander hört Mirella auf zu nerven und fragt auf „Heute“: weiter versuchen oder archivieren (Einstellungen › Kontakte › „Nerven aufhören“).
+  - Krank-Modus: „Ich bin krank“ (Sprache oder Gesundheit › Plus) schiebt die Anrufe der Krankheitstage nach hinten und legt Arbeitgeber und Arzttermin als Aufgaben an; „Wieder gesund“ auf „Heute“.
+  - Sparziele unter Finanzen mit Fortschritt und Betrag pro Monat bis zum Zieldatum, auch in der Excel-Sicherung.
 - PC-Sicherung (export.js): ein ZIP mit Excel (alle Kontakte mit allen Infos, Aufgaben, Einkauf, Verträge, Dokumente, Ausgaben, Notizen), allen PDFs/Fotos nach Bereich/Ordner benannt und der Wiederherstellungs-Datei. Erinnerung auf „Heute“ (Standard wöchentlich).
 
 ## Stand 0.12 (2026-11-10): Feinschliff nach dem ersten Ausprobieren

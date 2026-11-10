@@ -1,7 +1,7 @@
 # Mirella, die Sekretärin
 
-## Stand 0.9.1 (2026-11-10): Arbeitsversion läuft auf Netlify
-- `netlify/` ist die lauffähige App (reine Web-App ohne Build: `index.html`, `app.js`, `style.css`, `sw.js`, Manifest, Icons). Upload: Ordner `netlify` per Netlify Drop bzw. später als Publish-Verzeichnis.
+## Stand 0.9.1 (2026-11-10): Arbeitsversion läuft auf GitHub Pages
+- `app/` ist die lauffähige App (reine Web-App ohne Build). Sie wird bei jedem Push auf `main` automatisch über GitHub Pages veröffentlicht (`.github/workflows/pages.yml`): https://felix260796.github.io/mirella/
 - Daten liegen bis zum Supabase-Sync nur auf dem Gerät (localStorage, Fotos/PDFs in IndexedDB); Sicherung als JSON in den Einstellungen.
 - Funktionen: Heute (Wetter, Briefing, Anrufe, Geburtstage, Aufgaben), Menschen (Akte, nächster Anruf, Duplikate, vCard-Import, Adressvorschläge), To-dos und Einkaufsliste, Kalender mit KW, Bereiche, Finanzen, Dokumente, Briefings, Spracheingabe, Kamera.
 - Fehlt noch (braucht Server): Push-Benachrichtigungen, Abgleich zwischen Geräten, Briefings automatisch aus Gmail, KI-Belegerkennung.

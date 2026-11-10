@@ -186,10 +186,10 @@ let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selD
 
 /* ---------- Bausteine ---------- */
 function topbar(t) {
-  return `<div class="top"><p class="big">${esc(t)}</p><span class="tright"><button class="iconbtn camtop" data-act="photo" aria-label="Foto an Mirella">${IC.cam}</button><button class="brandbtn" data-act="drawer" aria-label="Menü mit allen Bereichen öffnen"><b>Mirella</b><img src="/logo-final.svg" alt=""></button></span></div>`;
+  return `<div class="top"><p class="big">${esc(t)}</p><span class="tright"><button class="iconbtn camtop" data-act="photo" aria-label="Foto an Mirella">${IC.cam}</button><button class="brandbtn" data-act="drawer" aria-label="Menü mit allen Bereichen öffnen"><b>Mirella</b><img src="./logo-final.svg" alt=""></button></span></div>`;
 }
 function subtop(backLabel, backAct, right = "") {
-  return `<div class="top"><button class="back" data-act="${backAct}" style="margin:0">‹ ${esc(backLabel)}</button><span class="tright">${right}<button class="brandbtn" data-act="drawer" aria-label="Menü öffnen"><img src="/logo-final.svg" alt=""></button></span></div>`;
+  return `<div class="top"><button class="back" data-act="${backAct}" style="margin:0">‹ ${esc(backLabel)}</button><span class="tright">${right}<button class="brandbtn" data-act="drawer" aria-label="Menü öffnen"><img src="./logo-final.svg" alt=""></button></span></div>`;
 }
 function pill(st, p) {
   if (st === "late") return '<span class="pill late">überfällig</span>';
@@ -1113,4 +1113,4 @@ load();
 render();
 loadWeather();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
-if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => { });
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => { });

@@ -51,7 +51,7 @@
     if (wg) S.settings.gmapsKey = wg;
     const lg = $("#w-log"); lg.style.display = ""; lg.innerHTML = "";
     await askAll((label, ok) => { lg.innerHTML += `<div>${ok ? "✓" : "–"} ${esc(label)}${ok ? "" : " (später unter Einstellungen › Apps › Mirella)"}</div>`; });
-    N.setup = true; nSave(); save();
+    N.setup = true; N.asked = Object.assign(N.asked || {}, { ki: 1, gmaps: 1 }); nSave(); save();
     lg.innerHTML += "<div>Ich übernehme jetzt deine Kontakte und Geburtstage …</div>";
     const r = await contactsSync(true); await calendarBirthdays(); await calendarEvents();
     lg.innerHTML += `<div>✓ ${r.added} Kontakte übernommen, ${r.linked} zusammengeführt.</div>`;
@@ -588,6 +588,24 @@
     scheduleLocal();
     try { if ((await P.PushNotifications.checkPermissions()).receive === "granted") P.PushNotifications.register(); } catch (_) { }
   };
-  setTimeout(() => { if (!N.setup) wizard(); else tick(); }, 600);
+  /* ---------- Nachfrage beim Start: alles, was neu einzugeben ist, einmal gesammelt (Wunsch Felix), danach nie wieder ----------
+     Kommt später etwas dazu, das Felix eingeben oder erlauben muss: hier einen Eintrag in NEED ergänzen. */
+  const NEED = [
+    { k: "ki", missing: () => typeof kiOn === "function" && !kiOn(), html: () => `<div class="fld"><label for="nf-ki">Claude-Schlüssel (für die Mirella-KI)</label><input id="nf-ki" type="password" autocomplete="off" placeholder="sk-ant-… einfügen"></div>`, save: () => { const v = ($("#nf-ki").value || "").trim(); if (v) { KI.key = v; kiSave(); } } },
+    { k: "gmaps", missing: () => !S.settings.gmapsKey, html: () => `<div class="fld"><label for="nf-gm">Google-Maps-Schlüssel (für den Wecker nach Verkehr)</label><input id="nf-gm" type="password" autocomplete="off" placeholder="AIza… einfügen"></div>`, save: () => { const v = ($("#nf-gm").value || "").trim(); if (v) S.settings.gmapsKey = v; } },
+    { k: "wecker", missing: () => !!P.MirellaAlarm && !N.alarmState, html: () => `<p class="hint">Dein iPhone fragt gleich einmal, ob Mirella echte Wecker stellen darf. Bitte <b>Erlauben</b> tippen.</p>`, save: async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; } catch (_) { } } }
+  ];
+  function nachfrage() {
+    N.asked = N.asked || {};
+    const open = NEED.filter(x => !N.asked[x.k] && x.missing()); if (!open.length || document.querySelector("#sheet.open")) return false;
+    openSheet(`<p class="stitle">Neu in Mirella</p><p class="hint" style="margin-top:0">Das fehlt noch. Einmal eintragen, danach fragt Mirella nicht mehr. Du kannst Felder auch leer lassen und später unter Einstellungen nachtragen.</p>${open.map(x => x.html()).join("")}<button class="btn pri" data-act="nfsave" style="width:100%">Speichern</button>`);
+    return true;
+  }
+  ACT.nfsave = async el => {
+    el.disabled = true; N.asked = N.asked || {};
+    for (const x of NEED) { if (N.asked[x.k] || !x.missing()) continue; try { await x.save(); } catch (_) { } N.asked[x.k] = 1; }
+    nSave(); save(); closeAll(); render(true); toast("Gespeichert");
+  };
+  setTimeout(() => { if (!N.setup) wizard(); else { tick(); setTimeout(nachfrage, 1200); } }, 600);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 })();

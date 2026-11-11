@@ -24,6 +24,8 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Mirella stellt deinen Wecker so, dass du pünktlich ankommst. Er klingelt auch, wenn die App zu ist.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Mirella liest deinen Geburtstags-Kalender und trägt Termine und Erinnerungen in deinen Kalender ein.</string>
 	<key>NSCalendarsUsageDescription</key>

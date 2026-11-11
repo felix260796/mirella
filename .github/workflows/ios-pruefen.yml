@@ -1,0 +1,37 @@
+name: iPhone-App prüfen
+
+# Baut die iPhone-App zur Probe (ohne Signatur, ohne Upload), sobald ein Pull Request
+# etwas am nativen Teil ändert. So fallen Fehler im Swift-Code vor dem Mergen auf.
+on:
+  pull_request:
+    paths:
+      - "native/**"
+      - ".github/workflows/ios-pruefen.yml"
+
+jobs:
+  bauen:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Capacitor vorbereiten
+        working-directory: native
+        run: |
+          npm install
+          npx cap sync ios
+      - name: Xcode wählen
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+          xcodebuild -version
+      - name: Zur Probe bauen
+        working-directory: native/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee $RUNNER_TEMP/build.log | grep -E "error:|warning: .*Mirella|BUILD (SUCCEEDED|FAILED)|\.swift:[0-9]+" || true
+          grep -q "BUILD SUCCEEDED" $RUNNER_TEMP/build.log

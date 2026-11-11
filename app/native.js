@@ -259,9 +259,44 @@
         add(at, "Geburtstag", (p.first || fullName(p)) + " hat heute Geburtstag 🎉");
         if (p.gift) add(at - (st.giftLead || 14) * 864e5, "Geschenk", "In " + (st.giftLead || 14) + " Tagen hat " + (p.first || fullName(p)) + " Geburtstag. Geschenk schon da?");
       }
+      // Wecker zusätzlich als Mitteilung, falls der echte Wecker nicht erlaubt oder das iPhone zu alt ist
+      if (N.alarmState !== "authorized") for (const a of alarmList()) add(a.at, "Wecker", a.title);
       if (list.length) await P.LocalNotifications.schedule({ notifications: list });
     } catch (e) { console.warn("Mitteilungen", e); }
+    alarmSync();
   }
+
+  /* ---------- Echter iPhone-Wecker (AlarmKit ab iOS 26): klingelt auch bei geschlossener App und im Stumm-Modus ---------- */
+  function alarmList() {
+    const now = Date.now(), list = [];
+    for (const w of S.alarms || []) {
+      if (!w.wake || !w.alarms) continue;
+      alarmTimes(w).forEach((d, i) => { if (+d > now + 30e3) list.push({ at: +d, title: (i ? "Jetzt aber raus! " : "Aufstehen. ") + "Losfahren " + w.leave + " nach " + w.to }); });
+    }
+    return list.sort((a, b) => a.at - b.at).slice(0, 30);
+  }
+  let alarmBusy = false;
+  async function alarmSync(force) {
+    const A = P.MirellaAlarm; if (!A || alarmBusy) return;
+    const list = alarmList(), sig = JSON.stringify(list);
+    if (!force && sig === N.alarmSig) return;
+    if (!list.length && !N.alarmSig) return; // noch nie einen Wecker gestellt: nicht nach der Erlaubnis fragen
+    alarmBusy = true;
+    try {
+      const r = await A.set({ alarms: list }), was = N.alarmState;
+      N.alarmState = r.state; N.alarmSig = r.state === "authorized" ? sig : ""; N.alarmN = r.count || 0; nSave();
+      if (r.state === "authorized" && list.length) toast("Echter iPhone-Wecker gestellt: " + list.slice(0, 4).map(a => new Date(a.at).toTimeString().slice(0, 5)).join(", "));
+      else if (r.state === "denied" && was !== "denied") toast("Wecker ist nicht erlaubt. Einstellungen › Apps › Mirella › Wecker einschalten.");
+      if (was !== r.state) scheduleLocal();
+    } catch (e) { console.warn("Wecker", e); N.alarmState = "fehler"; nSave(); }
+    alarmBusy = false;
+  }
+  const alarmNote = () => N.alarmState === "authorized" ? "Klingelt als echter iPhone-Wecker, auch wenn Mirella zu ist und das iPhone stumm ist."
+    : N.alarmState === "denied" ? "Der echte Wecker ist nicht erlaubt (Einstellungen › Apps › Mirella › Wecker). Bis dahin kommt nur eine Mitteilung."
+      : N.alarmState === "unavailable" ? "Der echte Wecker braucht iOS 26. Auf diesem Gerät kommt eine Mitteilung." : "Beim Speichern fragt dein iPhone einmal, ob Mirella Wecker stellen darf.";
+  const origRes = resHTML;
+  resHTML = function (w) { return origRes(w) + `<p class="hint">${alarmNote()}</p>`; };
+  ACT.nwecker = async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; nSave(); await alarmSync(true); render(true); } catch (_) { toast("Das hat nicht geklappt"); } };
   let schedT = null;
   const origSave2 = save;
   save = function () { const ok = origSave2(); clearTimeout(schedT); schedT = setTimeout(scheduleLocal, 1500); return ok; };
@@ -372,6 +407,7 @@
     <button class="btn" data-act="aufraeumen" style="width:100%;margin-top:8px">Kontakte aufräumen (${pending().length} offen)</button>
     <button class="btn" data-act="querv" style="width:100%;margin-top:8px">Geburtstags-Kalender zuordnen (${bOpen().length} offen)</button>
     ${S.settings.appleIgnored.length ? `<button class="btn" data-act="nunignore" style="width:100%;margin-top:8px">Aussortierte wieder vorschlagen (${S.settings.appleIgnored.length})</button>` : ""}
+    ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${N.alarmN ? " Gestellt: " + N.alarmN + "." : ""}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}` : ""}
     <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>`;
   const origEinst2 = R.einstellungen;
   R.einstellungen = function () {

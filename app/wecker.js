@@ -108,8 +108,8 @@ async function tripCheck() {
   const sig = t.ort + "|" + t.date + "|" + t.time;
   try {
     const w = { to: t.ort, date: t.date, arrive: t.time, mode: "auto", bufMin: 5, prepMin: 0 }; await planAlarm(w);
-    if (w.leave && w.travelMin) { t.los = w.leave; t.losDate = w.leaveDate || t.date; t.fahrt = w.travelMin; } else { delete t.los; delete t.fahrt; }
-  } catch (_) { delete t.los; delete t.fahrt; }
+    if (w.leave && w.travelMin) { t.los = w.leave; t.losDate = w.leaveDate || t.date; t.fahrt = w.travelMin; delete t.tripErr; } else { delete t.los; delete t.fahrt; t.tripErr = "Fahrzeit nicht gefunden"; }
+  } catch (e) { delete t.los; delete t.fahrt; t.tripErr = String(e && e.message || "Fahrzeit nicht gefunden").replace(/^Start(:| unbekannt:)\s*/, "").slice(0, 140); }
   t.tripSig = sig; tripBusy = false; save(); render(true);
 }
 setInterval(() => { tripCheck().catch(() => { tripBusy = false; }); }, 15000);

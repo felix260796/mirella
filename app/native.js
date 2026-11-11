@@ -797,8 +797,14 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       if (N.live === false || document.hidden) return;
       const x = nextLos(), sig = x ? x.at + "|" + x.titel + "|" + x.info : "";
       if (sig === (N.liveSig || "")) return;
-      try { if (x) { const r = await SY.losStart({ los: x.at, titel: x.titel, ziel: x.ziel, info: x.info }); if (!r.ok) { N.liveErr = r.reason || ""; nSave(); if (r.reason === "unavailable" || r.reason === "aus") { N.liveSig = sig; nSave(); } return; } N.liveErr = ""; } else await SY.losEnd(); N.liveSig = sig; nSave(); } catch (_) { }
+      try { if (x) { const r = await SY.losStart({ los: x.at, titel: x.titel, ziel: x.ziel, info: x.info }); if (!r.ok) { N.liveErr = r.reason || ""; nSave(); if (r.reason === "unavailable" || r.reason === "aus") { N.liveSig = sig; nSave(); } return; } N.liveErr = ""; } else await SY.losEnd(); N.liveSig = sig; nSave(); } catch (e) { N.liveErr = String(e && e.message || e).slice(0, 160); nSave(); }
     };
+    ACT.nlivetest = async () => {
+      let r; try { r = await SY.losStart({ los: Date.now() + 10 * 60e3, titel: "Test von Mirella", ziel: "Countdown", info: "läuft 10 Minuten" }); } catch (e) { r = { ok: false, reason: String(e && e.message || e) }; }
+      N.liveSig = ""; N.liveErr = r && r.ok ? "" : (r && r.reason || "unbekannt"); nSave(); render(true);
+      alert(r && r.ok ? "Der Countdown ist gestartet. Sperre jetzt das iPhone: Er muss auf dem Sperrbildschirm stehen." : "Das iPhone hat den Countdown nicht gestartet. Grund: " + liveWhy());
+    };
+    const liveWhy = () => { const e = N.liveErr || ""; return !e ? "" : e === "aus" ? "Live-Aktivitäten sind für Mirella ausgeschaltet. iPhone-Einstellungen › Apps › Mirella › Live-Aktivitäten einschalten." : e === "unavailable" ? "Dieses iPhone ist zu alt dafür (braucht iOS 16.2)." : e; };
     setTimeout(liveSync, 4000); setInterval(liveSync, 60000); document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(liveSync, 800); });
     ACT.nlive = () => { N.live = N.live === false; N.liveSig = ""; nSave(); if (N.live) liveSync(); else SY.losEnd().catch(() => { }); render(true); toast(N.live ? "Countdown auf dem Sperrbildschirm ist an" : "Countdown ist aus"); };
     // Teilen nach Mirella: was aus Mail, Safari, Fotos … geteilt wurde, beim Öffnen einsortieren
@@ -834,7 +840,9 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       ${(N.places || []).map(o => `<div class="listrow"><span class="grow">${esc(o.name)}<small>${o.exit ? "beim Weggehen" : "beim Ankommen"}${o.text ? " · " + esc(o.text) : ""}${o.shop ? " · mit Einkaufsliste" : ""}</small></span><button class="mini" data-act="nplacedel" data-id="${o.id}">Löschen</button></div>`).join("") || '<p class="hint" style="margin-top:0">Noch keine. Beispiel: „Du bist bei Rewe, 6 Sachen auf der Liste“ oder beim Verlassen der Wohnung „Schlüssel, Fenster zu?“.</p>'}
       <button class="btn" data-act="nplace" style="width:100%;margin-top:8px">+ Ort hinzufügen</button>
       ${setH("Sicherheit und Apple-KI")}
-      <button class="drow" data-act="nlive"><span class="dt"><b>Countdown „Jetzt musst du los“ auf dem Sperrbildschirm</b><small>${N.live === false ? "aus" : "an: ab 3 Stunden vorher, für Wecker und Termine mit Ort" + (N.liveErr === "aus" ? ". Live-Aktivitäten sind am iPhone ausgeschaltet (Einstellungen › Mirella)." : "")}</small></span><span class="chev">›</span></button>
+      <button class="drow" data-act="nlive"><span class="dt"><b>Countdown „Jetzt musst du los“ auf dem Sperrbildschirm</b><small>${N.live === false ? "aus" : "an: ab 3 Stunden vorher, für Wecker und Termine mit Ort"}</small></span><span class="chev">›</span></button>
+      <p class="hint">${(() => { const x = nextLos(); return x ? "Nächstes Losgehen: " + new Date(x.at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + " Uhr (" + esc(x.titel) + ")." : "Gerade steht kein Losgehen in den nächsten 3 Stunden an. Der Countdown braucht einen Wecker oder eine Aufgabe mit Ort und Uhrzeit, bei der „los um …“ steht."; })()}${liveWhy() ? " <b>Letzter Fehler: " + esc(liveWhy()) + "</b>" : ""}</p>
+      <button class="btn" data-act="nlivetest" style="width:100%;margin-bottom:8px">Countdown jetzt testen (10 Minuten)</button>
       <button class="drow" data-act="nfiles"><span class="dt"><b>Dokumente auch in der Dateien-App</b><small>${N.files === false ? "aus" : "an: Auf meinem iPhone › Mirella, nach Ordnern (" + Object.keys(N.filed || {}).length + " abgelegt)"}</small></span><span class="chev">›</span></button>
       <button class="drow" data-act="nfaceid"><span class="dt"><b>Mirella nur mit Face ID öffnen</b><small>${N.faceId ? "an" : "aus"}</small></span><span class="chev">›</span></button>
       <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;

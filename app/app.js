@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.28";
+const VERSION = "0.29";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -307,7 +307,7 @@ function personCard(p, withCall) {
 function todoRow(t) {
   const pr = !t.done && prioOf(t), shop = t.list === "einkauf", q = shop ? L.qtyLabel(t) : "";
   const right = shop ? (t.done ? "" : `<span class="qbtns"><button class="mini" data-act="qty" data-id="${t.id}" data-n="-1" aria-label="weniger">−</button><button class="mini" data-act="qty" data-id="${t.id}" data-n="1" aria-label="mehr">+</button></span>`) : todoPersonBtn(t);
-  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}${t.ort && !t.done ? `<div class="meta">📍 ${esc(t.ort)}${t.los ? " · los um " + esc(t.los) + " (" + t.fahrt + " Min.)" : ""}</div>` : ""}</div>${t.ort && !t.done ? routeBtn(t.ort) : ""}${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}${t.ort && !t.done ? `<div class="meta">📍 ${esc(t.ort)}${t.los ? " · los um " + esc(t.los) + " (" + t.fahrt + " Min.)" : t.tripErr && t.time ? " · Fahrzeit fehlt: " + esc(t.tripErr) : ""}</div>` : ""}</div>${t.ort && !t.done ? routeBtn(t.ort) : ""}${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
 }
 /* Routen-Symbol: öffnet Apple Karten mit der Route vom jetzigen Standort zur Adresse */
 const ROUTE_IC = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12z"/><path d="M8.5 13.5v-2a1 1 0 0 1 1-1H15"/><path d="m13 8.5 2 2-2 2"/></svg>';

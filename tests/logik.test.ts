@@ -124,3 +124,14 @@ test("Wetter: Regen-Zeiträume", () => {
   assert.equal(s[1].from, "2026-11-10T22:00");
   assert.equal(L.rainSpans({ time, precipitation_probability: P, precipitation: M }, "2026-11-10T20:00", 2).length, 0);
 });
+
+test("Anrufen: deutsche Nummern werden mit +49 gewählt", () => {
+  assert.equal(L.dialTel("0711 123456"), "+49711123456");
+  assert.equal(L.dialTel("0171/234 56 78"), "+491712345678");
+  assert.equal(L.dialTel("+49 171 2345678"), "+491712345678");
+  assert.equal(L.dialTel("0041 79 123 45 67"), "+41791234567");
+  assert.equal(L.dialTel("+41 79 123 45 67"), "+41791234567");
+  assert.equal(L.dialTel("110"), "110");
+  assert.equal(L.dialTel("116117"), "116117");
+  assert.equal(L.dialTel(""), "");
+});

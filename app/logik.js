@@ -67,6 +67,13 @@ const L = (() => {
     }
     return { p: "+49", n: t.replace(/^0+/, "") };
   }
+  /* Nummer zum Wählen: deutsche Nummern mit 0 vorne werden zu +49, internationale bleiben, Kurzwahlen (110, 116117) auch */
+  function dialTel(t) {
+    let d = String(t || "").replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
+    if (d.startsWith("00")) return "+" + d.slice(2);
+    if (d.startsWith("0") && d.length >= 6) return "+49" + d.slice(1);
+    return d;
+  }
   function joinTel(p, n) {
     const num = String(n || "").trim().replace(/^0+/, ""); if (!num) return "";
     if (num.startsWith("+")) return num;
@@ -355,6 +362,6 @@ const L = (() => {
     return list.map(h => ({ h, s: words.reduce((a, w) => a + (h.k.some(k => k.startsWith(w.slice(0, 5)) || w.startsWith(k.slice(0, 5))) ? 2 : 0) + (h.q.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.h);
   }
 
-  return { rainSpans, pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines, wxDayNight };
+  return { rainSpans, pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, dialTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines, wxDayNight };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = L;

@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.24";
+const VERSION = "0.24.1";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -364,7 +364,7 @@ const R = {
     return `${subtop("Kontakte", "go\" data-v=\"menschen")}
     <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>${p.woher ? `<p>Kennen uns: ${esc(p.woher)}</p>` : ""}
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
-    ${(p.tels || []).map(x => `<a class="mini" href="tel:${esc(x.n.replace(/[^\d+]/g, ""))}" style="text-decoration:none;display:block;margin:0 0 6px">${IC.call} ${esc(x.n)}${x.l ? " · " + esc(x.l) : ""}</a>`).join("")}
+    ${(p.tels || []).map(x => `<a class="mini" href="tel:${esc(L.dialTel(x.n))}" style="text-decoration:none;display:block;margin:0 0 6px">${IC.call} ${esc(x.n)}${x.l ? " · " + esc(x.l) : ""}</a>`).join("")}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${p.death ? "" : p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
     ${bdayBlock(p, nb)}
@@ -696,7 +696,7 @@ function bdayBlock(p, nb) {
 /* Kontaktdaten: jede Zeile gleich aufgebaut (Bezeichnung, Wert, Knopf) */
 function contactBlock(p) {
   const rows = [];
-  if (p.tel) rows.push(["Telefon", esc(p.tel), `<a class="mini" href="tel:${esc(p.tel.replace(/[^\d+]/g, ""))}">Anrufen</a>`]);
+  if (p.tel) rows.push(["Telefon", esc(p.tel), `<a class="mini" href="tel:${esc(L.dialTel(p.tel))}">Anrufen</a>`]);
   if (p.email) rows.push(["E-Mail", esc(p.email), `<a class="mini" href="mailto:${esc(p.email)}">Schreiben</a>`]);
   if (p.addr) rows.push(["Adresse", esc(p.addr), `<a class="mini" href="https://maps.apple.com/?q=${encodeURIComponent(p.addr)}">Karte</a>`]);
   if (p.nick) rows.push(["Spitzname", esc(p.nick), ""]);
@@ -709,7 +709,7 @@ function nextCallBlock(p) {
   const n = diffDays(today(), due), big = st === "late" ? `seit ${-n} ${-n === 1 ? "Tag" : "Tagen"} fällig` : n === 0 ? "heute" : n === 1 ? "morgen" : `in ${n} Tagen`;
   return `<div class="nextcall ${st}"><div><div class="label">Nächster Anruf</div><b>${esc(big)}</b><small>${st === "late" ? "fällig seit " : ""}${esc(fmtDate(due))} · ${esc(p.cyc)}${p.snooze && p.snooze >= today() ? " · verschoben" : ""}</small></div><div class="nc-r"><div class="label">Zuletzt erreicht</div><b style="font-size:16px">${esc(last ? relDate(last) : "noch nie")}</b>${lastAny && lastAny !== last ? `<small>Versuch ${esc(relDate(lastAny))}</small>` : ""}</div></div>`;
 }
-function waNum(tel) { let n = tel.replace(/[^\d+]/g, ""); if (n.startsWith("+")) return n.slice(1); if (n.startsWith("00")) return n.slice(2); if (n.startsWith("0")) return "49" + n.slice(1); return n; }
+function waNum(tel) { let n = L.dialTel(tel); if (n.startsWith("+")) return n.slice(1); if (n.startsWith("00")) return n.slice(2); if (n.startsWith("0")) return "49" + n.slice(1); return n; }
 function notePh(id) { return { auto: "z. B. getankt, 58.900 km, 72 €", geld: "z. B. Handyvertrag gekündigt zum 31.3.", gesund: "z. B. Zahnarzt: alles gut", haus: "z. B. Zählerstand Strom 19.310", frei: "z. B. Skiurlaub gebucht, 13.–20.2.", arbeit: "z. B. Jahresgespräch im Januar", sport: "z. B. Paddeln: neues Paddel gekauft", doku: "z. B. Pass beantragt" }[id] || "Notiz"; }
 function docRow(d) { return `<div class="listrow"><button data-act="viewphoto" data-id="${d.photo || ""}" style="border:0;padding:0;background:none" aria-label="Foto ansehen"><img class="thumbimg" data-thumb="${d.photo || ""}" alt=""></button><span class="grow">${esc(d.name)}<small>${esc([d.folder, d.until ? "gültig bis " + fmtDate(d.until) : "", fmtDate(d.created)].filter(Boolean).join(" · "))}</small></span><button class="rowdel" data-act="deldoc" data-id="${d.id}" aria-label="löschen">✕</button></div>`; }
 /* docsHTML() und financeHTML() stehen in bereiche.js */
@@ -1049,7 +1049,7 @@ function savePerson(id) {
   draftClear(); save(); closeSheet(); render(); toast("Gespeichert: " + [first, last].join(" ").trim());
 }
 function callMenu(p) {
-  const tel = p.tel ? p.tel.replace(/[^\d+]/g, "") : "";
+  const tel = p.tel ? L.dialTel(p.tel) : "";
   openSheet(`<p class="stitle">${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">${esc(cycLabel(p.cyc))} · zuletzt ${esc(agoText(lastCall(p)))}</p>
   <div style="display:grid;gap:8px">${tel ? `<a class="btn pri" href="tel:${esc(tel)}" data-act="dial" data-id="${p.id}" style="text-decoration:none;text-align:center">📞 ${esc(p.tel)} anrufen</a>` : `<button class="btn" data-act="call" data-id="${p.id}">Telefonnummer eintragen</button>`}
   <button class="btn" data-act="callok" data-id="${p.id}">✓ Erledigt, erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Probiert, nicht erreicht</button><button class="btn" data-act="snooze" data-id="${p.id}">Später anrufen</button><button class="btn" data-act="person" data-id="${p.id}">Zum Kontaktprofil</button></div>`);
@@ -1071,7 +1071,7 @@ document.addEventListener("change", e => { if (e.target.id === "f-avatar" && e.t
 function callResult(p, autoDial) {
   openSheet(`<p class="stitle">Anruf mit ${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">Wie ist es gelaufen?</p>
   <div style="display:grid;gap:8px"><button class="btn pri" data-act="callok" data-id="${p.id}">Erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Nicht erreicht (neuer Versuch ${relDate(addCallDays(today(), +S.settings.retryWorkdays || 2))})</button><button class="btn" data-act="snooze" data-id="${p.id}">Später</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
-  if (autoDial && p.tel) location.href = "tel:" + p.tel.replace(/[^\d+]/g, "");
+  if (autoDial && p.tel) location.href = "tel:" + L.dialTel(p.tel);
 }
 function snoozeForm(p) {
   const opts = [["morgen", addDays(today(), 1)], ["in 3 Tagen", addDays(today(), 3)], ["in 1 Woche", addDays(today(), 7)], ["in 3 Wochen", addDays(today(), 21)], ["in 2 Monaten", addMonths(today(), 2)]];
@@ -1480,7 +1480,7 @@ const ACT = {
   avnew: () => { closeSheet(); const f = $("#f-avatar"); f.value = ""; f.click(); },
   avdel: () => { const p = S.people.find(x => x.id === avFor); if (!p || !ask("Profilbild wirklich entfernen?")) return; const old = p.pic; delete p.pic; save(); photoDel(old).catch(() => { }); closeSheet(); render(true); toast("Profilbild entfernt"); },
   // Telefon-Symbol: sofort wählen (iPhone zeigt die Nummer mit „Anrufen“), danach fragt Mirella, wie es lief
-  dialnow: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p || !p.tel) return; pendingCall = p.id; location.href = "tel:" + p.tel.replace(/[^\d+]/g, ""); },
+  dialnow: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p || !p.tel) return; pendingCall = p.id; location.href = "tel:" + L.dialTel(p.tel); },
   pcbackup: () => { if (view !== "einstellungen" || setSec !== "sicherung") { setFrom = view === "einstellungen" ? null : { v: view, area, cur, t: "Zurück", y: $("#screen").scrollTop }; view = "einstellungen"; setSec = "sicherung"; closeAll(); render(); } window.pcBackup && window.pcBackup(); },
   roundack: (el, e) => { e.stopPropagation(); const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; p.roundAck = el.dataset.d; save(); render(true); toast("Gemerkt. Am Geburtstag erinnere ich dich wie gewohnt."); },
   callmenu: el => callMenu(S.people.find(x => x.id === el.dataset.id)),

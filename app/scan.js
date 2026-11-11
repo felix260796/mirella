@@ -15,7 +15,7 @@ photoStart = function (kind, areaId) {
   photoCtx = { kind: kind || null, area: areaId || null, blob: null, url: null, ref: "" };
   openSheet(`<p class="stitle">Foto oder Brief an Mirella</p>
   <p class="swipehint" style="text-align:left;margin:0 0 12px">Brief, Rechnung, Beleg, Dokument oder Einkaufszettel. Bei Papier schneide ich automatisch zu und lese den Text.</p>
-  <div style="display:grid;gap:8px"><button class="btn pri" data-act="pickcam">📷 Foto machen</button><button class="btn" data-act="picklib">Aus „Fotos“ wählen</button><button class="btn" data-act="pickpdf">📎 PDF oder Datei</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
+  <div style="display:grid;gap:8px"><button class="btn pri" data-act="scanmulti">📄 Scannen (auch mehrere Seiten)</button><button class="btn" data-act="pickcam">📷 Foto machen</button><button class="btn" data-act="picklib">Aus „Fotos“ wählen</button><button class="btn" data-act="pickpdf">📎 PDF oder Datei</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
 };
 photoChosen = async function (file) {
   if (!file) return;
@@ -274,3 +274,65 @@ Object.assign(ACT, {
   shopscanadd: () => { let n = 0; document.querySelectorAll("[data-sz]").forEach(el => { if (!el.checked) return; const x = shopScan[+el.dataset.sz]; if (addShop(x.t, x.qty, x.unit)) n++; const k = x.t.trim(); S.shopFreq[k] = (S.shopFreq[k] || 0) + 0.5; }); save(); closeSheet(); render(true); toast(`${n} Artikel vom Zettel übernommen`); }
 });
 document.addEventListener("change", e => { if (e.target.id === "f-shopimg" && e.target.files[0]) shopPhotoRead(e.target.files[0]); });
+
+/* ---------- Scannen mit mehreren Seiten: Seiten nacheinander aufnehmen, als EIN PDF ablegen ----------
+   In der iPhone-App macht das Apples Dokumenten-Scanner (erkennt Ränder, entzerrt, Seite für Seite).
+   Im Browser: Seite für Seite fotografieren. */
+let scanPages = [];
+const b64Blob = (b64, type) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); };
+/* Kleiner PDF-Schreiber: jede JPEG-Seite auf ein A4-Blatt (oder Querformat), ohne fremde Bibliothek */
+async function pdfFromJpegs(blobs) {
+  const enc = new TextEncoder(), parts = [], offs = []; let pos = 0;
+  const put = x => { const b = typeof x === "string" ? enc.encode(x) : x; parts.push(b); pos += b.length; };
+  const obj = (n, head, stream) => { offs[n] = pos; put(`${n} 0 obj\n${head}\n`); if (stream) { put("stream\n"); put(stream); put("\nendstream\n"); } put("endobj\n"); };
+  put("%PDF-1.4\n");
+  const n = blobs.length, kids = [];
+  for (let i = 0; i < n; i++) kids.push(`${3 + i * 3} 0 R`);
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, `<< /Type /Pages /Count ${n} /Kids [${kids.join(" ")}] >>`);
+  for (let i = 0; i < n; i++) {
+    const url = URL.createObjectURL(blobs[i]), img = await loadImg(url); URL.revokeObjectURL(url);
+    const iw = img.naturalWidth, ih = img.naturalHeight, quer = iw > ih, pw = quer ? 842 : 595, ph = quer ? 595 : 842;
+    const sc = Math.min(pw / iw, ph / ih), w = iw * sc, h = ih * sc, x = (pw - w) / 2, y = (ph - h) / 2;
+    const data = new Uint8Array(await blobs[i].arrayBuffer()), cont = enc.encode(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im0 Do Q`);
+    const pg = 3 + i * 3;
+    obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${pg + 2} 0 R >> >> /Contents ${pg + 1} 0 R >>`);
+    obj(pg + 1, `<< /Length ${cont.length} >>`, cont);
+    obj(pg + 2, `<< /Type /XObject /Subtype /Image /Width ${iw} /Height ${ih} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${data.length} >>`, data);
+  }
+  const total = 3 + n * 3, xref = pos;
+  put(`xref\n0 ${total}\n0000000000 65535 f \n` + offs.slice(1).map(o => String(o).padStart(10, "0") + " 00000 n \n").join(""));
+  put(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts, { type: "application/pdf" });
+}
+async function scanMultiFinish() {
+  const pages = scanPages; scanPages = []; if (!pages.length) return;
+  const ctx = photoCtx || {}; closeSheet(); toast(pages.length === 1 ? "Mirella legt den Scan ab …" : `Mirella legt ${pages.length} Seiten als ein Dokument ab …`);
+  let name = "Scan";
+  try { // erste Seite lesen, damit das Dokument gleich richtig einsortiert wird (höchstens 20 Sekunden)
+    const T = await ocrLib(), r = await Promise.race([T.recognize(pages[0], "deu"), new Promise((_, rej) => setTimeout(() => rej(new Error("zu langsam")), 20000))]);
+    const g = L.classifyDoc((r && r.data && r.data.text || "").trim(), today()); if (g && g.sure > 0 && g.type) name = g.type;
+  } catch (_) { }
+  try {
+    const pdf = await pdfFromJpegs(pages), file = new File([pdf], `${name} ${fmtDate(today())}.pdf`, { type: "application/pdf" });
+    if (ctx.ref) pdfRef = ctx.ref;
+    await addDocFile(file);
+    const d = S.docs[S.docs.length - 1]; if (d && !ctx.ref) setTimeout(() => docForm(d), 300);
+  } catch (e) { toast("Der Scan ließ sich nicht ablegen: " + (e.message || "Fehler")); }
+}
+function scanMultiSheet() {
+  openSheet(`<p class="stitle">Scannen</p><p class="hint" style="margin-top:0">Seite für Seite fotografieren. Am Ende wird alles ein Dokument.</p>
+  <p style="font-weight:700;font-size:18px;margin:8px 0">${scanPages.length ? scanPages.length + (scanPages.length === 1 ? " Seite" : " Seiten") + " aufgenommen" : "Noch keine Seite"}</p>
+  <div style="display:grid;gap:8px"><button class="btn${scanPages.length ? "" : " pri"}" data-act="scanpage">📷 ${scanPages.length ? "Nächste Seite" : "Erste Seite"} aufnehmen</button>${scanPages.length ? `<button class="btn pri" data-act="scanfin">Fertig: ${scanPages.length === 1 ? "Seite" : scanPages.length + " Seiten"} ablegen</button><button class="btn" data-act="scanundo">Letzte Seite verwerfen</button>` : ""}<button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
+}
+Object.assign(ACT, {
+  scanmulti: async () => {
+    const Pn = NATIVE && window.Capacitor.Plugins.MirellaScan;
+    if (!Pn) { scanPages = []; scanMultiSheet(); return; }
+    try { const r = await Pn.scan(); if (!r || !r.pages || !r.pages.length) return; scanPages = r.pages.map(b => b64Blob(b, "image/jpeg")); await scanMultiFinish(); }
+    catch (e) { toast(e.message || "Scannen hat nicht geklappt"); }
+  },
+  scanpage: () => { let f = $("#f-scan"); if (!f) { f = document.createElement("input"); f.type = "file"; f.id = "f-scan"; f.accept = "image/*"; f.capture = "environment"; f.hidden = true; document.body.appendChild(f); f.addEventListener("change", async () => { const x = f.files[0]; if (!x) return; try { scanPages.push(await shrink(x, 2000, 0.8)); } catch (e) { toast(e.message || "Seite konnte nicht gelesen werden"); } scanMultiSheet(); }); } f.value = ""; f.click(); },
+  scanundo: () => { scanPages.pop(); scanMultiSheet(); },
+  scanfin: () => scanMultiFinish()
+});

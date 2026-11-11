@@ -606,3 +606,17 @@ input[type=date]::-webkit-date-and-time-value,input[type=time]::-webkit-date-and
 .clrow[aria-pressed="true"] .clbox{background:var(--ink);border-color:var(--ink);color:#fff}
 .clbar{display:flex;gap:8px;width:100%;margin-top:8px}
 .clbar .btn{flex:1;padding-top:10px;padding-bottom:10px}.clbar .btn[disabled]{opacity:.45}
+
+/* v0.25: Wischen zum Löschen, Schalter am Wecker, kleine Kalender-Filter, A–Z-Leiste */
+[data-swipe]{position:relative;transition:transform .15s ease;touch-action:pan-y}
+.swdel{position:absolute;right:-104px;top:0;bottom:0;width:96px;border:0;border-radius:14px;background:var(--late,#c0392b);color:#fff;font:inherit;font-weight:700;font-size:16px;cursor:pointer}
+.tgl{width:52px;height:32px;border-radius:99px;border:0;background:var(--line);position:relative;flex:none;cursor:pointer;padding:0;transition:background .15s}
+.tgl i{position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
+.tgl.on{background:#2e9e5b}.tgl.on i{left:23px}
+.calfilt{margin:12px 0 0;gap:5px}
+.calfilt .chip2{font-size:12px;font-weight:500;padding:3px 9px;gap:4px}
+.azbar{position:fixed;right:2px;top:50%;transform:translateY(-50%);z-index:5;display:flex;flex-direction:column;align-items:center;padding:6px 3px;border-radius:12px;background:color-mix(in srgb,var(--surface) 85%,transparent);touch-action:none;user-select:none;-webkit-user-select:none}
+.azbar span{font-size:11px;font-weight:700;line-height:1;padding:2.5px 5px;color:var(--ink-2)}
+.azbar span.off{opacity:.3}
+.azpop{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;width:84px;height:84px;border-radius:20px;background:var(--ink);color:var(--bg,#fff);display:grid;place-items:center;font-size:44px;font-weight:800;pointer-events:none}
+.haskaz{padding-right:22px}

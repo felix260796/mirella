@@ -249,8 +249,11 @@
     } catch (e) { console.warn("Termine", e); return 0; }
   }
   /* ---------- Beidseitig: Mirella-Termine stehen im iPhone-Kalender „Mirella“, Änderungen dort kommen zurück ---------- */
-  const calMode = () => N.calMode || "zeit"; // zeit = alles mit Uhrzeit, alle = alles mit Datum, aus
-  const calWanted = t => calMode() !== "aus" && t.list === "todo" && t.date && !t.ref && !t.auto && !t.area && t.trig !== "verlassen" && (t.time || t.cal || calMode() === "alle");
+  // wahl = nur was Felix selbst in den Kalender schickt (Standard seit v0.25: To-dos gehören nicht in den Apple-Kalender),
+  // zeit = alles mit Uhrzeit, alle = alles mit Datum, aus
+  if (N.calV !== 2) { N.calV = 2; if (!N.calMode || N.calMode === "zeit") N.calMode = "wahl"; }
+  const calMode = () => N.calMode || "wahl";
+  const calWanted = t => calMode() !== "aus" && t.list === "todo" && t.date && !t.ref && !t.auto && !t.area && t.trig !== "verlassen" && (t.cal || (t.time && calMode() === "zeit") || calMode() === "alle");
   const tSig = t => [t.t, t.date, t.time || ""].join("|");
   const eTime = e => { const d = new Date(e.startDate); return e.isAllDay ? "" : pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
   const eSig = e => [e.title || "", isoOf(e.startDate), eTime(e)].join("|");
@@ -276,6 +279,7 @@
       for (const [tid, m] of Object.entries(map)) {
         const t = S.todos.find(x => x.id === tid), e = byId.get(m.id);
         if (!t || !t.date) { if (e) try { await C.deleteEvent({ id: m.id }); } catch (_) { } delete map[tid]; continue; }
+        if (!calWanted(t) && tSig(t) === m.sig) { if (e) try { await C.deleteEvent({ id: m.id }); } catch (_) { } delete map[tid]; continue; } // gehört nicht (mehr) in den Apple-Kalender, bleibt aber in Mirella
         if (!e) { const at = new Date(m.sig.split("|")[1] + "T12:00:00").getTime(); if (at > lo && at < hi) { delete map[tid]; gone[tid] = 1; } continue; }
         if (eSig(e) !== m.sig && tSig(t) === m.sig) { t.t = e.title || t.t; t.date = isoOf(e.startDate); t.time = eTime(e); m.sig = tSig(t); changed = true; }
       }
@@ -351,6 +355,10 @@
       const now = Date.now(), list = []; let id = 1;
       const add = (at, title, body, extra) => { if (at > now + 30e3 && list.length < 60) list.push({ id: id++, title, body, schedule: { at: new Date(at), allowWhileIdle: true }, extra: extra || {} }); };
       const st = S.settings, nagMin = +(st.nervEvery || 30), nv = st.nerv || {};
+      // Wecker zuerst (iOS erlaubt nur 64 geplante Mitteilungen): immer zusätzlich zum echten Wecker eine Mitteilung zur selben Minute,
+      // dazu "Jetzt musst du los" zur Abfahrtszeit.
+      for (const a of alarmList()) add(a.at, "Wecker", a.title, { wecker: 1 });
+      for (const w of S.alarms || []) { if (!w.wake || w.off || !w.leave) continue; const at = +new Date((w.leaveDate || w.date) + "T" + w.leave + ":00"); add(at, "Jetzt musst du los", "Damit du um " + w.arrive + " in " + weckerName(w) + " bist" + (w.travelMin ? " (" + w.travelMin + " Min. unterwegs)" : "") + ".", { wecker: 1 }); }
       for (const t of S.todos) {
         if (t.done || !t.date) continue;
         const at = new Date(t.date + "T" + (t.time || "09:00") + ":00").getTime();
@@ -371,10 +379,13 @@
         const b = nextBirthday(p); if (!b) continue;
         const at = new Date(b + "T09:00:00").getTime(); if (at - now > 30 * 864e5) continue;
         add(at, "Geburtstag", (p.first || fullName(p)) + " hat heute Geburtstag 🎉");
+      }
+      for (const { p, k, b } of kinSoon(30)) { add(new Date(b + "T09:00:00").getTime(), "Geburtstag", k.name + " (" + (k.rel || "Familie") + " von " + fullName(p) + ") hat heute Geburtstag 🎉"); }
+      for (const p of live) {
+        const b = nextBirthday(p); if (!b) continue;
+        const at = new Date(b + "T09:00:00").getTime(); if (at - now > 30 * 864e5) continue;
         if (p.gift) add(at - (st.giftLead || 14) * 864e5, "Geschenk", "In " + (st.giftLead || 14) + " Tagen hat " + (p.first || fullName(p)) + " Geburtstag. Geschenk schon da?");
       }
-      // Wecker zusätzlich als Mitteilung, falls der echte Wecker nicht erlaubt oder das iPhone zu alt ist
-      if (N.alarmState !== "authorized") for (const a of alarmList()) add(a.at, "Wecker", a.title);
       if (list.length) await P.LocalNotifications.schedule({ notifications: list });
     } catch (e) { console.warn("Mitteilungen", e); }
     alarmSync();
@@ -384,9 +395,9 @@
   function alarmList() {
     const now = Date.now(), list = [];
     for (const w of S.alarms || []) {
-      if (!w.wake || !w.alarms) continue;
+      if (!w.wake || !w.alarms || w.off) continue;
       const all = alarmTimes(w), nm = weckerName(w);
-      all.forEach((d, i) => { if (+d > now + 30e3) list.push({ at: +d, title: nm + ": los um " + w.leave + (all.length > 1 ? " (Wecker " + (i + 1) + " von " + all.length + ")" : "") }); });
+      all.forEach((d, i) => { if (+d > now + 30e3) list.push({ at: +d, title: nm + ": los um " + w.leave + (all.length > 1 ? " (Wecker " + (i + 1) + " von " + all.length + ")" : ""), near: +d - now < 23 * 3600e3 ? 1 : 0 }); });
     }
     return list.sort((a, b) => a.at - b.at).slice(0, 30);
   }
@@ -399,8 +410,9 @@
     alarmBusy = true;
     try {
       const r = await A.set({ alarms: list }), was = N.alarmState;
-      N.alarmState = r.state; N.alarmSig = r.state === "authorized" ? sig : ""; N.alarmN = r.count || 0; nSave();
-      if (r.state === "authorized" && list.length) toast("Echter iPhone-Wecker gestellt: " + list.slice(0, 4).map(a => new Date(a.at).toTimeString().slice(0, 5)).join(", "));
+      N.alarmState = r.state; N.alarmSig = r.state === "authorized" ? sig : ""; N.alarmN = r.count || 0; N.alarmErr = r.error || ""; N.alarmAt = Date.now(); nSave();
+      if (r.error) toast("Ein Wecker ließ sich nicht stellen: " + String(r.error).slice(0, 80));
+      if (r.state === "authorized" && list.length && !r.error) toast("Echter iPhone-Wecker gestellt: " + list.slice(0, 4).map(a => new Date(a.at).toTimeString().slice(0, 5)).join(", "));
       else if (r.state === "denied" && was !== "denied") toast("Wecker ist nicht erlaubt. Einstellungen › Apps › Mirella › Wecker einschalten.");
       if (was !== r.state) scheduleLocal();
     } catch (e) { console.warn("Wecker", e); N.alarmState = "fehler"; nSave(); }
@@ -409,8 +421,9 @@
   const alarmNote = () => N.alarmState === "authorized" ? "Klingelt als echter iPhone-Wecker, auch wenn Mirella zu ist und das iPhone stumm ist."
     : N.alarmState === "denied" ? "Der echte Wecker ist nicht erlaubt (Einstellungen › Apps › Mirella › Wecker). Bis dahin kommt nur eine Mitteilung."
       : N.alarmState === "unavailable" ? "Der echte Wecker braucht iOS 26. Auf diesem Gerät kommt eine Mitteilung." : "Beim Speichern fragt dein iPhone einmal, ob Mirella Wecker stellen darf.";
+  const alarmDiag = () => N.alarmState !== "authorized" ? "" : (N.alarmErr ? ` <b>Achtung: Dein iPhone hat den letzten Wecker nicht angenommen (${esc(String(N.alarmErr).slice(0, 120))}). Die Mitteilung kommt trotzdem.</b>` : N.alarmAt ? ` Beim iPhone angemeldet: ${N.alarmN || 0}.` : "") + " Zur selben Minute kommt zusätzlich eine Mitteilung mit Ton als Sicherheit. In der Uhr-App von Apple steht der Wecker nicht, er gehört zu Mirella.";
   const origRes = resHTML;
-  resHTML = function (w) { return origRes(w) + `<p class="hint">${alarmNote()}</p>`; };
+  resHTML = function (w) { return origRes(w) + `<p class="hint">${alarmNote()}${alarmDiag()}</p>`; };
   ACT.nwecker = async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; nSave(); await alarmSync(true); render(true); } catch (_) { toast("Das hat nicht geklappt"); } };
   let schedT = null;
   const origSave2 = save;
@@ -635,7 +648,11 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   ACT.querv = () => { closeAll(); qvPick = null; qvQ = ""; view = "querverweise"; render(); };
   ACT.qvback = () => { view = pending().length ? "aufraeumen" : "menschen"; render(); };
   ACT.qvpick = el => { const b = bOpen()[+el.dataset.i]; qvPick = b ? b.key : null; qvQ = ""; render(true); const i = $("#qvq"); if (i) i.focus(); };
-  const qvSet = (b, p) => { bLinks()[b.key] = p.id; bApply(b, p); p.rev = p.rev || today(); qvPick = null; save(); render(true); };
+  /* Gehört der Kalender-Geburtstag zu jemand anderem als dem Kontakt selbst (z. B. dem Kind), kommt er als Angehöriger in die Familie */
+  const bName = b => b.title.replace(/\(.*?\)/g, " ").split(/\s+/).filter(w => w && !BSTOP.has(normName(w)) && !/^\d/.test(w)).map(w => w.replace(/[’'`]s$/, "")).join(" ").trim();
+  const bIsOther = (b, p) => { const n = normName(bName(b).split(" ")[0] || ""), f = normName(p.first || ""), nk = normName(p.nick || ""); return !!n && !!f && n !== f && n !== nk && !f.startsWith(n) && !n.startsWith(f); };
+  const bToKin = (b, p) => { const nm = bName(b) || b.title, bd = (b.year || 1604) + "-" + b.md; p.kin = p.kin || []; const k = p.kin.find(x => normName(x.name) === normName(nm)); if (k) { if (!k.bday) k.bday = bd; } else p.kin.push({ id: uid(), name: nm, rel: "Kind", bday: bd, death: "" }); };
+  const qvSet = (b, p) => { bLinks()[b.key] = p.id; if (bIsOther(b, p)) { bToKin(b, p); toast(bName(b) + " steht jetzt in der Familie von " + fullName(p) + ". Dort kannst du „Kind“ ändern."); } else bApply(b, p); p.rev = p.rev || today(); qvPick = null; save(); render(true); };
   ACT.qvlink = el => { const b = bOpen()[+el.dataset.i], p = S.people.find(x => x.id === el.dataset.id); if (!b || !p) return; qvSet(b, p); toast(b.title + " → " + fullName(p)); };
   ACT.qvnew = el => {
     const b = bOpen()[+el.dataset.i]; if (!b) return;
@@ -653,13 +670,13 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     <button class="btn" data-act="aufraeumen" style="width:100%;margin-top:8px">Kontakte aufräumen (${pending().length} offen)</button>
     <button class="btn" data-act="querv" style="width:100%;margin-top:8px">Geburtstags-Kalender zuordnen (${bOpen().length} offen)</button>
     ${S.settings.appleIgnored.length ? `<button class="btn" data-act="nunignore" style="width:100%;margin-top:8px">Aussortierte wieder vorschlagen (${S.settings.appleIgnored.length})</button>` : ""}
-    ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${N.alarmN ? " Gestellt: " + N.alarmN + "." : ""}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}` : ""}
+    ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${alarmDiag()}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}` : ""}
     <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>
     ${setH("In beide Richtungen")}
     ${P.MirellaContacts ? `<button class="drow" data-act="ntwoway"><span class="dt"><b>Kontakte ins iPhone-Telefonbuch schreiben</b><small>${N.twoWay === false ? "aus" : "an: Name, Geburtstag, neue Nummer und E-Mail. Es wird nie etwas gelöscht."}</small></span><span class="chev">${N.twoWay === false ? "○" : "●"}</span></button>` : ""}
     <p class="hint" style="margin-bottom:6px"><b>Mirella-Termine im iPhone-Kalender „Mirella“</b></p>
-    <div class="seg">${[["zeit", "Mit Uhrzeit"], ["alle", "Alle mit Datum"], ["aus", "Aus"]].map(([v, l]) => `<button data-act="ncalmode" data-m="${v}" aria-pressed="${calMode() === v}">${l}</button>`).join("")}</div>
-    <p class="hint">Was du in Mirella einträgst, steht im iPhone-Kalender „Mirella“. Änderst du den Termin dort, ändert er sich auch in Mirella. Neue Termine, die du am iPhone in den Kalender „Mirella“ legst, erscheinen hier als Aufgabe.</p>`;
+    <div class="seg">${[["wahl", "Nur gewählte"], ["zeit", "Mit Uhrzeit"], ["alle", "Alle"], ["aus", "Aus"]].map(([v, l]) => `<button data-act="ncalmode" data-m="${v}" aria-pressed="${calMode() === v}">${l}</button>`).join("")}</div>
+    <p class="hint">To-dos und Einkäufe bleiben in Mirella und landen nicht im iPhone-Kalender. Bei „Nur gewählte“ steht dort nur, was du bei einer Aufgabe selbst mit „In den Kalender“ schickst. Änderst du den Termin dort, ändert er sich auch in Mirella. Neue Termine, die du am iPhone in den Kalender „Mirella“ legst, erscheinen hier als Aufgabe.</p>`;
   const origEinst2 = R.einstellungen;
   R.einstellungen = function () {
     const h = origEinst2.call(this); if (setSec) return h;

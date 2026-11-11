@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CAPACITOR_DEBUG</key>
-	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -26,14 +24,24 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Mirella liest deinen Geburtstags-Kalender und trägt Termine und Erinnerungen in deinen Kalender ein.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Mirella liest deinen Geburtstags-Kalender und trägt Termine und Erinnerungen in deinen Kalender ein.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Mirella trägt Termine und Erinnerungen in deinen Kalender ein.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Mirella fotografiert Belege, Dokumente und Notizen für dich.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Mirella übernimmt deine Kontakte mit Telefonnummern und Geburtstagen, damit sie dich an Anrufe erinnern kann.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Mirella zeigt dir das Wetter an deinem Standort.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mirella hört zu, wenn du ihr etwas sagst.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Mirella legt Fotos aus deiner Mediathek ab.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Mirella kann Erinnerungen in deiner Erinnerungen-App anlegen.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Mirella wandelt deine Sprache in Text um.</string>
 	<key>UIBackgroundModes</key>

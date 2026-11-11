@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos: IndexedDB "mirella" / "photos".
    Später ersetzt der Supabase-Sync (v0.7) die lokale Speicherung. */
 "use strict";
-const VERSION = "0.10";
+const VERSION = "0.11";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];

@@ -27,11 +27,15 @@ jobs:
         env:
           APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
         run: |
+          BODY=$(printf '%s' "$APNS_KEY_P8" | tr -d '\r' | sed -e 's/-----[A-Z ]*-----//g' | tr -d ' \n\t')
+          APNS_KEY_P8=$({ echo "-----BEGIN PRIVATE KEY-----"; printf '%s\n' "$BODY" | fold -w 64; echo "-----END PRIVATE KEY-----"; })
+          if ! printf '%s\n' "$APNS_KEY_P8" | openssl pkey -noout 2>/dev/null; then
+            echo "::error::Secret APNS_KEY_P8 ist kein gültiger Schlüssel (Länge ohne Rahmen: ${#BODY} Zeichen, erwartet etwa 200). Bitte den ganzen Inhalt der Push-Datei AuthKey_….p8 einfügen."; exit 1; fi
           PUSH_SECRET=$(printf '%s' "mirella-push:$SUPABASE_ACCESS_TOKEN" | sha256sum | cut -c1-48)
-          supabase secrets set --project-ref $PROJECT \
+          supabase secrets set --yes --project-ref $PROJECT \
             APPLE_TEAM_ID="${{ secrets.APPLE_TEAM_ID }}" \
             APNS_KEY_ID="${{ secrets.APNS_KEY_ID }}" \
             APNS_KEY_P8="$APNS_KEY_P8" \
             PUSH_SECRET="$PUSH_SECRET"
       - name: Funktion einspielen
-        run: supabase functions deploy push --project-ref $PROJECT --no-verify-jwt
+        run: supabase functions deploy push --yes --project-ref $PROJECT --no-verify-jwt

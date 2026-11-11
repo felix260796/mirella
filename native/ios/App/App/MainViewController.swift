@@ -7,5 +7,6 @@ class MainViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(MirellaAlarmPlugin())
         bridge?.registerPluginInstance(MirellaContactsPlugin())
         bridge?.registerPluginInstance(MirellaScanPlugin())
+        bridge?.registerPluginInstance(MirellaSystemPlugin())
     }
 }

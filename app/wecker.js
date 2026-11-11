@@ -99,6 +99,20 @@ async function planAlarm(w) {
   return w;
 }
 /* Route in Apple Karten zeigen */
+/* Termine mit Ort: Fahrzeit rechnen, damit „Jetzt musst du los“ auch dafür kommt (wie beim Wecker, hier mit dem Auto ab Zuhause) */
+let tripBusy = false;
+async function tripCheck() {
+  if (tripBusy) return; const lim = addDays(today(), 3);
+  const t = S.todos.find(x => !x.done && x.list === "todo" && x.ort && x.date && x.time && x.date >= today() && x.date <= lim && x.tripSig !== x.ort + "|" + x.date + "|" + x.time);
+  if (!t) return; tripBusy = true;
+  const sig = t.ort + "|" + t.date + "|" + t.time;
+  try {
+    const w = { to: t.ort, date: t.date, arrive: t.time, mode: "auto", bufMin: 5, prepMin: 0 }; await planAlarm(w);
+    if (w.leave && w.travelMin) { t.los = w.leave; t.losDate = w.leaveDate || t.date; t.fahrt = w.travelMin; } else { delete t.los; delete t.fahrt; }
+  } catch (_) { delete t.los; delete t.fahrt; }
+  t.tripSig = sig; tripBusy = false; save(); render(true);
+}
+setInterval(() => { tripCheck().catch(() => { tripBusy = false; }); }, 15000);
 function mapsUrl(w) { const m = MODES[modeOf(w)].maps; return `https://maps.apple.com/?saddr=${w.fromLat},${w.fromLon}&daddr=${w.toLat},${w.toLon}${m ? "&dirflg=" + m : ""}`; }
 const kmTxt = k => String(k).replace(".", ",") + " km";
 /* Name eines Weckers: eigener Name, sonst das Ziel */

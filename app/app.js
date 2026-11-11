@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.28";
+const VERSION = "0.29";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -196,6 +196,14 @@ function callPlanMap() {
 function callsForToday() { const m = callPlanMap(), t = today(); return S.people.filter(p => m[p.id] === t).sort((a, b) => (nextDue(a) || "9999") < (nextDue(b) || "9999") ? -1 : 1); }
 function pullPool() { const m = callPlanMap(), t = today(); return S.people.filter(p => !(p.calls || []).some(c => c.d === t)).filter(p => m[p.id] ? m[p.id] > t : (nextDue(p) && nextDue(p) > t && diffDays(t, nextDue(p)) <= 21)).sort((a, b) => (m[a.id] || nextDue(a)) < (m[b.id] || nextDue(b)) ? -1 : 1); }
 function planLabel(p) { const m = callPlanMap()[p.id]; if (!m) return null; const n = diffDays(today(), m); return n <= 0 ? "heute" : n === 1 ? "morgen" : fmtDate(m).replace(/^(\w+)\.?,? /, "$1. "); }
+/* Mittagessen vereinbaren: eigener Rhythmus je Kontakt, unabhängig von den Anrufen */
+const LUNCH = { "monatlich": 1, "alle 2 Monate": 2, "vierteljährlich": 3, "halbjährlich": 6, "jährlich": 12 };
+function lunchDue(p) {
+  if (!LUNCH[p.lunch] || p.arch || p.death) return null;
+  let due = p.lunchLast ? addMonths(p.lunchLast, LUNCH[p.lunch]) : today();
+  if (p.lunchSnooze && p.lunchSnooze > due) due = p.lunchSnooze;
+  return due;
+}
 function callState(p) { const d = nextDue(p); if (!d) return "none"; const n = diffDays(today(), d); return n < 0 ? "late" : n === 0 ? "due" : n <= 3 ? "soon" : "ok"; }
 function nextBirthday(p) {
   if (!p.bday || p.arch || p.death) return null;
@@ -307,7 +315,7 @@ function personCard(p, withCall) {
 function todoRow(t) {
   const pr = !t.done && prioOf(t), shop = t.list === "einkauf", q = shop ? L.qtyLabel(t) : "";
   const right = shop ? (t.done ? "" : `<span class="qbtns"><button class="mini" data-act="qty" data-id="${t.id}" data-n="-1" aria-label="weniger">−</button><button class="mini" data-act="qty" data-id="${t.id}" data-n="1" aria-label="mehr">+</button></span>`) : todoPersonBtn(t);
-  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}${t.ort && !t.done ? `<div class="meta">📍 ${esc(t.ort)}${t.los ? " · los um " + esc(t.los) + " (" + t.fahrt + " Min.)" : ""}</div>` : ""}</div>${t.ort && !t.done ? routeBtn(t.ort) : ""}${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}${t.ort && !t.done ? `<div class="meta">📍 ${esc(t.ort)}${t.los ? " · los um " + esc(t.los) + " (" + t.fahrt + " Min.)" : t.tripErr && t.time ? " · Fahrzeit fehlt: " + esc(t.tripErr) : ""}</div>` : ""}</div>${t.ort && !t.done ? routeBtn(t.ort) : ""}${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
 }
 /* Routen-Symbol: öffnet Apple Karten mit der Route vom jetzigen Standort zur Adresse */
 const ROUTE_IC = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12z"/><path d="M8.5 13.5v-2a1 1 0 0 1 1-1H15"/><path d="m13 8.5 2 2-2 2"/></svg>';
@@ -336,6 +344,7 @@ const R = {
     const dueCalls = callsForToday();
     const shownCalls = dueCalls, doneCalls = callsToday(), pool = pullPool();
     const leave = S.todos.filter(x => x.list === "todo" && !x.done && x.trig === "verlassen");
+    const lunches = S.people.filter(p => { const d = lunchDue(p); return d && d <= t; });
     const dueTodos = S.todos.filter(x => x.list === "todo" && !x.done && x.trig !== "verlassen" && ((x.date && x.date <= t) || (+x.prio === 1 && !x.date))).sort((a, b) => (a.date + (a.time || "")) < (b.date + (b.time || "")) ? -1 : 1);
     const bdays = S.people.filter(p => !heuteSkip(p)).map(p => [p, nextBirthday(p)]).filter(([, b]) => b && diffDays(t, b) <= S.settings.giftLead).sort((a, b) => a[1] < b[1] ? -1 : 1);
     const docs = S.docs.filter(x => x.until && diffDays(t, x.until) <= 60).sort((a, b) => a.until < b.until ? -1 : 1);
@@ -344,6 +353,7 @@ const R = {
     S.people.forEach(p => !p.arch && (p.ask || []).forEach(a => { if (!a.done) asks.push([p, a]); }));
     const counts = [];
     if (dueCalls.length) counts.push(dueCalls.length === 1 ? "ein Anruf" : dueCalls.length + " Anrufe");
+    if (lunches.length) counts.push(lunches.length === 1 ? "ein Mittagessen zum Vereinbaren" : lunches.length + " Mittagessen zum Vereinbaren");
     if (dueTodos.length) counts.push(dueTodos.length === 1 ? "eine Aufgabe" : dueTodos.length + " Aufgaben");
     const nB = bdays.filter(([, b]) => b === t).length; if (nB) counts.push(nB === 1 ? "ein Geburtstag" : nB + " Geburtstage");
     const one = counts.length === 1 && /^ein/.test(counts[0]);
@@ -361,21 +371,24 @@ const R = {
     }
     if (leave.length) h2 += `<div class="sec"><span class="label">Bevor du losgehst</span></div><div class="morning">${leave.map(x => `<label class="chk"><input type="checkbox" data-act="toggle" data-id="${x.id}"><span>${esc(x.t)}</span></label>`).join("")}</div>`;
     if (dueCalls.length || doneCalls) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length ? dueCalls.length + " heute" : ""}${doneCalls ? (dueCalls.length ? " · " : "") + doneCalls + " erledigt" : ""}</span></div>${dueCalls.map(p => personCard(p, true)).join("")}${!dueCalls.length ? `<div class="swipehint" style="text-align:left">Für heute alle Anrufe geschafft. 👍</div>` : ""}${pool.length && dueCalls.length < 2 ? `<button class="btn" data-act="pullcalls" style="width:100%;margin-top:6px">Weitere Anrufe vorziehen (${Math.min(pool.length, +S.settings.maxCalls || 3)} von ${pool.length})</button>` : ""}`;
+    if (lunches.length) h2 += `<div class="sec"><span class="label">Mittagessen vereinbaren</span><span class="label">${lunches.length}</span></div>${lunches.map(p => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(p.lunch)} · ${p.lunchLast ? "zuletzt " + esc(fmtDate(p.lunchLast)) : "noch nie"}</div><div class="actrow"><button class="mini" data-act="lunchset" data-id="${p.id}">Termin steht</button><button class="mini" data-act="lunchlater" data-id="${p.id}">Später</button></div></span></div>`).join("")}`;
     const quit = S.people.filter(p => !p.arch && gaveUp(p));
     if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
     const kins = kinSoon(S.settings.giftLead).filter(x => !heuteSkip(x.p));
+    if (dueTodos.length) h2 += `<div class="sec"><span class="label">Aufgaben</span><span class="label">${dueTodos.length}</span></div>${dueTodos.sort(byPrio).map(todoRow).join("")}`;
+    const bToday = bdays.filter(([, b]) => b === t), bSoon = bdays.filter(([, b]) => b !== t), bCard = ([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : (n === 1 ? "morgen" : "in " + n + " Tagen") + " · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; };
+    if (bToday.length) h2 += `<div class="sec"><span class="label">Heute Geburtstag</span></div>${bToday.map(bCard).join("")}`;
+    if (shop) h2 += `<div class="sec"><span class="label">Einkaufsliste</span></div><div class="card" role="button" tabindex="0" data-act="shoplist"><span class="av">🛒</span><span><div class="t">${shop} ${shop === 1 ? "Sache" : "Sachen"} offen</div><div class="s">Antippen für die Liste</div></span><button class="mini" data-act="shopmode" data-on="1">Einkaufen gehen</button></div>`;
     if (kins.length) h2 += `<div class="sec"><span class="label">Geburtstage in der Familie</span></div>${kins.map(({ p, k, b }) => { const n = diffDays(t, b), age = ageAt(k, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎂</span><span style="min-width:0"><div class="t">${esc(k.name)}${age ? ` wird ${age}` : ""}</div><div class="s">${esc(k.rel || "Familie")} von ${esc(fullName(p))} · ${n === 0 ? "heute!" : n === 1 ? "morgen" : "in " + n + " Tagen"}</div></span><span class="chev">›</span></div>`; }).join("")}`;
-    if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : (n === 1 ? "morgen" : "in " + n + " Tagen") + " · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
+    if (bSoon.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bSoon.map(bCard).join("")}`;
     const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && !p.death && !heuteSkip(p) && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
     if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
     const md = t.slice(5), mem = [];
     S.people.forEach(p => { if (!p.death || p.arch) return; if (p.death.slice(5) === md) mem.push([p, "Todestag"]); if (p.bday && p.bday.slice(5) === md) mem.push([p, "Geburtstag"]); });
     if (mem.length) h2 += `<div class="sec"><span class="label">In Gedenken</span></div>${mem.map(([p, k]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🕯️</span><span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">heute ${k}</div></span></div>`).join("")}`;
-    if (dueTodos.length) h2 += `<div class="sec"><span class="label">Aufgaben</span><span class="label">${dueTodos.length}</span></div>${dueTodos.sort(byPrio).map(todoRow).join("")}`;
     h2 += HOOKS.heute.map(f => f()).join("");
     if (asks.length) h2 += `<div class="sec"><span class="label">Nachfragen</span></div>${asks.slice(0, 5).map(([p, a]) => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(a.t)}</div></span></div>`).join("")}`;
     if (docs.length) h2 += `<div class="sec"><span class="label">Dokumente laufen ab</span></div>${docs.map(x => `<div class="card" role="button" tabindex="0" data-act="area" data-id="doku"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(x.name)}</div><div class="s">gültig bis ${esc(fmtDate(x.until))}</div></span>${x.until < t ? '<span class="pill late">abgelaufen</span>' : '<span class="pill">bald</span>'}</div>`).join("")}`;
-    if (shop) h2 += `<div class="sec"><span class="label">Einkaufsliste</span></div><div class="card" role="button" tabindex="0" data-act="shoplist"><span class="av">🛒</span><span><div class="t">${shop} ${shop === 1 ? "Sache" : "Sachen"} offen</div><div class="s">Antippen für die Liste</div></span><button class="mini" data-act="shopmode" data-on="1">Einkaufen gehen</button></div>`;
     return h2;
   },
   menschen() {
@@ -448,7 +461,7 @@ const R = {
       if (off) body += `<div class="kwc">${isoWeek(iso(new Date(calY, calM, 1, 12)))}</div>`;
       for (let i = 0; i < off; i++) body += "<div></div>";
       for (let d = 1; d <= n; d++) { const k = iso(new Date(calY, calM, d, 12)), e = ev[k] || []; if ((off + d - 1) % 7 === 0) body += `<div class="kwc">${isoWeek(k)}</div>`; body += `<button class="mc${k === today() ? " today" : ""}${k === selDate ? " sel" : ""}" data-act="selday" data-d="${k}" aria-label="${d}. ${MN[calM]}"><span>${d}</span><span class="dots">${[...new Set(e.map(x => x.c))].slice(0, 4).map(c => `<i class="d-${c}"></i>`).join("")}</span></button>`; }
-      body += "</div>";
+      body += "</div>" + filt;
       body += `<div class="sec"><span class="label">${WDL[dd.getDay()]}, ${dd.getDate()}. ${MN[dd.getMonth()]} · KW ${isoWeek(selDate)}</span><button class="mini" data-act="newtodo" data-d="${selDate}">+ Eintrag</button></div>` + dayList(selDate);
     } else if (calView === "tag") {
       body = `<div class="sec"><span class="label">${selDate === today() ? "Heute" : relDate(selDate)}</span><button class="mini" data-act="newtodo" data-d="${selDate}">+ Eintrag</button></div>` + dayList(selDate);
@@ -461,7 +474,7 @@ const R = {
       let lastW = null;
       body = keys.length ? keys.map(k => { const d = D(k), w = isoWeek(k), wh = w !== lastW ? `<div class="sec"><span class="label">Kalenderwoche ${w}</span></div>` : ""; lastW = w; return wh + `<div class="cal-day"><div class="d">${WD[d.getDay()]}<b>${d.getDate()}</b>${MN[d.getMonth()].slice(0, 3)}</div><div>${ev[k].map(evRow).join("")}</div></div>`; }).join("") : empty("In den nächsten 60 Tagen steht nichts an.");
     }
-    return topbar("Kalender") + seg + nav + body + filt + '<p class="swipehint" style="margin-top:14px">Wischen oder Pfeile: blättern · Tipp auf den Titel: Monat und Jahr wählen</p>';
+    return topbar("Kalender") + seg + nav + body + (calView === "monat" ? "" : filt) + '<p class="swipehint" style="margin-top:14px">Wischen oder Pfeile: blättern · Tipp auf den Titel: Monat und Jahr wählen</p>';
   },
   bereich() {
     const A = areaById(area); if (!A) { view = "heute"; return R.heute(); }
@@ -909,14 +922,14 @@ function todoForm(t, preset = {}) {
   <div class="fgrid"><div class="fld"><label for="a-rep">Wiederholen</label><select id="a-rep">${REPS.map(r => `<option${r === (v.rep || "nie") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
   <div class="fld"><label for="a-area">Bereich</label><select id="a-area"><option value="">kein Bereich</option>${AREAS.map(a => `<option value="${a.id}"${a.id === v.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div></div>
   <label class="tgl big"><input type="checkbox" id="a-nerv"${v.nerv ? " checked" : ""}><span><b>Nerv-Modus</b><small>meldet sich, bis es erledigt ist. Zum Ausschalten Haken wegnehmen.</small></span></label>
-  ${t ? todoDocs(t) : '<p class="swipehint" style="text-align:left;margin:8px 0 0">Rechnung oder Dokument dazu? Erst speichern, dann die Aufgabe antippen und anhängen.</p>'}
+  ${t ? todoDocs(t) : ""}
   ${t && t.date ? `<button class="btn" data-act="ics" data-id="${t.id}" style="width:100%;margin-top:8px">⏰ Zusätzlich als Wecker in den iPhone-Kalender</button>` : ""}
   <div class="row2">${t ? `<button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savetodo" data-id="${t ? t.id : ""}">Speichern</button></div></div>`,
     () => { $("#a-trig").onchange = e => { $("#f-time").hidden = e.target.value === "verlassen"; }; addrSuggest($("#a-ort"), $("#a-ort-sug"), true); });
 }
 function todoDocs(t) {
   const docs = S.docs.filter(d => d.ref === t.id);
-  return `<div class="block" style="margin-top:10px"><div class="bh"><h4>Dokumente dazu</h4><span class="label">${docs.length || ""}</span></div>${docs.length ? docs.map(docRow).join("") : '<div class="swipehint" style="text-align:left;margin:0">z. B. die Rechnung zur Zahnreinigung. Bleibt fest an dieser Aufgabe, auch wenn sie sich wiederholt.</div>'}<div class="row2" style="margin-top:8px"><button class="btn" type="button" data-act="pdffor" data-id="${t.id}">📄 PDF</button><button class="btn" type="button" data-act="docfortodo" data-id="${t.id}">📷 Foto / Scan</button></div></div>`;
+  return `${docs.length ? `<div style="margin-top:8px">${docs.map(docRow).join("")}</div>` : ""}<div class="docmini"><span>Anhang:</span><button type="button" data-act="pdffor" data-id="${t.id}">PDF</button><button type="button" data-act="docfortodo" data-id="${t.id}">Foto / Scan</button></div>`;
 }
 function saveTodo(id) {
   const w = $("#a-what").value.trim(); if (!w) { toast("Bitte eintragen, was zu tun ist"); return; }
@@ -1013,6 +1026,7 @@ function personForm(p) {
   <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"><div class="fwarn" id="w-mail" hidden></div></div>
   <div class="fld"><label>Gruppe</label><div class="chips" id="c-grps">${grpChips(v.group)}</div><input type="hidden" id="c-grp" value="${esc(v.group || "")}"></div>
   <div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}${c === "nie" ? " (nur Geburtstag merken)" : ""}</option>`).join("")}</select></div>
+  <div class="fld"><label for="c-lunch">Mittagessen vereinbaren</label><select id="c-lunch"><option value="">nie</option>${Object.keys(LUNCH).map(c => `<option value="${c}"${c === v.lunch ? " selected" : ""}>${c}</option>`).join("")}</select></div>
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.bday))}" autocomplete="off"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
   <div class="fld"><label for="c-woher">Woher kenne ich ihn/sie?</label><input id="c-woher" list="c-woher-l" value="${esc(v.woher || "")}" placeholder="z. B. Schule, Verein, Arbeit" autocomplete="off"><datalist id="c-woher-l">${[...new Set(S.people.map(x => x.woher).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de")).map(x => `<option value="${esc(x)}">`).join("")}</datalist></div>
   <label class="tgl"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
@@ -1092,7 +1106,7 @@ function mergeInto(t, src, label) {
 }
 function readPersonForm() {
   const bd = L.parseBday($("#c-bday").value), dd = L.parseBday($("#c-death").value);
-  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tel2: $("#c-tel2") ? { n: $("#c-tel2").value.trim(), l: $("#c-tel2l").value } : null, woher: $("#c-woher") ? $("#c-woher").value.trim() : "" };
+  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, lunch: $("#c-lunch") ? $("#c-lunch").value : "", group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tel2: $("#c-tel2") ? { n: $("#c-tel2").value.trim(), l: $("#c-tel2l").value } : null, woher: $("#c-woher") ? $("#c-woher").value.trim() : "" };
 }
 function savePerson(id) {
   const data = readPersonForm(), first = data.first, last = data.last;
@@ -1233,6 +1247,11 @@ async function viewPhoto(id) {
 
 /* ---------- Sprache ---------- */
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+/* Nach dem Diktieren das Mikrofon wieder freigeben, damit Musik oder ein Hörbuch von selbst weiterläuft */
+function audioFree() {
+  clearTimeout(audioFree.t);
+  audioFree.t = setTimeout(() => { if (recOn || rec) return; const SY = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.MirellaSystem; if (SY && SY.audioRelease) SY.audioRelease().catch(() => { }); }, 1500);
+}
 /* In der echten iPhone-App gibt es kein Web-Speech: dort übernimmt Apples Spracherkennung (Capacitor-Plugin) */
 class NativeSR {
   constructor() { this.P = window.Capacitor.Plugins.SpeechRecognition; this.lang = "de-DE"; this.subs = []; }
@@ -1245,9 +1264,9 @@ class NativeSR {
       await this.P.start({ language: this.lang, partialResults: true, popup: false, maxResults: 1 });
     } catch (e) { this.onerror && this.onerror({ error: String(e && e.message || e) }); this._end(); }
   }
-  _end() { this.subs.forEach(s => s.remove && s.remove()); this.subs = []; this.onend && this.onend(); }
+  _end() { this.subs.forEach(s => s.remove && s.remove()); this.subs = []; this.onend && this.onend(); audioFree(); }
   stop() { this.P.stop().catch(() => { }); }
-  abort() { this.P.stop().catch(() => { }); this.subs.forEach(s => s.remove && s.remove()); this.subs = []; }
+  abort() { this.P.stop().catch(() => { }); this.subs.forEach(s => s.remove && s.remove()); this.subs = []; audioFree(); }
 }
 const SR = NATIVE && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition ? NativeSR : (window.SpeechRecognition || window.webkitSpeechRecognition);
 let rec = null, recOn = false, finalText = "";
@@ -1658,6 +1677,23 @@ const ACT = {
   deldoc: async el => { const d = S.docs.find(x => x.id === el.dataset.id); if (!ask(`„${d.name}“ löschen? Das Foto wird mit gelöscht.`)) return; if (d.photo) await photoDel(d.photo); S.docs = S.docs.filter(x => x !== d); save(); render(true); },
   delnote: el => { const n = S.notes.find(x => x.id === el.dataset.id); if (!n || !ask(`Notiz „${n.t}“ löschen?`)) return; S.notes = S.notes.filter(x => x !== n); save(); render(true); },
   vagain: () => recStart(),
+  lunchset: el => {
+    const p = S.people.find(x => x.id === el.dataset.id); if (!p) return;
+    let d = addDays(today(), 7); while ([0, 6].includes(D(d).getDay())) d = addDays(d, 1);
+    openSheet(`<p class="stitle">Mittagessen mit ${esc(p.first || fullName(p))}</p>
+    <div class="fgrid"><div class="fld"><label for="lu-date">Wann?</label><input type="date" id="lu-date" value="${d}"></div><div class="fld"><label for="lu-time">Uhrzeit</label><input type="time" id="lu-time" value="12:00"></div></div>
+    <div class="fld" style="position:relative"><label for="lu-ort">Wo? (leer lassen, wenn noch offen)</label><input id="lu-ort" placeholder="z. B. Tati-Café Stuttgart" autocomplete="off"><div id="lu-ort-sug" class="sug" hidden></div></div>
+    <div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="lunchsave" data-id="${p.id}">Eintragen</button></div>`, () => addrSuggest($("#lu-ort"), $("#lu-ort-sug"), true));
+  },
+  lunchsave: el => {
+    const p = S.people.find(x => x.id === el.dataset.id), d = $("#lu-date").value; if (!p || !d) { toast("Bitte ein Datum wählen"); return; }
+    const o = $("#lu-ort"), ort = o.dataset.label || o.value.trim();
+    const nt = { id: uid(), t: "Mittagessen mit " + fullName(p), pid: p.id, list: "todo", done: false, created: today(), date: d, time: $("#lu-time").value || "", trig: "zeit", rep: "nie", area: "", nerv: false, ort };
+    S.todos.push(nt); p.lunchLast = d; delete p.lunchSnooze;
+    if (ort && !o.dataset.label) placeFind(ort).then(full => { if (full) { nt.ort = full; save(); render(true); } });
+    save(); closeSheet(); render(true); toast(`Eingetragen für ${relDate(d)}. Danach erinnert Mirella ${p.lunch} wieder.`);
+  },
+  lunchlater: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; p.lunchSnooze = addDays(today(), 14); save(); render(true); toast("In 2 Wochen erinnert Mirella wieder"); },
   vnext: () => voiceReview(),
   vback: () => { const t = voiceReview.lastTxt || ""; voiceStart(); recStop(); $("#v-text").value = t; $("#v-state").textContent = "Ändern oder auf „Nochmal“ tippen."; },
   gruss: el => { const p = S.people.find(x => x.id === el.dataset.id); if (p) grussForm(p); },
@@ -1747,7 +1783,8 @@ function azGo(e) {
   const t = e.touches ? e.touches[0] : e, el = document.elementFromPoint(t.clientX, t.clientY), sp = el && el.closest && el.closest("#azbar span"); if (!sp) return;
   const l = sp.dataset.l; let tgt = document.getElementById("az-" + (l === "#" ? "x" : l));
   if (!tgt) { const all = [...document.querySelectorAll('[id^="az-"]')]; tgt = all.find(x => x.id.slice(3) > l) || all[all.length - 1]; }
-  if (tgt) tgt.scrollIntoView({ block: "start" });
+  const first = document.querySelector("#azbar span");
+  if (sp === first) { const sc = $("#screen"); if (sc) sc.scrollTop = 0; window.scrollTo(0, 0); } else if (tgt) tgt.scrollIntoView({ block: "start" });
   let pop = document.querySelector(".azpop"); if (!pop) { pop = document.createElement("div"); pop.className = "azpop"; document.body.appendChild(pop); } pop.textContent = l;
 }
 const azEnd = () => { const p = document.querySelector(".azpop"); if (p) p.remove(); };

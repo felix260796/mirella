@@ -70,9 +70,6 @@ public class MirellaAlarmPlugin: CAPPlugin, CAPBridgedPlugin {
 
 #if canImport(AlarmKit)
 @available(iOS 26.0, *)
-struct MirellaAlarmMeta: AlarmMetadata {}
-
-@available(iOS 26.0, *)
 enum MirellaAlarms {
     static func name(_ s: AlarmManager.AuthorizationState) -> String {
         switch s {

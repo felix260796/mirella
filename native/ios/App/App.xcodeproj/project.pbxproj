@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0C654A229A423730B8865298 /* MirellaAlarmMeta.swift in Sources */ = {isa = PBXBuildFile; fileRef = B628D3C315C734D99D45582E /* MirellaAlarmMeta.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4E8C88C1A24AFDAD4656553C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 95DA0F8D1194BC1567FCC29F /* Foundation.framework */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
@@ -26,6 +27,7 @@
 		A1BE11A0000000000000A006 /* MirellaContactsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BE11A0000000000000A005 /* MirellaContactsPlugin.swift */; };
 		A1BE11A0000000000000A008 /* MirellaScanPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BE11A0000000000000A007 /* MirellaScanPlugin.swift */; };
 		A1BE11A0000000000000A00A /* MirellaSystemPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BE11A0000000000000A009 /* MirellaSystemPlugin.swift */; };
+		BFB1AC61B720A596AC417F53 /* MirellaAlarmMeta.swift in Sources */ = {isa = PBXBuildFile; fileRef = B628D3C315C734D99D45582E /* MirellaAlarmMeta.swift */; };
 		C98202307829A5B095350BDC /* MirellaLiveBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCBA600E72F6FA277884C079 /* MirellaLiveBundle.swift */; };
 		D4340128997CCF38A14DC420 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67E8276305722F20BF92105 /* ShareViewController.swift */; };
 		EFA6111B62D71553F0EE69FE /* MirellaLive.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C261F529E8467A8FF09D8A6C /* MirellaLive.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -88,6 +90,7 @@
 		ACB5578E305F97F22C8EABBE /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
+		B628D3C315C734D99D45582E /* MirellaAlarmMeta.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MirellaAlarmMeta.swift; sourceTree = "<group>"; };
 		C261F529E8467A8FF09D8A6C /* MirellaLive.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MirellaLive.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1BFF4A2031A09298353BBBB /* MirellaTeilen.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MirellaTeilen.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
@@ -189,6 +192,7 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				490A863EFFD354579BD9D207 /* MirellaLosAttributes.swift */,
 				54B3D4609BE8B23F6628D1DB /* MirellaShareBox.swift */,
+				B628D3C315C734D99D45582E /* MirellaAlarmMeta.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -387,6 +391,7 @@
 				A1BE11A0000000000000A004 /* MainViewController.swift in Sources */,
 				549DF0481848C5E97C8E92F6 /* MirellaLosAttributes.swift in Sources */,
 				9D849532E91A41C401B696AE /* MirellaShareBox.swift in Sources */,
+				0C654A229A423730B8865298 /* MirellaAlarmMeta.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,6 +410,7 @@
 			files = (
 				C98202307829A5B095350BDC /* MirellaLiveBundle.swift in Sources */,
 				96F291D310E96FDFDB5CA263 /* MirellaLosAttributes.swift in Sources */,
+				BFB1AC61B720A596AC417F53 /* MirellaAlarmMeta.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

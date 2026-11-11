@@ -425,6 +425,16 @@
   const alarmDiag = () => N.alarmState !== "authorized" ? "" : (N.alarmErr ? ` <b>Achtung: Dein iPhone hat den letzten Wecker nicht angenommen (${esc(String(N.alarmErr).slice(0, 120))}). Die Mitteilung kommt trotzdem.</b>` : N.alarmAt ? ` Beim iPhone angemeldet: ${N.alarmN || 0}.` : "") + " Zur selben Minute kommt zusätzlich eine Mitteilung mit Ton als Sicherheit. In der Uhr-App von Apple steht der Wecker nicht, er gehört zu Mirella.";
   const origRes = resHTML;
   resHTML = function (w) { return origRes(w) + `<p class="hint">${alarmNote()}${alarmDiag()}</p>`; };
+  /* Probe: ein Wecker zur übernächsten vollen Minute, damit man den Sperrbildschirm prüfen kann */
+  ACT.nweckertest = async () => {
+    const A = P.MirellaAlarm; if (!A) return;
+    try {
+      const at = (Math.floor(Date.now() / 60e3) + 2) * 60e3, d = new Date(at), real = alarmList();
+      const r = await A.set({ alarms: real.concat([{ at, title: "Mirella Test-Wecker", near: 1 }]) });
+      N.alarmState = r.state; N.alarmSig = r.state === "authorized" ? JSON.stringify(real) : ""; N.alarmErr = r.error || ""; N.alarmN = r.count || 0; N.alarmAt = Date.now(); nSave(); render(true);
+      alert(r.state !== "authorized" ? "Mirella darf noch keine echten Wecker stellen (Zustand: " + r.state + "). Bitte unter Einstellungen › Apps › Mirella den Wecker erlauben." : r.error ? "Dein iPhone hat den Test-Wecker nicht angenommen:\n" + r.error : "Der Test-Wecker klingelt um " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + " Uhr. Sperre jetzt dein iPhone und warte. Er muss laut klingeln und groß auf dem Sperrbildschirm stehen.");
+    } catch (e) { alert("Der Test-Wecker ging nicht: " + (e && e.message || e)); }
+  };
   ACT.nwecker = async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; nSave(); await alarmSync(true); render(true); } catch (_) { toast("Das hat nicht geklappt"); } };
   let schedT = null;
   const origSave2 = save;
@@ -687,7 +697,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     <button class="btn" data-act="aufraeumen" style="width:100%;margin-top:8px">Kontakte aufräumen (${pending().length} offen)</button>
     <button class="btn" data-act="querv" style="width:100%;margin-top:8px">Geburtstags-Kalender zuordnen (${bOpen().length} offen)</button>
     ${S.settings.appleIgnored.length ? `<button class="btn" data-act="nunignore" style="width:100%;margin-top:8px">Aussortierte wieder vorschlagen (${S.settings.appleIgnored.length})</button>` : ""}
-    ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${alarmDiag()}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}` : ""}
+    ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${alarmDiag()}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}${N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nweckertest" style="width:100%;margin-top:8px">Wecker jetzt testen (klingelt in 1 bis 2 Minuten)</button>'}` : ""}
     <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>
     ${setH("In beide Richtungen")}
     ${P.MirellaContacts ? `<button class="drow" data-act="ntwoway"><span class="dt"><b>Kontakte ins iPhone-Telefonbuch schreiben</b><small>${N.twoWay === false ? "aus" : "an: Name, Geburtstag, neue Nummer und E-Mail. Es wird nie etwas gelöscht."}</small></span><span class="chev">${N.twoWay === false ? "○" : "●"}</span></button>` : ""}
@@ -797,8 +807,14 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       if (N.live === false || document.hidden) return;
       const x = nextLos(), sig = x ? x.at + "|" + x.titel + "|" + x.info : "";
       if (sig === (N.liveSig || "")) return;
-      try { if (x) { const r = await SY.losStart({ los: x.at, titel: x.titel, ziel: x.ziel, info: x.info }); if (!r.ok) { N.liveErr = r.reason || ""; nSave(); if (r.reason === "unavailable" || r.reason === "aus") { N.liveSig = sig; nSave(); } return; } N.liveErr = ""; } else await SY.losEnd(); N.liveSig = sig; nSave(); } catch (_) { }
+      try { if (x) { const r = await SY.losStart({ los: x.at, titel: x.titel, ziel: x.ziel, info: x.info }); if (!r.ok) { N.liveErr = r.reason || ""; nSave(); if (r.reason === "unavailable" || r.reason === "aus") { N.liveSig = sig; nSave(); } return; } N.liveErr = ""; } else await SY.losEnd(); N.liveSig = sig; nSave(); } catch (e) { N.liveErr = String(e && e.message || e).slice(0, 160); nSave(); }
     };
+    ACT.nlivetest = async () => {
+      let r; try { r = await SY.losStart({ los: Date.now() + 10 * 60e3, titel: "Test von Mirella", ziel: "Countdown", info: "läuft 10 Minuten" }); } catch (e) { r = { ok: false, reason: String(e && e.message || e) }; }
+      N.liveSig = ""; N.liveErr = r && r.ok ? "" : (r && r.reason || "unbekannt"); nSave(); render(true);
+      alert(r && r.ok ? "Der Countdown ist gestartet. Sperre jetzt das iPhone: Er muss auf dem Sperrbildschirm stehen." : "Das iPhone hat den Countdown nicht gestartet. Grund: " + liveWhy());
+    };
+    const liveWhy = () => { const e = N.liveErr || ""; return !e ? "" : e === "aus" ? "Live-Aktivitäten sind für Mirella ausgeschaltet. iPhone-Einstellungen › Apps › Mirella › Live-Aktivitäten einschalten." : e === "unavailable" ? "Dieses iPhone ist zu alt dafür (braucht iOS 16.2)." : e; };
     setTimeout(liveSync, 4000); setInterval(liveSync, 60000); document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(liveSync, 800); });
     ACT.nlive = () => { N.live = N.live === false; N.liveSig = ""; nSave(); if (N.live) liveSync(); else SY.losEnd().catch(() => { }); render(true); toast(N.live ? "Countdown auf dem Sperrbildschirm ist an" : "Countdown ist aus"); };
     // Teilen nach Mirella: was aus Mail, Safari, Fotos … geteilt wurde, beim Öffnen einsortieren
@@ -834,7 +850,9 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       ${(N.places || []).map(o => `<div class="listrow"><span class="grow">${esc(o.name)}<small>${o.exit ? "beim Weggehen" : "beim Ankommen"}${o.text ? " · " + esc(o.text) : ""}${o.shop ? " · mit Einkaufsliste" : ""}</small></span><button class="mini" data-act="nplacedel" data-id="${o.id}">Löschen</button></div>`).join("") || '<p class="hint" style="margin-top:0">Noch keine. Beispiel: „Du bist bei Rewe, 6 Sachen auf der Liste“ oder beim Verlassen der Wohnung „Schlüssel, Fenster zu?“.</p>'}
       <button class="btn" data-act="nplace" style="width:100%;margin-top:8px">+ Ort hinzufügen</button>
       ${setH("Sicherheit und Apple-KI")}
-      <button class="drow" data-act="nlive"><span class="dt"><b>Countdown „Jetzt musst du los“ auf dem Sperrbildschirm</b><small>${N.live === false ? "aus" : "an: ab 3 Stunden vorher, für Wecker und Termine mit Ort" + (N.liveErr === "aus" ? ". Live-Aktivitäten sind am iPhone ausgeschaltet (Einstellungen › Mirella)." : "")}</small></span><span class="chev">›</span></button>
+      <button class="drow" data-act="nlive"><span class="dt"><b>Countdown „Jetzt musst du los“ auf dem Sperrbildschirm</b><small>${N.live === false ? "aus" : "an: ab 3 Stunden vorher, für Wecker und Termine mit Ort"}</small></span><span class="chev">›</span></button>
+      <p class="hint">${(() => { const x = nextLos(); return x ? "Nächstes Losgehen: " + new Date(x.at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + " Uhr (" + esc(x.titel) + ")." : "Gerade steht kein Losgehen in den nächsten 3 Stunden an. Der Countdown braucht einen Wecker oder eine Aufgabe mit Ort und Uhrzeit, bei der „los um …“ steht."; })()}${liveWhy() ? " <b>Letzter Fehler: " + esc(liveWhy()) + "</b>" : ""}</p>
+      <button class="btn" data-act="nlivetest" style="width:100%;margin-bottom:8px">Countdown jetzt testen (10 Minuten)</button>
       <button class="drow" data-act="nfiles"><span class="dt"><b>Dokumente auch in der Dateien-App</b><small>${N.files === false ? "aus" : "an: Auf meinem iPhone › Mirella, nach Ordnern (" + Object.keys(N.filed || {}).length + " abgelegt)"}</small></span><span class="chev">›</span></button>
       <button class="drow" data-act="nfaceid"><span class="dt"><b>Mirella nur mit Face ID öffnen</b><small>${N.faceId ? "an" : "aus"}</small></span><span class="chev">›</span></button>
       <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;

@@ -36,6 +36,12 @@
 	<string>Mirella fotografiert Belege, Dokumente und Notizen für dich.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Mirella übernimmt deine Kontakte mit Telefonnummern und Geburtstagen, damit sie dich an Anrufe erinnern kann.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Mirella öffnet sich auf Wunsch nur mit deinem Gesicht.</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Mirella zeigt dir das Wetter an deinem Standort.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -70,11 +70,11 @@ const KI_ITEMS = {
   properties: {
     items: {
       type: "array", items: {
-        type: "object", additionalProperties: false, required: ["type", "t", "date", "time", "person", "ok", "amount", "shop", "cat", "vorschlag"],
+        type: "object", additionalProperties: false, required: ["type", "t", "date", "time", "person", "ok", "amount", "shop", "cat", "vorschlag", "ort"],
         properties: {
           type: { type: "string", enum: ["todo", "shop", "note", "call", "expense"] },
           t: { type: "string" }, date: { type: "string" }, time: { type: "string" }, person: { type: "string" },
-          ok: { type: "boolean" }, amount: { type: ["number", "null"] }, shop: { type: "string" }, cat: { type: "string" }, vorschlag: { type: "boolean" }
+          ok: { type: "boolean" }, amount: { type: ["number", "null"] }, shop: { type: "string" }, cat: { type: "string" }, vorschlag: { type: "boolean" }, ort: { type: "string" }
         }
       }
     }
@@ -99,13 +99,15 @@ Arten von Einträgen:
 
 Mitdenken: Ergibt sich aus dem Gesagten etwas, woran ein aufmerksamer Mensch später denken würde, schlage dafür zusätzliche todo-Einträge vor und setze bei ihnen "vorschlag" auf true. Beispiel: "Tim fliegt am Freitag nach China" ergibt eine Notiz zu Tim und die Vorschläge "Tim gute Reise wünschen" am Donnerstag und "Tim fragen, wie China war" etwa eine Woche nach der Rückkehr. Höchstens zwei Vorschläge, nur wenn sie wirklich naheliegen. Bei reinen Einkäufen, Ausgaben oder klaren Aufgaben keine Vorschläge.
 
+Ort: Nennt er bei einer Aufgabe oder einem Treffen einen Ort (Café, Restaurant, Firma, Adresse), schreibe ihn mit Stadt in "ort", zum Beispiel "Tati-Café Stuttgart". Der Ort gehört dann nicht noch einmal in "t".
+
 Felder, die nicht zur Art passen, bleiben leer ("" bzw. null, "ok" true, "vorschlag" false). Erfinde keine Personen: steht jemand nicht in der Kontaktliste, wird es eine Aufgabe mit dem Namen im Text.
 
 Zeitwörter: "nachher" und "später" heißen in zwei Stunden (auf die Viertelstunde gerundet; wäre das nach 21 Uhr, dann morgen 9 Uhr), "gleich" heißt in 30 Minuten, "heute Abend" 19 Uhr, "morgen früh" 8 Uhr.
 
 Heute ist ${WDL[d.getDay()]}, der ${today()}, es ist ${pad(d.getHours())}:${pad(d.getMinutes())} Uhr.
 Kontakte, die gemeint sein könnten: ${cand.length ? cand.map(p => fullName(p) + (p.nick ? " (Spitzname " + p.nick + ")" : "")).join("; ") : "keine passenden gefunden"}.`;
-  const pr = (prior || []).map(x => { const p = x.pid && S.people.find(y => y.id === x.pid); return { type: x.type, t: (x.t || "").replace(/^Vorschlag: /, ""), date: x.date || "", time: x.time || "", person: p ? fullName(p) : "", amount: x.amount == null ? null : x.amount, shop: x.shop || "", cat: x.cat || "", ok: x.ok !== false }; });
+  const pr = (prior || []).map(x => { const p = x.pid && S.people.find(y => y.id === x.pid); return { type: x.type, t: (x.t || "").replace(/^Vorschlag: /, ""), date: x.date || "", time: x.time || "", person: p ? fullName(p) : "", amount: x.amount == null ? null : x.amount, shop: x.shop || "", cat: x.cat || "", ok: x.ok !== false, ort: x.ort || "", vorschlag: false }; });
   const user = prior ? `Bisher verstandene Einträge (JSON):\n${JSON.stringify(pr)}\n\nDer Nutzer hat danach weitergesprochen: „${text}“\n\nGib die vollständige Liste zurück: ändere die Einträge, auf die sich das Gesagte bezieht (zum Beispiel eine andere Uhrzeit), lasse die anderen unverändert und ergänze neue, wenn er etwas Neues sagt. Keine neuen Vorschläge.` : text;
   const raw = await kiCall({ system, user, hard: false, schema: KI_ITEMS, maxTokens: 3000 });
   const out = [];
@@ -115,7 +117,7 @@ Kontakte, die gemeint sein könnten: ${cand.length ? cand.map(p => fullName(p) +
     else if (it.type === "expense") out.push({ type: "expense", amount: typeof it.amount === "number" ? it.amount : null, shop: it.shop || "", cat: catList().includes(it.cat) ? it.cat : "Sonstiges", t: it.t || it.shop || "" });
     else if (it.type === "call" && p) out.push({ type: "call", pid: p.id, ok: it.ok !== false, t: it.ok === false ? "nicht erreicht" : "erreicht" });
     else if (it.type === "note" && p && it.t) out.push({ type: "note", pid: p.id, t: it.t });
-    else if (it.t) out.push({ type: "todo", t: (it.vorschlag ? "Vorschlag: " : "") + it.t, date: /^\d{4}-\d\d-\d\d$/.test(it.date) ? it.date : "", time: /^\d\d:\d\d$/.test(it.time) ? it.time : "", trig: "", pid: p ? p.id : "" });
+    else if (it.t) out.push({ type: "todo", t: (it.vorschlag ? "Vorschlag: " : "") + it.t, date: /^\d{4}-\d\d-\d\d$/.test(it.date) ? it.date : "", time: /^\d\d:\d\d$/.test(it.time) ? it.time : "", trig: "", pid: p ? p.id : "", ort: it.ort || "" });
   }
   return out;
 }

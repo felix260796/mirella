@@ -353,7 +353,7 @@
       const pend = (await P.LocalNotifications.getPending()).notifications || [];
       if (pend.length) await P.LocalNotifications.cancel({ notifications: pend.map(x => ({ id: x.id })) });
       const now = Date.now(), list = []; let id = 1;
-      const add = (at, title, body, extra) => { if (at > now + 30e3 && list.length < 60) list.push({ id: id++, title, body, schedule: { at: new Date(at), allowWhileIdle: true }, extra: extra || {} }); };
+      const add = (at, title, body, extra) => { if (at > now + 30e3 && list.length < 60) list.push({ id: id++, title, body, schedule: { at: new Date(at), allowWhileIdle: true }, extra: extra || {}, ...(extra && extra.todo ? { actionTypeId: "MTODO" } : extra && extra.call ? { actionTypeId: "MCALL" } : {}) }); };
       const st = S.settings, nagMin = +(st.nervEvery || 30), nv = st.nerv || {};
       // Wecker zuerst (iOS erlaubt nur 64 geplante Mitteilungen): immer zusätzlich zum echten Wecker eine Mitteilung zur selben Minute,
       // dazu "Jetzt musst du los" zur Abfahrtszeit.
@@ -363,6 +363,7 @@
         if (t.done || !t.date) continue;
         const at = new Date(t.date + "T" + (t.time || "09:00") + ":00").getTime();
         add(at, t.list === "shop" ? "Einkaufen" : "Mirella", t.t, { todo: t.id });
+        if (t.los && t.ort && t.time) { const la = +new Date((t.losDate || t.date) + "T" + t.los + ":00"), wo = String(t.ort).split(",")[0]; add(la - 15 * 60e3, "In 15 Minuten losfahren", t.t + ": " + t.fahrt + " Min. bis " + wo + "."); add(la, "Jetzt musst du los", "Damit du um " + t.time + " bei „" + t.t + "“ in " + wo + " bist (" + t.fahrt + " Min. mit dem Auto)."); }
         if (t.nerv && nv.aufgaben !== 0) for (let k = 1; k <= 6; k++) { const n2 = new Date(Math.max(at, now) + k * nagMin * 60e3); if (inWin(n2, 8, 21)) add(n2.getTime(), "Noch offen", t.t, { todo: t.id }); }
       }
       // Anrufe: werktags um 8 Uhr eine Sammel-Erinnerung, Nerv-Modus bis 18 Uhr
@@ -372,13 +373,13 @@
         const day = new Date(); day.setDate(day.getDate() + dd); if (day.getDay() === 0 || day.getDay() === 6) continue;
         const names = (dd === 0 ? due : live.filter(p => { const n = nextDue(p); return n && n <= isoOf(day.getTime()); })).slice(0, st.maxCalls || 3).map(p => p.first || fullName(p));
         if (!names.length) continue;
-        for (const hh of (nv.anrufe === 0 ? [8] : [8, 11, 14, 17])) { day.setHours(hh, 0, 0, 0); add(day.getTime(), "Anrufen", names.join(", ")); }
+        for (const hh of (nv.anrufe === 0 ? [8] : [8, 11, 14, 17])) { day.setHours(hh, 0, 0, 0); add(day.getTime(), "Anrufen", names.join(", "), dd === 0 && due[0] ? { call: due[0].id } : {}); }
       }
       // Geburtstage um 9 Uhr
       for (const p of live) {
         const b = nextBirthday(p); if (!b) continue;
         const at = new Date(b + "T09:00:00").getTime(); if (at - now > 30 * 864e5) continue;
-        add(at, "Geburtstag", (p.first || fullName(p)) + " hat heute Geburtstag 🎉");
+        add(at, "Geburtstag", (p.first || fullName(p)) + " hat heute Geburtstag 🎉", { bday: p.id });
       }
       for (const { p, k, b } of kinSoon(30)) { add(new Date(b + "T09:00:00").getTime(), "Geburtstag", k.name + " (" + (k.rel || "Familie") + " von " + fullName(p) + ") hat heute Geburtstag 🎉"); }
       for (const p of live) {
@@ -436,7 +437,23 @@
     try { await sb("/rest/v1/mirella_device", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ token: t.value, user_id: SY.auth.user.id, platform: "ios" }) }); } catch (e) { console.warn("Push-Gerät", e); }
   });
   P.PushNotifications.addListener("pushNotificationActionPerformed", a => { const d = a.notification && a.notification.data || {}; if (d.view) { view = d.view; render(); } });
-  P.LocalNotifications.addListener("localNotificationActionPerformed", a => { const x = a.notification && a.notification.extra || {}; if (x.todo) { view = "todos"; render(); } });
+  /* Knöpfe unter den Mitteilungen: Erledigt, In 1 Stunde, Morgen, Jetzt anrufen */
+  try { P.LocalNotifications.registerActionTypes({ types: [
+    { id: "MTODO", actions: [{ id: "done", title: "Erledigt" }, { id: "h1", title: "In 1 Stunde" }, { id: "morgen", title: "Morgen" }] },
+    { id: "MCALL", actions: [{ id: "call", title: "Jetzt anrufen", foreground: true }, { id: "spaeter", title: "Später" }] }] }); } catch (_) { }
+  P.LocalNotifications.addListener("localNotificationActionPerformed", a => {
+    const x = a.notification && a.notification.extra || {}, act = a.actionId || "tap";
+    if (x.todo) {
+      const t = S.todos.find(y => y.id === x.todo);
+      if (t && act === "done") { if (!t.done) toggleTodo(t.id); toast("Erledigt: " + t.t); }
+      else if (t && act === "h1") { const d = new Date(Date.now() + 3600e3); t.date = isoOf(d.getTime()); t.time = pad(d.getHours()) + ":" + pad(d.getMinutes()); save(); toast("In 1 Stunde wieder: " + t.t); }
+      else if (t && act === "morgen") { t.date = addDays(today(), 1); save(); toast("Auf morgen verschoben: " + t.t); }
+      else { view = "todos"; }
+      render(); scheduleLocal(); return;
+    }
+    if (x.call) { const p = S.people.find(y => y.id === x.call); if (p && act === "call" && p.tel) { pendingCall = p.id; N.dialAt = Date.now(); location.href = "tel:" + p.tel.replace(/[^\d+]/g, ""); } else { view = "heute"; render(); } return; }
+    if (x.bday) { const p = S.people.find(y => y.id === x.bday); if (p) { cur = p.id; view = "akte"; render(); if (p.tel) grussForm(p); } }
+  });
 
   /* ---------- Kontakte aufräumen ---------- */
   let clF = "alle", clSel = new Set(), clMax = 120, clQ = "";
@@ -712,6 +729,84 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     for (const x of NEED) { if (N.asked[x.k] || !x.missing()) continue; try { await x.save(); } catch (_) { } N.asked[x.k] = 1; }
     nSave(); save(); closeAll(); render(true); toast("Gespeichert");
   };
+  /* ---------- Was das iPhone selbst kann (MirellaSystemPlugin) ---------- */
+  const SY = P.MirellaSystem;
+  const b64Of = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = rej; r.readAsDataURL(blob); });
+  if (SY) {
+    // Texterkennung von Apple statt Tesseract: gleiche Aufrufstelle, nichts wird aus dem Internet geladen
+    window.Tesseract = { recognize: async blob => { const r = await SY.ocr({ images: [await b64Of(blob)] }); return { data: { text: (r.texts || [])[0] || "" } }; } };
+    // Live-Kamera: angetippten Text übernehmen
+    ACT.livescan = async () => {
+      closeSheet(); let r; try { r = await SY.liveScan(); } catch (e) { toast(e && e.message || "Die Kamera geht gerade nicht"); return; }
+      const t = (r && r.text || "").trim(); if (!t) return;
+      const tel = (t.match(/(\+|0)[\d\s\/().-]{6,}\d/) || [])[0];
+      openSheet(`<p class="stitle">Das habe ich gelesen</p><div class="fld"><textarea id="ls-t" rows="4">${esc(t)}</textarea></div><div style="display:grid;gap:8px">
+        ${tel ? `<a class="btn pri" href="tel:${esc(tel.replace(/[^\d+]/g, ""))}" style="text-decoration:none;text-align:center">📞 ${esc(tel.trim())} anrufen</a><button class="btn" data-act="lsperson" data-tel="${esc(tel.trim())}">Als neuen Kontakt anlegen</button>` : ""}
+        <button class="btn${tel ? "" : " pri"}" data-act="lsvoice">An Mirella geben (Aufgabe, Termin, Notiz)</button><button class="btn" data-act="lscopy">Kopieren</button></div>`);
+    };
+    ACT.lsvoice = () => { const t = $("#ls-t").value; voiceStart(); recStop(); $("#v-text").value = t; };
+    ACT.lscopy = () => { try { navigator.clipboard.writeText($("#ls-t").value); toast("Kopiert"); } catch (_) { toast("Kopieren geht hier nicht"); } };
+    ACT.lsperson = el => { closeSheet(); personForm(null); setTimeout(() => { const i = $("#c-tel"); if (i) { i.value = el.dataset.tel; i.dispatchEvent(new Event("input", { bubbles: true })); } }, 200); };
+    // Siri, Kurzbefehle, Action-Taste: "Sag Mirella …" kommt hier als Text an
+    const intentIn = async () => { try { const r = await SY.takeIntent(); const t = (r && r.text || "").trim(); if (!t || !N.setup) return; closeAll(); voiceStart(); recStop(); $("#v-text").value = t; voiceReview(); } catch (_) { } };
+    SY.addListener("intent", () => setTimeout(intentIn, 300)); setTimeout(intentIn, 1500);
+    // Anruf zu Ende: kurzer Anruf ohne Gespräch zählt als nicht erreicht, sonst fragt Mirella nach
+    SY.addListener("callEnded", d => {
+      const p = pendingCall && S.people.find(x => x.id === pendingCall); if (!p || !d || d.outgoing === false) return; pendingCall = null;
+      const go = () => { if (!d.connected || d.seconds < 20) { logCall(p, false); render(true); toast(fullName(p) + " nicht erreicht. Neuer Versuch ist geplant."); } else { callResult(p, false); const h = $("#sheetbody .swipehint"); if (h) h.textContent = "Das Gespräch ging " + (d.seconds < 90 ? d.seconds + " Sekunden" : Math.round(d.seconds / 60) + " Minuten") + ". Wie ist es gelaufen?"; } };
+      if (document.hidden) document.addEventListener("visibilitychange", function once() { if (!document.hidden) { document.removeEventListener("visibilitychange", once); setTimeout(go, 500); } }); else setTimeout(go, 500);
+    });
+    // Apple-KI auf dem iPhone (kostenlos, ohne Internet), wenn das Gerät sie hat
+    SY.kiStatus().then(r => { N.appleKi = r.state; nSave(); if (r.state === "available") window.appleKi = async (system, user) => (await SY.ki({ system, user })).text; }).catch(() => { });
+    // Erinnerungen nach Ort: Mitteilung beim Ankommen oder Verlassen
+    const placesSync = () => { const n = S.todos.filter(t => t.list === "einkauf" && !t.done).length; SY.setPlaces({ places: (N.places || []).map(o => ({ id: o.id, lat: o.lat, lon: o.lon, radius: o.r || 150, exit: !!o.exit, title: (o.exit ? "Du verlässt " : "Du bist bei ") + o.name, body: (o.text || "") + (o.shop && n ? (o.text ? " " : "") + n + (n === 1 ? " Sache" : " Sachen") + " auf der Einkaufsliste." : "") || "Mirella erinnert dich." })) }).catch(() => { }); };
+    let plSig = "";
+    setInterval(() => { const sg = JSON.stringify(N.places || []) + S.todos.filter(t => t.list === "einkauf" && !t.done).length; if (sg !== plSig) { plSig = sg; placesSync(); } }, 20000);
+    ACT.nplace = () => {
+      openSheet(`<p class="stitle">Erinnerung an einem Ort</p><div class="fld" style="position:relative"><label for="pl-o">Welcher Ort?</label><input id="pl-o" placeholder="z. B. Rewe Remseck oder deine Adresse" autocomplete="off"><div id="pl-sug" class="sug" hidden></div></div>
+      <div class="fld"><label for="pl-w">Wann?</label><select id="pl-w"><option value="">Wenn ich ankomme</option><option value="x">Wenn ich weggehe (z. B. Haustür)</option></select></div>
+      <div class="fld"><label for="pl-t">Was soll Mirella sagen?</label><input id="pl-t" placeholder="z. B. Schlüssel, Supplements, Fenster zu?" autocomplete="off"></div>
+      <label class="chk"><input type="checkbox" id="pl-s"> Einkaufsliste dazu nennen</label>
+      <div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="nplacesave">Speichern</button></div>`, () => addrSuggest($("#pl-o"), $("#pl-sug"), true));
+    };
+    ACT.nplacesave = () => { const i = $("#pl-o"); if (!i.dataset.lat) { toast("Bitte den Ort aus den Vorschlägen antippen"); return; } N.places = N.places || []; if (N.places.length >= 18) { toast("Mehr als 18 Orte erlaubt das iPhone nicht"); return; } N.places.push({ id: uid(), name: (i.dataset.label || i.value).split(",")[0], lat: +i.dataset.lat, lon: +i.dataset.lon, exit: !!$("#pl-w").value, text: $("#pl-t").value.trim(), shop: $("#pl-s").checked }); nSave(); placesSync(); closeSheet(); render(true); toast("Gespeichert"); };
+    ACT.nplacedel = el => { const o = (N.places || []).find(x => x.id === el.dataset.id); if (!o || !ask("Erinnerung bei " + o.name + " löschen?")) return; N.places = N.places.filter(x => x !== o); nSave(); placesSync(); render(true); };
+    // Dokumente zusätzlich in die Dateien-App legen (Auf meinem iPhone › Mirella › Ordner). Mirellas eigene Ablage bleibt, das ist eine Kopie.
+    const fname = x => String(x || "Dokument").replace(/[\/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+    const filesSync = async () => {
+      if (N.files === false) return; N.filed = N.filed || {};
+      for (const [id, path] of Object.entries(N.filed)) if (!S.docs.some(d => d.id === id)) { try { await SY.removeFile({ path }); } catch (_) { } delete N.filed[id]; }
+      let n = 0;
+      for (const d of S.docs) {
+        if (N.filed[d.id] || !d.photo || n >= 4) continue;
+        try { const blob = await photoGet(d.photo); if (!blob) continue; const ext = /pdf/.test(blob.type || d.type || "") ? "pdf" : /png/.test(blob.type || "") ? "png" : "jpg", path = fname(d.folder || "Sonstiges") + "/" + fname(d.name) + " " + (d.created || "") + "." + ext; await SY.saveFile({ path, data: await b64Of(blob) }); N.filed[d.id] = path; n++; } catch (_) { }
+      }
+      nSave();
+    };
+    setTimeout(filesSync, 8000); setInterval(filesSync, 60000);
+    ACT.nfiles = () => { N.files = N.files === false; nSave(); render(true); if (N.files) filesSync(); toast(N.files ? "Dokumente erscheinen in der Dateien-App" : "Es werden keine neuen Kopien mehr abgelegt"); };
+    // Face ID: nur als Schalter in den Einstellungen, zunächst aus
+    let lockedAt = 0;
+    const lock = async () => {
+      if (!N.faceId || $("#facelock")) return;
+      const d = document.createElement("div"); d.id = "facelock"; d.style.cssText = "position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px";
+      d.innerHTML = '<p class="big" style="margin:0">Mirella</p><button class="btn pri" id="faceopen">Mit Face ID öffnen</button>'; document.body.appendChild(d);
+      const tryIt = async () => { try { const r = await SY.faceId({ reason: "Mirella öffnen" }); if (r.ok || r.available === false) d.remove(); } catch (_) { } };
+      d.querySelector("#faceopen").addEventListener("click", tryIt); tryIt();
+    };
+    document.addEventListener("visibilitychange", () => { if (document.hidden) lockedAt = Date.now(); else if (lockedAt && Date.now() - lockedAt > 120e3) lock(); });
+    lock();
+    ACT.nfaceid = async () => { if (!N.faceId) { const r = await SY.faceId({ reason: "Face ID für Mirella einschalten" }).catch(() => ({})); if (!r.ok) { toast(r.available === false ? "Face ID ist auf diesem iPhone nicht eingerichtet" : "Nicht eingeschaltet"); return; } } N.faceId = !N.faceId; nSave(); render(true); toast(N.faceId ? "Mirella öffnet jetzt nur mit Face ID" : "Face ID ist aus"); };
+    const origIph = SETS.iphone;
+    SETS.iphone = () => origIph() + `${setH("Erinnerungen nach Ort")}
+      ${(N.places || []).map(o => `<div class="listrow"><span class="grow">${esc(o.name)}<small>${o.exit ? "beim Weggehen" : "beim Ankommen"}${o.text ? " · " + esc(o.text) : ""}${o.shop ? " · mit Einkaufsliste" : ""}</small></span><button class="mini" data-act="nplacedel" data-id="${o.id}">Löschen</button></div>`).join("") || '<p class="hint" style="margin-top:0">Noch keine. Beispiel: „Du bist bei Rewe, 6 Sachen auf der Liste“ oder beim Verlassen der Wohnung „Schlüssel, Fenster zu?“.</p>'}
+      <button class="btn" data-act="nplace" style="width:100%;margin-top:8px">+ Ort hinzufügen</button>
+      ${setH("Sicherheit und Apple-KI")}
+      <button class="drow" data-act="nfiles"><span class="dt"><b>Dokumente auch in der Dateien-App</b><small>${N.files === false ? "aus" : "an: Auf meinem iPhone › Mirella, nach Ordnern (" + Object.keys(N.filed || {}).length + " abgelegt)"}</small></span><span class="chev">›</span></button>
+      <button class="drow" data-act="nfaceid"><span class="dt"><b>Mirella nur mit Face ID öffnen</b><small>${N.faceId ? "an" : "aus"}</small></span><span class="chev">›</span></button>
+      <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;
+  }
+
   setTimeout(() => { if (!N.setup) wizard(); else { tick(); setTimeout(nachfrage, 1200); } }, 600);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 })();

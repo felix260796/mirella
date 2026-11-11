@@ -620,3 +620,7 @@ input[type=date]::-webkit-date-and-time-value,input[type=time]::-webkit-date-and
 .azbar span.off{opacity:.3}
 .azpop{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;width:84px;height:84px;border-radius:20px;background:var(--ink);color:var(--bg,#fff);display:grid;place-items:center;font-size:44px;font-weight:800;pointer-events:none}
 .haskaz{padding-right:22px}
+
+/* Routen-Symbol neben Adressen */
+a.mini.route{display:inline-flex;align-items:center;gap:6px;text-decoration:none;flex:none}
+.todo a.mini.route{align-self:center;margin-right:6px;padding:8px}

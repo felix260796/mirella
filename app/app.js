@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.25";
+const VERSION = "0.26";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -307,7 +307,18 @@ function personCard(p, withCall) {
 function todoRow(t) {
   const pr = !t.done && prioOf(t), shop = t.list === "einkauf", q = shop ? L.qtyLabel(t) : "";
   const right = shop ? (t.done ? "" : `<span class="qbtns"><button class="mini" data-act="qty" data-id="${t.id}" data-n="-1" aria-label="weniger">−</button><button class="mini" data-act="qty" data-id="${t.id}" data-n="1" aria-label="mehr">+</button></span>`) : todoPersonBtn(t);
-  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}</div>${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}${t.ort && !t.done ? `<div class="meta">📍 ${esc(t.ort)}${t.los ? " · los um " + esc(t.los) + " (" + t.fahrt + " Min.)" : ""}</div>` : ""}</div>${t.ort && !t.done ? routeBtn(t.ort) : ""}${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+}
+/* Routen-Symbol: öffnet Apple Karten mit der Route vom jetzigen Standort zur Adresse */
+const ROUTE_IC = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12z"/><path d="M8.5 13.5v-2a1 1 0 0 1 1-1H15"/><path d="m13 8.5 2 2-2 2"/></svg>';
+const routeBtn = (addr, label) => addr ? `<a class="mini route" href="https://maps.apple.com/?daddr=${encodeURIComponent(addr)}&dirflg=d" aria-label="Route zu ${esc(addr)}">${ROUTE_IC}${label ? " " + label : ""}</a>` : "";
+/* Ort nachschlagen: aus „Tati-Café Stuttgart“ wird Name mit Straße und Ort */
+async function placeFind(q) {
+  try {
+    const lat = S.settings.wxLat || 48.8, lon = S.settings.wxLon || 9.2, r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=de&limit=1&lat=${lat}&lon=${lon}`), f = ((await r.json()).features || [])[0]; if (!f) return "";
+    const a = f.properties || {}, street = [a.street, a.housenumber].filter(Boolean).join(" ");
+    return [a.name, street, [a.postcode, a.city || a.town || a.village].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  } catch (_) { return ""; }
 }
 function todoPersonBtn(t) {
   const p = t.pid && S.people.find(x => x.id === t.pid); if (!p || t.done) return "";
@@ -722,14 +733,25 @@ function bdayBlock(p, nb) {
   const a = ageAt(p, nb), n = diffDays(today(), nb), isT = nb === today();
   const line = isT ? `🎂 Heute ${a ? "wird " + (p.first || "") + " " + a + " Jahre alt" : "ist Geburtstag"}!` : `${a ? `Wird ${a} Jahre alt` : "Nächster Geburtstag"} am ${esc(fmtDate(nb))}, ${n === 1 ? "morgen" : "in " + n + " Tagen"}`;
   const round = a && !isT ? (a === 18 || (S.settings.roundAges || []).includes(a) || a % 10 === 0) : false;
-  return `<div class="block"><h4>Geburtstag</h4><div class="kvgrid"><div><span class="k">Geboren</span><b>${esc(longDate(p.bday))}</b></div>${a ? `<div><span class="k">Alter</span><b>${isT ? a : a - 1} Jahre</b></div>` : ""}</div><div class="bdline${isT ? " today" : ""}${round ? " round" : ""}">${round ? "🎉 " : ""}${line}</div>${p.gift ? `<div class="bdline">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}</div>`;
+  return `<div class="block"><h4>Geburtstag</h4><div class="kvgrid"><div><span class="k">Geboren</span><b>${esc(longDate(p.bday))}</b></div>${a ? `<div><span class="k">Alter</span><b>${isT ? a : a - 1} Jahre</b></div>` : ""}</div><div class="bdline${isT ? " today" : ""}${round ? " round" : ""}">${round ? "🎉 " : ""}${line}</div>${p.gift ? `<div class="bdline">Geschenk-Erinnerung ${S.settings.giftLead} Tage vorher</div>` : ""}${n <= 1 && p.tel ? `<button class="btn" data-act="gruss" data-id="${p.id}" style="width:100%;margin-top:10px">💬 Glückwunsch schreiben</button>` : ""}</div>`;
 }
+/* Geburtstagsgruß: Mirella schreibt vor, WhatsApp oder Nachrichten öffnen sich mit Text und Empfänger. Gesendet wird erst, wenn du selbst auf Senden tippst. */
+function grussForm(p) {
+  const a = ageAt(p, nextBirthday(p) || today()), nm = p.nick || p.first || fullName(p);
+  const txt = `Alles Gute zum ${a && (a % 10 === 0 || a === 18) ? a + ". " : ""}Geburtstag, ${nm}! 🎉 Ich wünsche dir einen richtig schönen Tag und alles Liebe fürs neue Lebensjahr.`;
+  const canKi = (typeof kiOn === "function" && kiOn()) || typeof window.appleKi === "function";
+  openSheet(`<p class="stitle">Glückwunsch an ${esc(fullName(p))}</p><div class="fld"><label for="gr-t">Dein Text (kannst du ändern)</label><textarea id="gr-t" rows="6">${esc(txt)}</textarea></div>
+  ${canKi ? `<button class="btn" data-act="grusski" data-id="${p.id}" style="width:100%;margin-bottom:8px">✦ Mirella schreibt es persönlicher</button>` : ""}
+  <div class="row2"><button class="btn pri" data-act="grusssend" data-id="${p.id}" data-via="wa">WhatsApp</button><button class="btn pri" data-act="grusssend" data-id="${p.id}" data-via="sms">Nachricht</button></div>
+  <p class="hint">Es öffnet sich die App mit dem Text. Abgeschickt wird erst, wenn du dort auf Senden tippst.</p>`);
+}
+function intlTel(t) { let n = (t || "").replace(/[^\d+]/g, ""); if (n.startsWith("00")) n = "+" + n.slice(2); else if (n.startsWith("0")) n = "+49" + n.slice(1); return n; }
 /* Kontaktdaten: jede Zeile gleich aufgebaut (Bezeichnung, Wert, Knopf) */
 function contactBlock(p) {
   const rows = [];
   if (p.tel) rows.push(["Telefon", esc(p.tel), `<a class="mini" href="tel:${esc(p.tel.replace(/[^\d+]/g, ""))}">Anrufen</a>`]);
   if (p.email) rows.push(["E-Mail", esc(p.email), `<a class="mini" href="mailto:${esc(p.email)}">Schreiben</a>`]);
-  if (p.addr) rows.push(["Adresse", esc(p.addr), `<a class="mini" href="https://maps.apple.com/?q=${encodeURIComponent(p.addr)}">Karte</a>`]);
+  if (p.addr) rows.push(["Adresse", esc(p.addr), routeBtn(p.addr, "Route")]);
   if (p.nick) rows.push(["Spitzname", esc(p.nick), ""]);
   if (!rows.length) return "";
   return `<div class="block"><h4>Kontakt</h4>${rows.map(([k, v, b]) => `<div class="kvrow"><span class="k">${k}</span><span class="v">${v}</span>${b}</div>`).join("")}</div>`;
@@ -883,13 +905,14 @@ function todoForm(t, preset = {}) {
   <div class="fld"><label>Priorität</label><div class="pick3" id="a-prio-pick">${[["", "Keine", ""], ...PRIOS].map(([k, n, c]) => `<button type="button" data-act="pickprio" data-p="${k}" aria-pressed="${String(v.prio || "") === String(k)}"${c ? ` style="--pc:${c}"` : ""}>${c ? '<i class="pdot"></i>' : ""}${n}</button>`).join("")}</div><input type="hidden" id="a-prio" value="${esc(v.prio || "")}"></div>
   <div class="fld"><label for="a-trig">Wann erinnern?</label><select id="a-trig"><option value="zeit"${v.trig !== "verlassen" ? " selected" : ""}>An einem Tag</option><option value="verlassen"${v.trig === "verlassen" ? " selected" : ""}>Bevor ich losgehe (auf „Heute“ oben)</option></select></div>
   <div class="fgrid" id="f-time"${v.trig === "verlassen" ? " hidden" : ""}><div class="fld"><label for="a-date">Datum (leer = ohne Termin)</label><input type="date" id="a-date" value="${esc(v.date || "")}"></div><div class="fld"><label for="a-time">Uhrzeit</label><input type="time" id="a-time" value="${esc(v.time || "")}"></div></div>
+  <div class="fld" style="position:relative"><label for="a-ort">Wo? (leer lassen, wenn egal)</label><input id="a-ort" value="${esc(v.ort || "")}" placeholder="z. B. Tati-Café Stuttgart" autocomplete="off"><div id="a-ort-sug" class="sug" hidden></div>${v.ort ? `<div style="margin-top:6px">${routeBtn(v.ort, "Route dorthin")}</div>` : ""}</div>
   <div class="fgrid"><div class="fld"><label for="a-rep">Wiederholen</label><select id="a-rep">${REPS.map(r => `<option${r === (v.rep || "nie") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
   <div class="fld"><label for="a-area">Bereich</label><select id="a-area"><option value="">kein Bereich</option>${AREAS.map(a => `<option value="${a.id}"${a.id === v.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div></div>
   <label class="tgl big"><input type="checkbox" id="a-nerv"${v.nerv ? " checked" : ""}><span><b>Nerv-Modus</b><small>meldet sich, bis es erledigt ist. Zum Ausschalten Haken wegnehmen.</small></span></label>
   ${t ? todoDocs(t) : '<p class="swipehint" style="text-align:left;margin:8px 0 0">Rechnung oder Dokument dazu? Erst speichern, dann die Aufgabe antippen und anhängen.</p>'}
   ${t && t.date ? `<button class="btn" data-act="ics" data-id="${t.id}" style="width:100%;margin-top:8px">⏰ Zusätzlich als Wecker in den iPhone-Kalender</button>` : ""}
   <div class="row2">${t ? `<button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savetodo" data-id="${t ? t.id : ""}">Speichern</button></div></div>`,
-    () => { $("#a-trig").onchange = e => { $("#f-time").hidden = e.target.value === "verlassen"; }; });
+    () => { $("#a-trig").onchange = e => { $("#f-time").hidden = e.target.value === "verlassen"; }; addrSuggest($("#a-ort"), $("#a-ort-sug"), true); });
 }
 function todoDocs(t) {
   const docs = S.docs.filter(d => d.ref === t.id);
@@ -898,10 +921,11 @@ function todoDocs(t) {
 function saveTodo(id) {
   const w = $("#a-what").value.trim(); if (!w) { toast("Bitte eintragen, was zu tun ist"); return; }
   const trig = $("#a-trig").value;
-  const data = { t: w, trig, date: trig === "verlassen" ? "" : $("#a-date").value, time: trig === "verlassen" ? "" : $("#a-time").value, rep: $("#a-rep").value, area: $("#a-area").value, nerv: $("#a-nerv").checked, prio: $("#a-prio").value ? +$("#a-prio").value : "" };
+  const data = { t: w, trig, date: trig === "verlassen" ? "" : $("#a-date").value, time: trig === "verlassen" ? "" : $("#a-time").value, rep: $("#a-rep").value, area: $("#a-area").value, nerv: $("#a-nerv").checked, prio: $("#a-prio").value ? +$("#a-prio").value : "", ort: $("#a-ort") ? ($("#a-ort").dataset.label || $("#a-ort").value.trim()) : "" };
   if (data.rep !== "nie" && !data.date && trig !== "verlassen") data.date = today();
   if (id) Object.assign(S.todos.find(x => x.id === id), data);
   else S.todos.push(Object.assign({ id: uid(), list: "todo", done: false, created: today() }, data));
+  if (data.ort && !($("#a-ort").dataset.label) && !/\d{5}/.test(data.ort)) { const nt = id ? S.todos.find(x => x.id === id) : S.todos[S.todos.length - 1], was = data.ort; placeFind(was).then(full => { if (full && nt.ort === was) { nt.ort = full; save(); render(true); } }); }
   draftClear(); save(); closeSheet(); render(true); toast("Gespeichert: " + w);
 }
 const todoSeg = isShop => `<div class="seg"><button data-act="todolist" data-l="todo" aria-pressed="${!isShop}">Aufgaben</button><button data-act="todolist" data-l="einkauf" aria-pressed="${isShop}">Einkaufsliste</button></div>`;
@@ -1412,7 +1436,7 @@ function reviewRender(txt) {
   <div id="pitems">${pending.map((it, i) => `<div class="pitem" data-i="${i}"><div class="ph"><select data-pf="type" aria-label="Art">${TYPES.map(([v, l]) => `<option value="${v}"${v === it.type ? " selected" : ""}>${l}</option>`).join("")}</select><button class="rowdel" data-act="pdel" data-i="${i}" aria-label="Weglassen" style="margin-left:auto">✕</button></div>
     ${it.type === "note" || it.type === "call" ? `<select data-pf="pid" style="width:100%;margin-bottom:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px">${pOpts(it.pid)}</select>` : ""}
     ${it.type === "call" ? `<select data-pf="ok" style="width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px"><option value="1"${it.ok !== false ? " selected" : ""}>erreicht</option><option value="0"${it.ok === false ? " selected" : ""}>nicht erreicht</option></select>` : `<input data-pf="t" value="${esc(it.t || "")}" aria-label="Text">`}
-    ${it.type === "todo" ? `<div class="pg"><input type="date" data-pf="date" value="${esc(it.date || "")}" aria-label="Datum"><input type="time" data-pf="time" value="${esc(it.time || "")}" aria-label="Uhrzeit"></div>${it.trig === "verlassen" ? '<div class="swipehint" style="text-align:left;margin:0">bevor du losgehst</div>' : ""}` : ""}
+    ${it.type === "todo" ? `<div class="pg"><input type="date" data-pf="date" value="${esc(it.date || "")}" aria-label="Datum"><input type="time" data-pf="time" value="${esc(it.time || "")}" aria-label="Uhrzeit"></div>${it.trig === "verlassen" ? '<div class="swipehint" style="text-align:left;margin:0">bevor du losgehst</div>' : ""}${it.ort ? `<div class="swipehint" style="text-align:left;margin:0">📍 ${esc(it.ort)} (Adresse sucht Mirella beim Speichern)</div>` : ""}` : ""}
     ${it.type === "expense" ? `<div class="pg"><input data-pf="amount" inputmode="decimal" value="${it.amount != null ? String(it.amount).replace(".", ",") : ""}" placeholder="Betrag €" aria-label="Betrag"><select data-pf="cat" style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:14px;margin-bottom:6px">${catList().map(c => `<option${c === it.cat ? " selected" : ""}>${c}</option>`).join("")}</select></div>` : ""}
   </div>`).join("") || empty("Alles weggelassen.")}</div>
   <button class="btn" data-act="vmore" style="width:100%;margin-bottom:8px">🎙 Weiterreden: ändern oder ergänzen</button>
@@ -1430,7 +1454,7 @@ function voiceSave() {
   let n = 0; const miss = [];
   for (const it of pending) {
     if (it.type === "shop" && it.t) { if (addShop(it.t)) n++; }
-    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, pid: it.pid || "", list: "todo", done: false, created: today(), date: it.trig === "verlassen" ? "" : it.date || "", time: it.time || "", trig: it.trig || "zeit", rep: "nie", area: "", nerv: true }); n++; }
+    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, pid: it.pid || "", list: "todo", done: false, created: today(), date: it.trig === "verlassen" ? "" : it.date || "", time: it.time || "", trig: it.trig || "zeit", rep: "nie", area: "", nerv: true, ort: it.ort || "" }); if (it.ort) { const nt = S.todos[S.todos.length - 1]; placeFind(it.ort).then(full => { if (full) { nt.ort = full; save(); render(true); } }); } n++; }
     else if (it.type === "note" || it.type === "call") {
       const p = S.people.find(x => x.id === it.pid); if (!p) { miss.push(it); continue; }
       if (it.type === "note" && it.t) { p.notes = p.notes || []; p.notes.unshift({ id: uid(), t: it.t, d: today() }); n++; }
@@ -1631,6 +1655,16 @@ const ACT = {
   vagain: () => recStart(),
   vnext: () => voiceReview(),
   vback: () => { const t = voiceReview.lastTxt || ""; voiceStart(); recStop(); $("#v-text").value = t; $("#v-state").textContent = "Ändern oder auf „Nochmal“ tippen."; },
+  gruss: el => { const p = S.people.find(x => x.id === el.dataset.id); if (p) grussForm(p); },
+  grusssend: el => { const p = S.people.find(x => x.id === el.dataset.id), t = ($("#gr-t").value || "").trim(); if (!p || !t) return; const n = intlTel(p.tel); closeSheet(); location.href = el.dataset.via === "wa" ? "https://wa.me/" + n.replace("+", "") + "?text=" + encodeURIComponent(t) : "sms:" + n + "&body=" + encodeURIComponent(t); },
+  grusski: async el => {
+    const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; el.disabled = true; el.textContent = "Mirella schreibt …";
+    const a = ageAt(p, nextBirthday(p) || today()), notes = (S.notes || []).filter(x => x.pid === p.id).slice(-5).map(x => x.t).join("; ");
+    const system = `Du schreibst für ${S.settings.name || "Felix"} einen kurzen, herzlichen Geburtstagsgruß auf Deutsch in du-Form für WhatsApp. Zwei bis vier Sätze, natürlich und persönlich, höchstens zwei Emojis, keine Floskeln, kein Gedicht. Gib nur den Text zurück, ohne Anführungszeichen.`;
+    const user = `Empfänger: ${p.nick || p.first || fullName(p)}${a ? ", wird " + a : ""}${p.woher ? ". Woher wir uns kennen: " + p.woher : ""}${(p.groups || []).length ? ". Gruppe: " + p.groups.join(", ") : ""}${notes ? ". Notizen: " + notes : ""}.`;
+    try { const t = typeof kiOn === "function" && kiOn() ? await kiCall({ system, user, hard: false, maxTokens: 600 }) : await window.appleKi(system, user); if (t && $("#gr-t")) $("#gr-t").value = String(t).trim(); } catch (e) { toast(e && e.message || "Das hat nicht geklappt"); }
+    el.disabled = false; el.textContent = "✦ Nochmal anders";
+  },
   vsave: () => voiceSave(),
   vmore: () => { $$("#pitems .pitem").forEach(b => readPItem(b, pending[+b.dataset.i])); const m = { txt: voiceReview.lastTxt || "", items: pending.slice() }; voiceStart(); vMore = m; const st = $("#sheetbody .stitle"); if (st) st.textContent = "Was soll ich ändern oder ergänzen?"; const ta = $("#v-text"); if (ta) ta.placeholder = "z. B. Mach die Uhrzeit auf 18 Uhr. Oder: Und noch Milch auf die Einkaufsliste."; },
   pdel: el => { $$("#pitems .pitem").forEach(b => readPItem(b, pending[+b.dataset.i])); pending.splice(+el.dataset.i, 1); reviewRender(voiceReview.lastTxt); },

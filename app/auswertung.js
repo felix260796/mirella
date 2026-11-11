@@ -32,9 +32,12 @@ function auswStats() {
   /* Einkauf */
   const shop = S.todos.filter(x => x.list === "einkauf"), bought = shop.filter(x => x.done), trips = new Set(bought.filter(x => x.doneAt >= d30).map(x => x.doneAt));
   const fav = top(bought.map(x => x.t.replace(/^\d+[.,]?\d*\s*(x|kg|g|l|ml|stück|packung|pack|liter|flaschen?|dosen?)?\s+/i, "").trim()), 5);
+  const byName = {}; bought.forEach(x => { if (!x.doneAt) return; const n = x.t.replace(/^\d+[.,]?\d*\s*(x|kg|g|l|ml|stück|packung|pack|liter|flaschen?|dosen?)?\s+/i, "").trim(); (byName[n] = byName[n] || new Set()).add(x.doneAt); });
+  const rhythm = Object.entries(byName).map(([n, set]) => { const ds = [...set].sort(); if (ds.length < 3) return null; const every = Math.round(diffDays(ds[0], ds[ds.length - 1]) / (ds.length - 1)); return every >= 2 ? { n, every, last: ds[ds.length - 1], due: every - diffDays(ds[ds.length - 1], t) } : null; }).filter(Boolean).sort((a, b) => a.due - b.due).slice(0, 4);
   out.push({ h: "Einkauf", rows: [
     ["Auf der Liste", shop.filter(x => !x.done).length], ["Einkäufe in 30 Tagen", trips.size, bought.filter(x => x.doneAt >= d30).length + " Artikel"],
-    ["Am häufigsten gekauft", fav.length ? fav.map(x => x[0] + " (" + x[1] + ")").join(", ") : "–"]] });
+    ["Am häufigsten gekauft", fav.length ? fav.map(x => x[0] + " (" + x[1] + ")").join(", ") : "–"],
+    ...rhythm.map(r => [r.n + " kaufst du etwa alle " + r.every + " Tage", r.due <= 0 ? "jetzt fällig" : "in " + r.due + " Tagen", "zuletzt " + fmtDate(r.last)])] });
   /* Geld */
   const ex = S.expenses || [], sum = l => l.reduce((a, b) => a + (+b.amount || 0), 0), e0 = ex.filter(x => (x.d || "").startsWith(m0)), e1 = ex.filter(x => (x.d || "").startsWith(m1));
   const cats = {}; e0.forEach(x => cats[x.cat || "Sonstiges"] = (cats[x.cat || "Sonstiges"] || 0) + (+x.amount || 0));
@@ -44,7 +47,8 @@ function auswStats() {
     ["Ausgaben diesen Monat", eur(sum(e0)), e1.length ? "letzter Monat " + eur(sum(e1)) : ""],
     ["Hochgerechnet bis Monatsende", e0.length ? eur(sum(e0) / day * dim) : "–"],
     ["Größte Posten", Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0] + " " + eur(x[1])).join(", ") || "–"],
-    ["Feste Kosten im Monat (Verträge, Versicherungen …)", fix ? eur(fix) : "–", fix ? "im Jahr " + eur(fix * 12) : ""]] });
+    ["Feste Kosten im Monat (Verträge, Versicherungen …)", fix ? eur(fix) : "–", fix ? "im Jahr " + eur(fix * 12) : ""],
+    ...(S.goals || []).filter(g => +g.target > 0).slice(0, 4).map(g => { const left = (+g.target || 0) - (+g.saved || 0), mon = g.until && g.until > t ? Math.max(1, Math.round(diffDays(t, g.until) / 30)) : 0; return ["Sparziel " + (g.n || ""), left <= 0 ? "geschafft" : eur(left) + " fehlen", left > 0 && mon ? "bis " + fmtDate(g.until) + " sind das " + eur(left / mon) + " im Monat" : ""]; })] });
   /* Alltag */
   const sl = S.suppLog || {}, supp = (S.items || []).filter(x => x.kind === "supplement"); let sollen = 0, genommen = 0;
   for (let i = 1; i <= 7; i++) { const d = addDays(t, -i); for (const s of supp) for (const k of ["morgens", "mittags", "abends"]) if (s[k]) { sollen++; if (sl[d + "|" + k + "|" + s.id]) genommen++; } }
@@ -62,7 +66,7 @@ let auswKi = "";
 R.auswertungen = function () {
   const st = auswStats();
   return `${subtop("Alle Bereiche", "drawer")}<p class="big" style="margin:0 0 4px">Auswertungen</p><p class="hint" style="margin-top:0">Was sich aus deinen Einträgen ablesen lässt. Gerechnet wird auf deinem iPhone, es verlässt nichts das Gerät.</p>
-  ${typeof kiOn === "function" && kiOn() ? `<button class="btn pri" data-act="auswki" style="width:100%;margin-bottom:10px">✦ Mirella-KI: Was fällt dir auf?</button>${auswKi ? `<div class="block"><h4>Mirella meint</h4><p style="white-space:pre-wrap;margin:0;line-height:1.5">${esc(auswKi)}</p></div>` : ""}` : ""}
+  ${(typeof kiOn === "function" && kiOn()) || typeof window.appleKi === "function" ? `<button class="btn pri" data-act="auswki" style="width:100%;margin-bottom:10px">✦ Mirella-KI: Was fällt dir auf?</button>${auswKi ? `<div class="block"><h4>Mirella meint</h4><p style="white-space:pre-wrap;margin:0;line-height:1.5">${esc(auswKi)}</p></div>` : ""}` : ""}
   ${st.map(s => `<div class="block"><h4>${s.h}</h4>${s.rows.map(r => `<div class="listrow"><span class="grow">${esc(r[0])}${r[2] ? `<small>${esc(String(r[2]))}</small>` : ""}</span><b style="text-align:right;max-width:55%">${esc(String(r[1]))}</b></div>`).join("")}</div>`).join("")}
   <p class="swipehint">Fehlt dir eine Auswertung? Sag es Mirella, dann kommt sie dazu.</p>`;
 };

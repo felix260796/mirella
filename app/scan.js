@@ -15,7 +15,7 @@ photoStart = function (kind, areaId) {
   photoCtx = { kind: kind || null, area: areaId || null, blob: null, url: null, ref: "" };
   openSheet(`<p class="stitle">Foto oder Brief an Mirella</p>
   <p class="swipehint" style="text-align:left;margin:0 0 12px">Brief, Rechnung, Beleg, Dokument oder Einkaufszettel. Bei Papier schneide ich automatisch zu und lese den Text.</p>
-  <div style="display:grid;gap:8px"><button class="btn pri" data-act="scanmulti">📄 Scannen (auch mehrere Seiten)</button><button class="btn" data-act="pickcam">📷 Foto machen</button><button class="btn" data-act="picklib">Aus „Fotos“ wählen</button><button class="btn" data-act="pickpdf">📎 PDF oder Datei</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
+  <div style="display:grid;gap:8px"><button class="btn pri" data-act="scanmulti">📄 Scannen (auch mehrere Seiten)</button>${window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MirellaSystem ? '<button class="btn" data-act="livescan">🔎 Kamera liest Nummer, Datum oder Text</button>' : ""}<button class="btn" data-act="pickcam">📷 Foto machen</button><button class="btn" data-act="picklib">Aus „Fotos“ wählen</button><button class="btn" data-act="pickpdf">📎 PDF oder Datei</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
 };
 photoChosen = async function (file) {
   if (!file) return;

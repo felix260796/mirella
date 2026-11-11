@@ -13,7 +13,7 @@ import base64, json, os, re, subprocess, sys, time, urllib.error, urllib.request
 
 BUNDLE = "de.brenzinger.mirella"
 # Erweiterungen der App (eigene App-ID und eigenes Profil je Erweiterung)
-EXTENSIONS = {"de.brenzinger.mirella.live": "Mirella Live-Anzeige"}
+EXTENSIONS = {"de.brenzinger.mirella.live": "Mirella Live-Anzeige", "de.brenzinger.mirella.teilen": "Mirella Teilen"}
 API = "https://api.appstoreconnect.apple.com/v1"
 HOME = os.path.expanduser("~")
 TMP = os.environ.get("RUNNER_TEMP", "/tmp")

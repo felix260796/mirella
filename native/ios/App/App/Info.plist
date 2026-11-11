@@ -36,6 +36,8 @@
 	<string>Mirella fotografiert Belege, Dokumente und Notizen für dich.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Mirella übernimmt deine Kontakte mit Telefonnummern und Geburtstagen, damit sie dich an Anrufe erinnern kann.</string>
+	<key>MirellaAppIdPrefix</key>
+	<string>$(AppIdentifierPrefix)</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSFaceIDUsageDescription</key>

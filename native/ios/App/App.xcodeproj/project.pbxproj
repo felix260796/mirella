@@ -8,15 +8,18 @@
 
 /* Begin PBXBuildFile section */
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		4E8C88C1A24AFDAD4656553C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 95DA0F8D1194BC1567FCC29F /* Foundation.framework */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		511B586784E64319D53074C4 /* MirellaShareBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B3D4609BE8B23F6628D1DB /* MirellaShareBox.swift */; };
 		549DF0481848C5E97C8E92F6 /* MirellaLosAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 490A863EFFD354579BD9D207 /* MirellaLosAttributes.swift */; };
 		80F34B1D7F566A1D532D4ACE /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 95DA0F8D1194BC1567FCC29F /* Foundation.framework */; };
 		96F291D310E96FDFDB5CA263 /* MirellaLosAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 490A863EFFD354579BD9D207 /* MirellaLosAttributes.swift */; };
+		9D849532E91A41C401B696AE /* MirellaShareBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B3D4609BE8B23F6628D1DB /* MirellaShareBox.swift */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		A1BE11A0000000000000A002 /* MirellaAlarmPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BE11A0000000000000A001 /* MirellaAlarmPlugin.swift */; };
 		A1BE11A0000000000000A004 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BE11A0000000000000A003 /* MainViewController.swift */; };
@@ -24,10 +27,19 @@
 		A1BE11A0000000000000A008 /* MirellaScanPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BE11A0000000000000A007 /* MirellaScanPlugin.swift */; };
 		A1BE11A0000000000000A00A /* MirellaSystemPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BE11A0000000000000A009 /* MirellaSystemPlugin.swift */; };
 		C98202307829A5B095350BDC /* MirellaLiveBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCBA600E72F6FA277884C079 /* MirellaLiveBundle.swift */; };
+		D4340128997CCF38A14DC420 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67E8276305722F20BF92105 /* ShareViewController.swift */; };
 		EFA6111B62D71553F0EE69FE /* MirellaLive.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C261F529E8467A8FF09D8A6C /* MirellaLive.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		FB1E9D6FFF4BC5EDD1EE67FF /* MirellaTeilen.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E1BFF4A2031A09298353BBBB /* MirellaTeilen.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		51C1FD781BF23A464BE26447 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CAC2CCE06CD66D0B135644A0;
+			remoteInfo = MirellaTeilen;
+		};
 		798070AC4B9FA2E838BDEE73 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
@@ -45,6 +57,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				EFA6111B62D71553F0EE69FE /* MirellaLive.appex in Embed Foundation Extensions */,
+				FB1E9D6FFF4BC5EDD1EE67FF /* MirellaTeilen.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -53,6 +66,7 @@
 
 /* Begin PBXFileReference section */
 		00EABA7BB3A2604FBDAE3D42 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		14A070B8A93740DBDD534B97 /* MirellaTeilen.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = MirellaTeilen.entitlements; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		490A863EFFD354579BD9D207 /* MirellaLosAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MirellaLosAttributes.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
@@ -63,15 +77,19 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		54B3D4609BE8B23F6628D1DB /* MirellaShareBox.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MirellaShareBox.swift; sourceTree = "<group>"; };
 		95DA0F8D1194BC1567FCC29F /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		A1BE11A0000000000000A001 /* MirellaAlarmPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirellaAlarmPlugin.swift; sourceTree = "<group>"; };
 		A1BE11A0000000000000A003 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		A1BE11A0000000000000A005 /* MirellaContactsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirellaContactsPlugin.swift; sourceTree = "<group>"; };
 		A1BE11A0000000000000A007 /* MirellaScanPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirellaScanPlugin.swift; sourceTree = "<group>"; };
 		A1BE11A0000000000000A009 /* MirellaSystemPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirellaSystemPlugin.swift; sourceTree = "<group>"; };
+		A67E8276305722F20BF92105 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		ACB5578E305F97F22C8EABBE /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		C261F529E8467A8FF09D8A6C /* MirellaLive.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MirellaLive.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1BFF4A2031A09298353BBBB /* MirellaTeilen.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MirellaTeilen.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		FCBA600E72F6FA277884C079 /* MirellaLiveBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MirellaLiveBundle.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -90,6 +108,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				80F34B1D7F566A1D532D4ACE /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D417715415547C37F5C63D12 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4E8C88C1A24AFDAD4656553C /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,6 +157,7 @@
 				7F8756D8B27F46E3366F6CEA /* Pods */,
 				27E2DDA53C4D2A4D1A88CE4A /* Frameworks */,
 				10DFC58F69BE391F41E1E270 /* MirellaLive */,
+				B124520EC9FF533E7034DB87 /* MirellaTeilen */,
 			);
 			sourceTree = "<group>";
 		};
@@ -139,6 +166,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				C261F529E8467A8FF09D8A6C /* MirellaLive.appex */,
+				E1BFF4A2031A09298353BBBB /* MirellaTeilen.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -160,6 +188,7 @@
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 				490A863EFFD354579BD9D207 /* MirellaLosAttributes.swift */,
+				54B3D4609BE8B23F6628D1DB /* MirellaShareBox.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -171,6 +200,17 @@
 				AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */,
 			);
 			name = Pods;
+			sourceTree = "<group>";
+		};
+		B124520EC9FF533E7034DB87 /* MirellaTeilen */ = {
+			isa = PBXGroup;
+			children = (
+				A67E8276305722F20BF92105 /* ShareViewController.swift */,
+				ACB5578E305F97F22C8EABBE /* Info.plist */,
+				14A070B8A93740DBDD534B97 /* MirellaTeilen.entitlements */,
+			);
+			name = MirellaTeilen;
+			path = MirellaTeilen;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -191,11 +231,29 @@
 			);
 			dependencies = (
 				8CBB5B6E43BE92D260819501 /* PBXTargetDependency */,
+				14005374659F65EE098F6292 /* PBXTargetDependency */,
 			);
 			name = App;
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		CAC2CCE06CD66D0B135644A0 /* MirellaTeilen */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A9B62E1042C2C581EF55A78 /* Build configuration list for PBXNativeTarget "MirellaTeilen" */;
+			buildPhases = (
+				C7B24D5E133EA3FAC9B60599 /* Sources */,
+				D417715415547C37F5C63D12 /* Frameworks */,
+				BF84A1B8AC794FEF39BFFBDE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MirellaTeilen;
+			productName = MirellaTeilen;
+			productReference = E1BFF4A2031A09298353BBBB /* MirellaTeilen.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		CF1D10DAA64C6536DA79EAE3 /* MirellaLive */ = {
 			isa = PBXNativeTarget;
@@ -245,6 +303,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				CF1D10DAA64C6536DA79EAE3 /* MirellaLive */,
+				CAC2CCE06CD66D0B135644A0 /* MirellaTeilen */,
 			);
 		};
 /* End PBXProject section */
@@ -264,6 +323,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		84A4A14181F486E5BCD38C01 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BF84A1B8AC794FEF39BFFBDE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -320,6 +386,16 @@
 				A1BE11A0000000000000A00A /* MirellaSystemPlugin.swift in Sources */,
 				A1BE11A0000000000000A004 /* MainViewController.swift in Sources */,
 				549DF0481848C5E97C8E92F6 /* MirellaLosAttributes.swift in Sources */,
+				9D849532E91A41C401B696AE /* MirellaShareBox.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C7B24D5E133EA3FAC9B60599 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D4340128997CCF38A14DC420 /* ShareViewController.swift in Sources */,
+				511B586784E64319D53074C4 /* MirellaShareBox.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -335,6 +411,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		14005374659F65EE098F6292 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MirellaTeilen;
+			target = CAC2CCE06CD66D0B135644A0 /* MirellaTeilen */;
+			targetProxy = 51C1FD781BF23A464BE26447 /* PBXContainerItemProxy */;
+		};
 		8CBB5B6E43BE92D260819501 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = MirellaLive;
@@ -554,9 +636,63 @@
 			};
 			name = Release;
 		};
+		51E1458ED8049BE17CA87390 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MirellaTeilen/MirellaTeilen.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MirellaTeilen/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.brenzinger.mirella.teilen;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		F239CC3195FE133FD23F9D63 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MirellaTeilen/MirellaTeilen.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MirellaTeilen/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.brenzinger.mirella.teilen;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1A9B62E1042C2C581EF55A78 /* Build configuration list for PBXNativeTarget "MirellaTeilen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				51E1458ED8049BE17CA87390 /* Release */,
+				F239CC3195FE133FD23F9D63 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

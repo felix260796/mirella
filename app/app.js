@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.24";
+const VERSION = "0.25";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -204,6 +204,28 @@ function nextBirthday(p) {
   let s = `${y}-${pad(m)}-${pad(d)}`; if (s < t) s = `${y + 1}-${pad(m)}-${pad(d)}`;
   return s;
 }
+/* Familie am Kontakt (Kinder, Partner) ohne eigenen Kontakt: p.kin = [{id, name, rel, bday, death}] */
+const KINREL = ["Kind", "Partner/in", "Elternteil", "Sonstige"];
+const TELL = ["Handy", "Privat", "Geschäft", "Festnetz"];
+function kinSoon(maxDays) {
+  const t = today(), out = [];
+  for (const p of S.people) { if (p.arch) continue; for (const k of p.kin || []) { const b = nextBirthday({ bday: k.bday, death: k.death }); if (b && diffDays(t, b) <= maxDays) out.push({ p, k, b }); } }
+  return out.sort((a, b) => a.b < b.b ? -1 : 1);
+}
+function kinBlock(p) {
+  const ks = p.kin || [];
+  return `<div class="block"><div class="bh"><h4>Familie</h4><button class="mini" data-act="kinedit" data-id="">+ Kind oder Angehörigen</button></div>${ks.length ? ks.map(k => { const nb = nextBirthday({ bday: k.bday, death: k.death }), age = nb && ageAt(k, nb); return `<div class="listrow"><span class="grow" role="button" tabindex="0" data-act="kinedit" data-id="${k.id}" style="cursor:pointer">${esc(k.name)}${k.rel ? " · " + esc(k.rel) : ""}<small>${k.bday ? "* " + esc(longDate(k.bday)) + (age ? " · wird " + age : "") : "Geburtstag fehlt noch"}${k.death ? " · † " + esc(longDate(k.death)) : ""}</small></span></div>`; }).join("") : '<p class="swipehint" style="text-align:left;margin:0">Kinder oder Partner mit Geburtstag, ohne eigenen Kontakt. Mirella erinnert trotzdem.</p>'}</div>`;
+}
+function kinForm(id) {
+  const p = S.people.find(x => x.id === cur); if (!p) return; const k = (p.kin || []).find(x => x.id === id) || { name: "", rel: "Kind", bday: "", death: "" };
+  openSheet(`<p class="stitle">${id ? "Angehörigen ändern" : "Kind oder Angehörigen eintragen"}</p><p class="hint" style="margin-top:0">Gehört zu ${esc(fullName(p))}. Bekommt keinen eigenen Kontakt, der Geburtstag steht aber im Kalender und auf Heute.</p>
+  <div class="fld"><label for="k-name">Name</label><input id="k-name" value="${esc(k.name)}" placeholder="z. B. Maja" autocomplete="off"></div>
+  <div class="fld"><label for="k-rel">Wer ist das?</label><select id="k-rel">${KINREL.map(r => `<option${k.rel === r ? " selected" : ""}>${r}</option>`).join("")}</select></div>
+  <div class="fgrid"><div class="fld"><label for="k-bday">Geburtstag</label><input id="k-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(k.bday))}" autocomplete="off"></div><div class="fld"><label for="k-death">Verstorben am</label><input id="k-death" inputmode="numeric" maxlength="10" placeholder="nur falls zutreffend" value="${esc(L.bdayToInput(k.death || ""))}" autocomplete="off"></div></div>
+  <div class="row2">${id ? `<button class="btn danger" data-act="kindel" data-id="${id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="kinsave" data-id="${id || ""}">Speichern</button></div>`, () => {
+    for (const q of ["#k-bday", "#k-death"]) $(q).addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
+  });
+}
 function ageAt(p, dateStr) { const y = +(p.bday || "").slice(0, 4); if (!y || y < 1900) return null; return +dateStr.slice(0, 4) - y; }
 function findPersonsIn(text) {
   const t = " " + text.toLowerCase() + " ";
@@ -261,7 +283,7 @@ let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selD
 
 /* ---------- Bausteine ---------- */
 /* Kopfzeile: links Logo (öffnet die Einstellungen genau dieser Seite) + Titel, rechts Suche, Kamera, „Mirella“ + Logo (alle Bereiche) */
-const setKeyFor = () => ({ heute: "heute", briefings: "heute", menschen: "kontakte", akte: "kontakte", todos: "todos", kalender: "kalender", bereich: area }[view] || "");
+const setKeyFor = () => ({ heute: "heute", briefings: "heute", auswertungen: "heute", menschen: "kontakte", akte: "kontakte", todos: "todos", kalender: "kalender", bereich: area }[view] || "");
 function topbar(t, setKey) {
   const k = setKey || setKeyFor();
   return `<div class="top">${k ? `<button class="tleft tsetbtn" data-act="tabset" data-k="${esc(k)}" data-t="${esc(t)}" aria-label="Einstellungen für ${esc(t)}"><span class="logobtn"><img src="./logo-final.svg" alt=""></span><p class="big">${esc(t)}</p></button>` : `<span class="tleft"><p class="big">${esc(t)}</p></span>`}<span class="tright"><button class="iconbtn camtop" data-act="search" aria-label="Suchen oder Mirella fragen">${IC.such}</button><button class="iconbtn camtop" data-act="photo" aria-label="Foto oder Brief an Mirella">${IC.cam}</button><button class="brandbtn" data-act="drawer" aria-label="Menü mit allen Bereichen öffnen"><b>Mirella</b><img src="./logo-final.svg" alt=""></button></span></div>`;
@@ -285,7 +307,7 @@ function personCard(p, withCall) {
 function todoRow(t) {
   const pr = !t.done && prioOf(t), shop = t.list === "einkauf", q = shop ? L.qtyLabel(t) : "";
   const right = shop ? (t.done ? "" : `<span class="qbtns"><button class="mini" data-act="qty" data-id="${t.id}" data-n="-1" aria-label="weniger">−</button><button class="mini" data-act="qty" data-id="${t.id}" data-n="1" aria-label="mehr">+</button></span>`) : todoPersonBtn(t);
-  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}</div>${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}</div>${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
 }
 function todoPersonBtn(t) {
   const p = t.pid && S.people.find(x => x.id === t.pid); if (!p || t.done) return "";
@@ -330,6 +352,8 @@ const R = {
     if (dueCalls.length || doneCalls) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length ? dueCalls.length + " heute" : ""}${doneCalls ? (dueCalls.length ? " · " : "") + doneCalls + " erledigt" : ""}</span></div>${dueCalls.map(p => personCard(p, true)).join("")}${!dueCalls.length ? `<div class="swipehint" style="text-align:left">Für heute alle Anrufe geschafft. 👍</div>` : ""}${pool.length && dueCalls.length < 2 ? `<button class="btn" data-act="pullcalls" style="width:100%;margin-top:6px">Weitere Anrufe vorziehen (${Math.min(pool.length, +S.settings.maxCalls || 3)} von ${pool.length})</button>` : ""}`;
     const quit = S.people.filter(p => !p.arch && gaveUp(p));
     if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
+    const kins = kinSoon(S.settings.giftLead).filter(x => !heuteSkip(x.p));
+    if (kins.length) h2 += `<div class="sec"><span class="label">Geburtstage in der Familie</span></div>${kins.map(({ p, k, b }) => { const n = diffDays(t, b), age = ageAt(k, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎂</span><span style="min-width:0"><div class="t">${esc(k.name)}${age ? ` wird ${age}` : ""}</div><div class="s">${esc(k.rel || "Familie")} von ${esc(fullName(p))} · ${n === 0 ? "heute!" : n === 1 ? "morgen" : "in " + n + " Tagen"}</div></span><span class="chev">›</span></div>`; }).join("")}`;
     if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : (n === 1 ? "morgen" : "in " + n + " Tagen") + " · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
     const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && !p.death && !heuteSkip(p) && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
     if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
@@ -347,12 +371,18 @@ const R = {
     const ql = q.trim().toLowerCase();
     let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "")).toLowerCase().includes(ql)));
     const grps = S.groups.filter(g => S.people.some(p => p.group === g));
-    const rank = p => { const d = nextDue(p); return d || "9999"; };
-    list = list.sort((a, b) => rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : fullName(a).localeCompare(fullName(b), "de"));
+    const rank = p => { const d = nextDue(p); return d || "9999"; }, az = (S.settings.peopleSort || "az") === "az";
+    const key = p => (p.last || p.first || "").trim(), letter = p => { const c = key(p).normalize("NFD").replace(/[̀-ͯ]/g, "").charAt(0).toUpperCase(); return /[A-Z]/.test(c) ? c : "#"; };
+    list = az ? list.sort((a, b) => key(a).localeCompare(key(b), "de") || fullName(a).localeCompare(fullName(b), "de")) : list.sort((a, b) => rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : fullName(a).localeCompare(fullName(b), "de"));
+    let body = "", have = new Set();
+    if (az) { let cur0 = ""; for (const p of list) { const l = letter(p); if (l !== cur0) { cur0 = l; have.add(l); body += `<div class="sec" id="az-${l === "#" ? "x" : l}"><span class="label">${l}</span></div>`; } body += personCard(p, false); } }
+    else body = list.map(p => personCard(p, false)).join("");
     return `${topbar("Kontakte")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Gruppe oder Nummer" aria-label="Suchen" value="${esc(q)}">
     ${grps.length ? `<div class="chips"><button class="chip2" data-act="grpf" data-g="" aria-pressed="${!grpFilter}">Alle</button>${grps.map(g => `<button class="chip2" data-act="grpf" data-g="${esc(g)}" aria-pressed="${grpFilter === g}">${esc(g)}</button>`).join("")}</div>` : ""}
-    <div class="sec"><span class="label">Wer zuerst dran ist</span><span class="label">${list.length}</span></div>
-    ${list.length ? list.map(p => personCard(p, false)).join("") : empty(S.people.length ? "Niemand gefunden." : "Noch keine Kontakte. Tipp auf +, oder importiere sie in den Einstellungen (vCard).")}
+    <div class="seg" style="margin-bottom:8px"><button data-act="psort" data-m="az" aria-pressed="${az}">A bis Z</button><button data-act="psort" data-m="dran" aria-pressed="${!az}">Wer ist dran</button></div>
+    ${az ? "" : `<div class="sec"><span class="label">Wer zuerst dran ist</span><span class="label">${list.length}</span></div>`}
+    <div class="${az && list.length > 12 ? "haskaz" : ""}">${list.length ? body : empty(S.people.length ? "Niemand gefunden." : "Noch keine Kontakte. Tipp auf +, oder importiere sie in den Einstellungen (vCard).")}</div>
+    ${az && list.length > 12 ? `<div class="azbar" id="azbar" aria-label="Zum Buchstaben springen">${"ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("").map(l => `<span data-l="${l}" class="${have.has(l) ? "" : "off"}">${l}</span>`).join("")}</div>` : ""}
     ${(() => { const ar = S.people.filter(p => p.arch && (!ql || fullName(p).toLowerCase().includes(ql))).sort((a, b) => fullName(a).localeCompare(fullName(b), "de")); return ar.length ? `<div class="sec"><button class="mini" data-act="showarch" style="border:0;background:none;padding:0"><span class="label">Archiv (${ar.length}) ${showArch ? "▾" : "▸"}</span></button></div>${showArch ? ar.map(p => `<div class="listrow"><span class="grow" role="button" data-act="person" data-id="${p.id}" style="cursor:pointer">${esc(fullName(p))}<small>archiviert${p.arch && p.arch !== 1 ? " am " + esc(fmtDate(p.arch)) : ""} · keine Anrufe, keine Geburtstage</small></span><button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>`).join("") : ""}` : ""; })()}`;
   },
   akte() {
@@ -363,11 +393,12 @@ const R = {
     const calls = (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1);
     return `${subtop("Kontakte", "go\" data-v=\"menschen")}
     <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>${p.woher ? `<p>Kennen uns: ${esc(p.woher)}</p>` : ""}
-    ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
+    ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}${p.telL ? ` <small style="font-weight:500;opacity:.8">· ${esc(p.telL)}</small>` : ""}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
     ${(p.tels || []).map(x => `<a class="mini" href="tel:${esc(x.n.replace(/[^\d+]/g, ""))}" style="text-decoration:none;display:block;margin:0 0 6px">${IC.call} ${esc(x.n)}${x.l ? " · " + esc(x.l) : ""}</a>`).join("")}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${p.death ? "" : p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
     ${bdayBlock(p, nb)}
+    ${kinBlock(p)}
     ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
     ${list("Geschenkideen", "gifts", "Noch keine Ideen", "z. B. Kochkurs")}
@@ -390,7 +421,7 @@ const R = {
   kalender() {
     const f = S.settings.calFilter, dd = D(selDate);
     const seg = `<div class="seg">${[["tag", "Tag"], ["woche", "Woche"], ["monat", "Monat"], ["liste", "Liste"]].map(([v, l]) => `<button data-act="calview" data-cv="${v}" aria-pressed="${calView === v}">${l}</button>`).join("")}</div>`;
-    const filt = `<div class="chips">${CALF.map(([k, l]) => `<button class="chip2 cf-${k}" data-act="calf" data-k="${k}" aria-pressed="${!!f[k]}"><i></i>${l}</button>`).join("")}</div>`;
+    const filt = `<div class="chips calfilt">${CALF.map(([k, l]) => `<button class="chip2 cf-${k}" data-act="calf" data-k="${k}" aria-pressed="${!!f[k]}"><i></i>${l}</button>`).join("")}</div>`;
     let title = "", sub = "";
     if (calView === "tag") { title = `${WDL[dd.getDay()]}, ${dd.getDate()}. ${MN[dd.getMonth()]}`; sub = `${dd.getFullYear()} · KW ${isoWeek(selDate)}`; }
     else if (calView === "woche") { const mo = weekStart(selDate), su = addDays(mo, 6); title = `KW ${isoWeek(mo)}`; sub = `${D(mo).getDate()}. ${MN[D(mo).getMonth()].slice(0, 3)} bis ${D(su).getDate()}. ${MN[D(su).getMonth()].slice(0, 3)} ${D(su).getFullYear()}`; }
@@ -419,7 +450,7 @@ const R = {
       let lastW = null;
       body = keys.length ? keys.map(k => { const d = D(k), w = isoWeek(k), wh = w !== lastW ? `<div class="sec"><span class="label">Kalenderwoche ${w}</span></div>` : ""; lastW = w; return wh + `<div class="cal-day"><div class="d">${WD[d.getDay()]}<b>${d.getDate()}</b>${MN[d.getMonth()].slice(0, 3)}</div><div>${ev[k].map(evRow).join("")}</div></div>`; }).join("") : empty("In den nächsten 60 Tagen steht nichts an.");
     }
-    return topbar("Kalender") + seg + nav + filt + body + '<p class="swipehint" style="margin-top:14px">Wischen oder Pfeile: blättern · Tipp auf den Titel: Monat und Jahr wählen</p>';
+    return topbar("Kalender") + seg + nav + body + filt + '<p class="swipehint" style="margin-top:14px">Wischen oder Pfeile: blättern · Tipp auf den Titel: Monat und Jahr wählen</p>';
   },
   bereich() {
     const A = areaById(area); if (!A) { view = "heute"; return R.heute(); }
@@ -728,6 +759,10 @@ function eventsRange(from, to, all) {
   for (const p of S.people) {
     if (p.bday) { const [, m, dd] = p.bday.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", p.death ? "Gedenken" : "Geburtstag", fullName(p) + (p.death ? " · Geburtstag" : ageAt(p, `${y}-${m}-${dd}`) ? " wird " + ageAt(p, `${y}-${m}-${dd}`) : ""), "person", p.id); }
     if (p.death) { const [, m, dd] = p.death.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", "Gedenken", fullName(p) + " · Todestag", "person", p.id); }
+    for (const k of p.arch ? [] : p.kin || []) {
+      if (k.bday) { const [, m, dd] = k.bday.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", k.death ? "Gedenken" : "Geburtstag", k.name + " (" + (k.rel || "Familie") + " von " + fullName(p) + ")" + (!k.death && ageAt(k, `${y}-${m}-${dd}`) > 0 ? " wird " + ageAt(k, `${y}-${m}-${dd}`) : ""), "person", p.id); }
+      if (k.death) { const [, m, dd] = k.death.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", "Gedenken", k.name + " · Todestag", "person", p.id); }
+    }
     const due = nextDue(p); if (due) add(due < today() ? today() : due, "anruf", "Anruf", fullName(p), "person", p.id);
     for (const c of p.calls || []) add(c.d, "anruf", "Anruf", fullName(p) + (c.ok ? " · erreicht" : " · nicht erreicht"), "person", p.id);
   }
@@ -805,7 +840,7 @@ function closeSheet(byUser) {
 }
 function drawerHTML() {
   const nb = S.briefings.filter(b => !b.read).length;
-  const brief = `<button class="drow" data-act="go" data-v="briefings">${IC.doku}<span class="dt"><b>Briefings</b><small>${S.briefings.length ? "Diese Woche: " + S.briefings.filter(b => isoWeek(b.d) === isoWeek(today()) && b.d.slice(0, 4) === today().slice(0, 4)).length + " · neuestes " + relDate(latestBriefing().d) : "Noch keine Briefings"}</small></span>${nb ? `<span class="pill acc">${nb}</span>` : ""}<span class="chev">›</span></button>`;
+  const brief = `<button class="drow" data-act="go" data-v="briefings">${IC.doku}<span class="dt"><b>Briefings</b><small>${S.briefings.length ? "Diese Woche: " + S.briefings.filter(b => isoWeek(b.d) === isoWeek(today()) && b.d.slice(0, 4) === today().slice(0, 4)).length + " · neuestes " + relDate(latestBriefing().d) : "Noch keine Briefings"}</small></span>${nb ? `<span class="pill acc">${nb}</span>` : ""}<span class="chev">›</span></button><button class="drow" data-act="go" data-v="auswertungen">${IC.doku}<span class="dt"><b>Auswertungen</b><small>Aufgaben, Anrufe, Einkauf, Geld: was deine Einträge zeigen</small></span><span class="chev">›</span></button>`;
   return wxRow() + AREAS.map(A => {
     const open = S.todos.filter(t => t.area === A.id && !t.done && t.list === "todo");
     const late = open.some(t => t.date && t.date < today());
@@ -949,6 +984,8 @@ function personForm(p) {
   <div class="fld"><label for="c-first">Vorname</label><input id="c-first" value="${esc(v.first)}" autocomplete="off" autocapitalize="words"></div>
   <div class="fld"><label for="c-last">Nachname</label><input id="c-last" value="${esc(v.last)}" autocomplete="off" autocapitalize="words"></div>
   <div class="fld"><label for="c-tel">Telefon</label><div class="telrow"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678"></div><div class="fwarn" id="w-tel" hidden></div></div>
+  <div class="fgrid"><div class="fld"><label for="c-tell">Diese Nummer ist</label><select id="c-tell"><option value="">(keine Angabe)</option>${TELL.map(x => `<option${v.telL === x ? " selected" : ""}>${x}</option>`).join("")}</select></div><div class="fld"><label for="c-tel2l">Zweite Nummer ist</label><select id="c-tel2l">${TELL.map(x => `<option${(((v.tels || [])[0] || {}).l || "Geschäft") === x ? " selected" : ""}>${x}</option>`).join("")}</select></div></div>
+  <div class="fld"><label for="c-tel2">Zweite Nummer (z. B. geschäftlich)</label><input id="c-tel2" type="tel" inputmode="tel" value="${esc(((v.tels || [])[0] || {}).n || "")}" placeholder="0711 1234567" autocomplete="off"></div>
   <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"><div class="fwarn" id="w-mail" hidden></div></div>
   <div class="fld"><label>Gruppe</label><div class="chips" id="c-grps">${grpChips(v.group)}</div><input type="hidden" id="c-grp" value="${esc(v.group || "")}"></div>
   <div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}${c === "nie" ? " (nur Geburtstag merken)" : ""}</option>`).join("")}</select></div>
@@ -972,22 +1009,27 @@ function personForm(p) {
 }
 function grpChips(sel) { return S.groups.map(g => `<button type="button" class="chip2" data-act="pickgrp" data-g="${esc(g)}" aria-pressed="${g === sel}">${esc(g)}</button>`).join("") + `<button type="button" class="chip2" data-act="newgrp">+ Eigene</button>`; }
 let addrTimer = null;
-function addrSuggest(inp, box) {
+function addrSuggest(inp, box, places) {
   inp.addEventListener("input", () => {
-    clearTimeout(addrTimer); const q = inp.value.trim();
+    clearTimeout(addrTimer); const q = inp.value.trim(); delete inp.dataset.lat; delete inp.dataset.lon; delete inp.dataset.label;
     if (q.length < 4) { box.hidden = true; return; }
     addrTimer = setTimeout(async () => {
       try {
         const lat = S.settings.wxLat || 48.8, lon = S.settings.wxLon || 9.2;
-        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=de&limit=5&lat=${lat}&lon=${lon}`);
-        const j = await r.json();
-        const list = [...new Set((j.features || []).map(f => fmtAddr(f.properties)).filter(Boolean))];
+        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=de&limit=${places ? 7 : 5}&lat=${lat}&lon=${lon}`);
+        const j = await r.json(), seen = new Set(), list = [];
+        for (const f of j.features || []) { const a = places ? placeLabel(f.properties) : fmtAddr(f.properties); if (!a || seen.has(a)) continue; seen.add(a); list.push({ a, c: f.geometry && f.geometry.coordinates }); }
         if (!list.length || inp.value.trim() !== q) { box.hidden = true; return; }
-        box.innerHTML = list.map(a => `<button type="button" data-addr="${esc(a)}">${esc(a)}</button>`).join(""); box.hidden = false;
+        box.innerHTML = list.map(x => `<button type="button" data-addr="${esc(x.a)}"${x.c ? ` data-lat="${x.c[1]}" data-lon="${x.c[0]}"` : ""}>${esc(x.a)}</button>`).join(""); box.hidden = false;
       } catch (_) { box.hidden = true; }
     }, 350);
   });
-  box.addEventListener("click", e => { const b = e.target.closest("[data-addr]"); if (!b) return; inp.value = b.dataset.addr; box.hidden = true; });
+  box.addEventListener("click", e => { const b = e.target.closest("[data-addr]"); if (!b) return; inp.value = b.dataset.addr; if (b.dataset.lat) { inp.dataset.lat = b.dataset.lat; inp.dataset.lon = b.dataset.lon; inp.dataset.label = b.dataset.addr; } box.hidden = true; });
+}
+/* Ort mit Namen: „Alte Wache, Marktplatz 1, 70173 Stuttgart“ */
+function placeLabel(a) {
+  const adr = fmtAddr(a); if (!a || !a.name || !a.street || adr.startsWith(a.name)) return adr;
+  return a.name + ", " + adr;
 }
 function fmtAddr(a) {
   if (!a) return "";
@@ -1014,6 +1056,11 @@ function mergeInto(t, src, label) {
     (t.tels = t.tels || []).push({ n: x.n, l: x.l || "" });
   }
   if (src.email && t.email && src.email.toLowerCase() !== t.email.toLowerCase() && !(t.notes || []).some(n => n.t.includes(src.email))) (t.notes = t.notes || []).unshift({ id: uid(), t: "Weitere E-Mail: " + src.email, d: today() });
+  // Hat der andere Eintrag einen anderen Geburtstag oder Todestag, geht der nicht verloren: er kommt als Angehöriger in die Familie
+  if ((src.bday && t.bday && src.bday.slice(5) !== t.bday.slice(5)) || (src.death && src.death !== t.death && normName(src.first || "") !== normName(t.first || ""))) {
+    const nm = fullName(src); if (!(t.kin || []).some(k => normName(k.name) === normName(nm))) (t.kin = t.kin || []).push({ id: uid(), name: nm, rel: "Sonstige", bday: src.bday && src.bday !== t.bday ? src.bday : "", death: src.death || "" });
+  }
+  for (const k of src.kin || []) if (!(t.kin || []).some(x => normName(x.name) === normName(k.name))) (t.kin = t.kin || []).push(k);
   if (noCycle(t.cyc) && src.cyc) t.cyc = src.cyc;
   t.gift = t.gift || !!src.gift;
   for (const k of ["calls", "notes", "ask", "gifts"]) t[k] = [...(t[k] || []), ...(src[k] || [])];
@@ -1021,7 +1068,7 @@ function mergeInto(t, src, label) {
 }
 function readPersonForm() {
   const bd = L.parseBday($("#c-bday").value), dd = L.parseBday($("#c-death").value);
-  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), woher: $("#c-woher") ? $("#c-woher").value.trim() : "" };
+  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tel2: $("#c-tel2") ? { n: $("#c-tel2").value.trim(), l: $("#c-tel2l").value } : null, woher: $("#c-woher") ? $("#c-woher").value.trim() : "" };
 }
 function savePerson(id) {
   const data = readPersonForm(), first = data.first, last = data.last;
@@ -1039,6 +1086,10 @@ function savePerson(id) {
     $("#dup-warn").scrollIntoView({ block: "center" }); return;
   }
   savePerson.force = false;
+  { // zweite Nummer: steht an erster Stelle der weiteren Nummern, die übrigen bleiben
+    const old = id ? S.people.find(x => x.id === id) : null, rest = ((old && old.tels) || []).slice(1), t2 = data.tel2; delete data.tel2;
+    if (t2) data.tels = (t2.n ? [{ n: t2.n, l: t2.l }] : []).concat(rest);
+  }
   savePerson.last = data;
   if (id) Object.assign(S.people.find(x => x.id === id), data);
   else {
@@ -1177,6 +1228,7 @@ class NativeSR {
 const SR = NATIVE && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition ? NativeSR : (window.SpeechRecognition || window.webkitSpeechRecognition);
 let rec = null, recOn = false, finalText = "";
 function voiceStart() {
+  vMore = null;
   finalText = "";
   openSheet(`<p class="stitle">Sag es Mirella</p>
   <div class="vstate"><span class="vdot" id="v-dot"></span><span id="v-state">${SR ? "Ich höre zu …" : "Tippe ins Feld und nutze das Mikrofon auf der Tastatur."}</span></div>
@@ -1328,6 +1380,22 @@ function understand(text) {
   return items;
 }
 let pending = [];
+/* Weiterreden nach „Das habe ich verstanden“: „mach die Uhrzeit auf 18 Uhr“ ändert den letzten Eintrag, alles andere kommt dazu */
+let vMore = null;
+function amendLocal(items, corr) {
+  const w = parseWhen(corr); let mt;
+  if (!w.time) { // „auf 18 Uhr“, „lieber 19:30“, „halb sieben“ – ohne „um“
+    const NUM = { eins: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10, elf: 11, zwölf: 12 };
+    if ((mt = w.rest.match(/\bhalb (\d{1,2}|[a-zäöüß]+)\b/i)) && (+mt[1] || NUM[mt[1].toLowerCase()])) { let h = (+mt[1] || NUM[mt[1].toLowerCase()]) - 1; if (h < 7) h += 12; w.time = pad(h) + ":30"; w.rest = w.rest.replace(mt[0], " "); }
+    else if ((mt = w.rest.match(/\b(\d{1,2})[:.](\d{2})(\s*uhr)?\b/i) || w.rest.match(/\b(\d{1,2})()\s*uhr(?:\s*(\d{1,2}))?\b/i)) && +mt[1] <= 23) { const mi = +(mt[2] || (/^\d+$/.test(mt[3] || "") ? mt[3] : 0)); if (mi < 60) { w.time = pad(+mt[1]) + ":" + pad(mi); w.rest = w.rest.replace(mt[0], " "); } }
+  }
+  const last = [...items].reverse().find(x => x.type === "todo"), words = w.rest.replace(/\b(mach|mache|bitte|doch|die|den|das|uhrzeit|zeit|datum|auf|statt|lieber|nicht|sondern|ändere|aender|verschieb|verschiebe|es|ihn|sie|und|hey|ey|eher|termin|aufgabe)\b/gi, " ").trim();
+  if (last && (w.date || w.time) && words.split(/\s+/).filter(Boolean).length <= 2) {
+    const dateSaid = /heute|morgen|übermorgen|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|woche|tag|monat|\d\.|nachher|später|gleich|stunde|minute/i.test(corr);
+    if (w.time) last.time = w.time; if (w.date && (dateSaid || !last.date)) last.date = w.date; return items;
+  }
+  const add = understand(corr); return items.concat(add.length ? add : [{ type: "todo", t: cap(corr), date: "", time: "", trig: "" }]);
+}
 function voiceReview() {
   recStop();
   const txt = ($("#v-text").value || "").trim();
@@ -1347,6 +1415,7 @@ function reviewRender(txt) {
     ${it.type === "todo" ? `<div class="pg"><input type="date" data-pf="date" value="${esc(it.date || "")}" aria-label="Datum"><input type="time" data-pf="time" value="${esc(it.time || "")}" aria-label="Uhrzeit"></div>${it.trig === "verlassen" ? '<div class="swipehint" style="text-align:left;margin:0">bevor du losgehst</div>' : ""}` : ""}
     ${it.type === "expense" ? `<div class="pg"><input data-pf="amount" inputmode="decimal" value="${it.amount != null ? String(it.amount).replace(".", ",") : ""}" placeholder="Betrag €" aria-label="Betrag"><select data-pf="cat" style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:14px;margin-bottom:6px">${catList().map(c => `<option${c === it.cat ? " selected" : ""}>${c}</option>`).join("")}</select></div>` : ""}
   </div>`).join("") || empty("Alles weggelassen.")}</div>
+  <button class="btn" data-act="vmore" style="width:100%;margin-bottom:8px">🎙 Weiterreden: ändern oder ergänzen</button>
   <div class="row2"><button class="btn" data-act="vback" style="flex:none">‹ Zurück</button><button class="btn" data-close="sheet">Abbrechen</button><button class="btn pri" data-act="vsave"${pending.length ? "" : " disabled"}>Speichern</button></div>`);
   sheetCleanup = null;
   $("#pitems").addEventListener("change", e => { const el = e.target, box = el.closest(".pitem"); if (!box) return; const it = pending[+box.dataset.i]; readPItem(box, it); if (el.dataset.pf === "type") { it.type = el.value; reviewRender(txt); } });
@@ -1528,6 +1597,15 @@ const ACT = {
   dropdraft: (el, e) => { if (!ask("Unfertige Eingabe verwerfen?")) return; draftClear(); render(true); },
   editperson: el => personForm(S.people.find(x => x.id === el.dataset.id)),
   saveperson: el => savePerson(el.dataset.id),
+  kinedit: el => kinForm(el.dataset.id),
+  kinsave: el => {
+    const p = S.people.find(x => x.id === cur); if (!p) return; const name = $("#k-name").value.trim(), bd = L.parseBday($("#k-bday").value), dd = L.parseBday($("#k-death").value);
+    if (!name) { toast("Bitte einen Namen eintragen"); return; } if (bd === null || dd === null) { toast("Datum bitte als TT.MM.JJJJ, z. B. 07042024"); return; }
+    p.kin = p.kin || []; let k = p.kin.find(x => x.id === el.dataset.id); if (!k) { k = { id: uid() }; p.kin.push(k); }
+    Object.assign(k, { name, rel: $("#k-rel").value, bday: bd || "", death: dd || "" }); save(); closeSheet(); render(true); toast(name + " gespeichert");
+  },
+  kindel: el => { const p = S.people.find(x => x.id === cur), k = p && (p.kin || []).find(x => x.id === el.dataset.id); if (!k || !ask(`${k.name} aus der Familie von ${fullName(p)} löschen?`)) return; p.kin = p.kin.filter(x => x !== k); save(); closeSheet(); render(true); },
+  psort: el => { S.settings.peopleSort = el.dataset.m; save(); render(); },
   delperson: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!ask(fullName(p) + " wirklich löschen? Notizen und Anrufverlauf gehen mit.")) return; S.people = S.people.filter(x => x !== p); draftClear(); save(); closeSheet(); view = "menschen"; render(); toast("Gelöscht"); },
   askdone: el => { const p = S.people.find(x => x.id === cur), a = p.ask.find(x => x.id === el.dataset.id); a.done = !a.done; save(); render(true); },
   delakte: el => { const p = S.people.find(x => x.id === cur), it = p[el.dataset.k].find(x => x.id === el.dataset.id); if (!it || !ask(`„${it.t}“ löschen?`)) return; p[el.dataset.k] = p[el.dataset.k].filter(x => x !== it); save(); render(true); },
@@ -1554,6 +1632,7 @@ const ACT = {
   vnext: () => voiceReview(),
   vback: () => { const t = voiceReview.lastTxt || ""; voiceStart(); recStop(); $("#v-text").value = t; $("#v-state").textContent = "Ändern oder auf „Nochmal“ tippen."; },
   vsave: () => voiceSave(),
+  vmore: () => { $$("#pitems .pitem").forEach(b => readPItem(b, pending[+b.dataset.i])); const m = { txt: voiceReview.lastTxt || "", items: pending.slice() }; voiceStart(); vMore = m; const st = $("#sheetbody .stitle"); if (st) st.textContent = "Was soll ich ändern oder ergänzen?"; const ta = $("#v-text"); if (ta) ta.placeholder = "z. B. Mach die Uhrzeit auf 18 Uhr. Oder: Und noch Milch auf die Einkaufsliste."; },
   pdel: el => { $$("#pitems .pitem").forEach(b => readPItem(b, pending[+b.dataset.i])); pending.splice(+el.dataset.i, 1); reviewRender(voiceReview.lastTxt); },
   importvcf: () => { const f = $("#f-vcf"); f.value = ""; f.click(); },
   export: () => exportData(),
@@ -1569,6 +1648,7 @@ document.addEventListener("click", e => {
   if (e.target.closest("#mic")) { if ($("#sheet").classList.contains("open") && $("#v-text")) { closeSheet(); return; } voiceStart(); return; }
   if (e.target.closest("#plus")) { plusAction(); return; }
   const a = e.target.closest("[data-act]");
+  if (a && Date.now() - swipeAt < 450 && !a.classList.contains("swdel")) { e.preventDefault(); return; } // gerade gewischt: kein Antippen auslösen
   if (a && ACT[a.dataset.act]) {
     if (a.tagName === "INPUT" && a.type === "checkbox") return; // über "change"
     if (a.dataset.act === "dial") { e.stopPropagation(); pendingCall = a.dataset.id; closeSheet(); return; } // tel:-Link normal öffnen
@@ -1623,6 +1703,34 @@ document.addEventListener("keydown", e => {
 });
 function shiftMonth(k) { calM += k; if (calM < 0) { calM = 11; calY--; } if (calM > 11) { calM = 0; calY++; } selDate = iso(new Date(calY, calM, 1, 12)); if (today().startsWith(`${calY}-${pad(calM + 1)}`)) selDate = today(); render(); }
 let tx = null, ty = null;
+/* A–Z-Leiste: Finger drauf und ziehen springt zum Buchstaben */
+function azGo(e) {
+  const t = e.touches ? e.touches[0] : e, el = document.elementFromPoint(t.clientX, t.clientY), sp = el && el.closest && el.closest("#azbar span"); if (!sp) return;
+  const l = sp.dataset.l; let tgt = document.getElementById("az-" + (l === "#" ? "x" : l));
+  if (!tgt) { const all = [...document.querySelectorAll('[id^="az-"]')]; tgt = all.find(x => x.id.slice(3) > l) || all[all.length - 1]; }
+  if (tgt) tgt.scrollIntoView({ block: "start" });
+  let pop = document.querySelector(".azpop"); if (!pop) { pop = document.createElement("div"); pop.className = "azpop"; document.body.appendChild(pop); } pop.textContent = l;
+}
+const azEnd = () => { const p = document.querySelector(".azpop"); if (p) p.remove(); };
+document.addEventListener("touchstart", e => { if (e.target.closest("#azbar")) azGo(e); }, { passive: true });
+document.addEventListener("touchmove", e => { if (e.target.closest && e.target.closest("#azbar")) azGo(e); }, { passive: true });
+document.addEventListener("touchend", azEnd); document.addEventListener("touchcancel", azEnd);
+document.addEventListener("click", e => { if (e.target.closest("#azbar")) { azGo(e); setTimeout(azEnd, 500); } });
+/* Wischen nach links auf einer Zeile: roter Löschen-Knopf. Gelöscht wird erst nach Tipp darauf und Nachfrage. */
+let swp = null, swipeAt = 0;
+function swipeClose() { document.querySelectorAll(".swiped").forEach(x => { x.classList.remove("swiped"); x.style.transform = ""; const b = x.querySelector(":scope > .swdel"); if (b) b.remove(); }); }
+document.addEventListener("touchstart", e => { if (!e.target.closest(".swdel")) swipeClose(); const row = e.target.closest("[data-swipe]"); swp = row && e.touches.length === 1 ? { row, x: e.touches[0].clientX, y: e.touches[0].clientY, on: false } : null; }, { passive: true });
+document.addEventListener("touchmove", e => {
+  if (!swp) return; const dx = e.touches[0].clientX - swp.x, dy = e.touches[0].clientY - swp.y;
+  if (!swp.on) { if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { swp = null; return; } if (dx < -14 && Math.abs(dx) > Math.abs(dy) * 1.5) swp.on = true; else return; }
+  swp.row.style.transform = `translateX(${Math.max(-104, Math.min(0, dx))}px)`;
+}, { passive: true });
+document.addEventListener("touchend", e => {
+  if (!swp || !swp.on) { swp = null; return; } const row = swp.row, dx = e.changedTouches[0].clientX - swp.x; swp = null; swipeAt = Date.now();
+  if (dx > -52) { row.style.transform = ""; return; }
+  row.classList.add("swiped"); row.style.transform = "translateX(-104px)";
+  const b = document.createElement("button"); b.className = "swdel"; b.dataset.act = row.dataset.swipe; b.dataset.id = row.dataset.id; b.textContent = "Löschen"; row.appendChild(b);
+});
 $("#screen").addEventListener("touchstart", e => { if (view === "kalender" && calView !== "liste") { tx = e.touches[0].clientX; ty = e.touches[0].clientY; } else tx = null; }, { passive: true });
 $("#screen").addEventListener("touchend", e => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) calStep(dx < 0 ? 1 : -1); tx = null; });
 /* Wisch nach unten auf dem Sheet-Kopf schließt */

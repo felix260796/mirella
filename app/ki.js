@@ -86,8 +86,8 @@ function kiNames(text) {
   const hit = w => words.has(w) || (w.length > 2 && words.has(w + "s"));
   return S.people.filter(p => !p.arch && normName(fullName(p) + " " + (p.nick || "")).split(" ").some(hit)).slice(0, 60);
 }
-async function kiUnderstand(text) {
-  const cand = kiNames(text), d = new Date();
+async function kiUnderstand(text, prior) {
+  const cand = kiNames(text + " " + (prior || []).map(x => { const p = x.pid && S.people.find(y => y.id === x.pid); return p ? fullName(p) : ""; }).join(" ")), d = new Date();
   const system = `Du bist Mirella, die persönliche Assistentin von ${S.settings.name || "Felix"}. Du bekommst einen gesprochenen oder getippten Satz auf Deutsch und zerlegst ihn in Einträge für die App. Es wird nichts gespeichert, bevor der Nutzer deine Einträge bestätigt hat.
 
 Arten von Einträgen:
@@ -101,9 +101,13 @@ Mitdenken: Ergibt sich aus dem Gesagten etwas, woran ein aufmerksamer Mensch sp�
 
 Felder, die nicht zur Art passen, bleiben leer ("" bzw. null, "ok" true, "vorschlag" false). Erfinde keine Personen: steht jemand nicht in der Kontaktliste, wird es eine Aufgabe mit dem Namen im Text.
 
+Zeitwörter: "nachher" und "später" heißen in zwei Stunden (auf die Viertelstunde gerundet; wäre das nach 21 Uhr, dann morgen 9 Uhr), "gleich" heißt in 30 Minuten, "heute Abend" 19 Uhr, "morgen früh" 8 Uhr.
+
 Heute ist ${WDL[d.getDay()]}, der ${today()}, es ist ${pad(d.getHours())}:${pad(d.getMinutes())} Uhr.
 Kontakte, die gemeint sein könnten: ${cand.length ? cand.map(p => fullName(p) + (p.nick ? " (Spitzname " + p.nick + ")" : "")).join("; ") : "keine passenden gefunden"}.`;
-  const raw = await kiCall({ system, user: text, hard: false, schema: KI_ITEMS, maxTokens: 3000 });
+  const pr = (prior || []).map(x => { const p = x.pid && S.people.find(y => y.id === x.pid); return { type: x.type, t: (x.t || "").replace(/^Vorschlag: /, ""), date: x.date || "", time: x.time || "", person: p ? fullName(p) : "", amount: x.amount == null ? null : x.amount, shop: x.shop || "", cat: x.cat || "", ok: x.ok !== false }; });
+  const user = prior ? `Bisher verstandene Einträge (JSON):\n${JSON.stringify(pr)}\n\nDer Nutzer hat danach weitergesprochen: „${text}“\n\nGib die vollständige Liste zurück: ändere die Einträge, auf die sich das Gesagte bezieht (zum Beispiel eine andere Uhrzeit), lasse die anderen unverändert und ergänze neue, wenn er etwas Neues sagt. Keine neuen Vorschläge.` : text;
+  const raw = await kiCall({ system, user, hard: false, schema: KI_ITEMS, maxTokens: 3000 });
   const out = [];
   for (const it of (JSON.parse(raw).items || [])) {
     const p = it.person ? cand.find(x => normName(fullName(x)) === normName(it.person)) || (findPersonsIn(it.person.toLowerCase())[0] || {}).p : null;
@@ -118,6 +122,13 @@ Kontakte, die gemeint sein könnten: ${cand.length ? cand.map(p => fullName(p) +
 const kiOrigReview = voiceReview;
 voiceReview = async function () {
   const txt = ($("#v-text") && $("#v-text").value || "").trim();
+  if (vMore) { // Weiterreden: Änderung oder Ergänzung zu dem, was schon verstanden wurde
+    const m = vMore; vMore = null; recStop();
+    if (!txt) { pending = m.items; return reviewRender(m.txt); }
+    if (kiOn()) { toast("Mirella ändert es …"); try { const it = await kiUnderstand(txt, m.items); pending = it.length ? it : amendLocal(m.items, txt); } catch (e) { pending = amendLocal(m.items, txt); } }
+    else pending = amendLocal(m.items, txt);
+    return reviewRender((m.txt + " … " + txt).trim());
+  }
   if (!kiOn() || !txt || /^(ich bin|bin) (heute |jetzt |leider )*(krank|erkältet|krankgeschrieben)\b/i.test(txt)) return kiOrigReview();
   recStop(); toast("Mirella denkt nach …");
   try {

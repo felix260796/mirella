@@ -58,7 +58,7 @@ public class MirellaAlarmPlugin: CAPPlugin, CAPBridgedPlugin {
             Task {
                 do {
                     let r = try await MirellaAlarms.replace(items)
-                    call.resolve(["state": r.0, "count": r.1])
+                    call.resolve(["state": r.0, "count": r.1, "error": r.2])
                 } catch { call.reject("Wecker konnte nicht gestellt werden: \(error.localizedDescription)") }
             }
             return
@@ -91,21 +91,37 @@ enum MirellaAlarms {
         return m.authorizationState
     }
 
-    static func replace(_ items: [(Date, String)]) async throws -> (String, Int) {
+    /// Stellt alle Wecker neu. Liefert Zustand, Anzahl gestellter Wecker und den ersten Fehlertext (leer = alles gut).
+    static func replace(_ items: [(Date, String)]) async throws -> (String, Int, String) {
         let m = AlarmManager.shared
         let st = try await authorize()
-        guard st == .authorized else { return (name(st), 0) }
+        guard st == .authorized else { return (name(st), 0, "") }
         for a in (try? m.alarms) ?? [] { try? m.cancel(id: a.id) }
         var n = 0
+        var fehler = ""
+        let cal = Calendar.current
         for (date, title) in items {
             let stop = AlarmButton(text: "Stopp", textColor: .white, systemImageName: "stop.circle")
             let alert = AlarmPresentation.Alert(title: LocalizedStringResource(String.LocalizationValue(title)), stopButton: stop, secondaryButton: nil, secondaryButtonBehavior: nil)
             let attrs = AlarmAttributes<MirellaAlarmMeta>(presentation: AlarmPresentation(alert: alert, countdown: nil, paused: nil), metadata: nil, tintColor: .orange)
-            let cfg = AlarmManager.AlarmConfiguration<MirellaAlarmMeta>.alarm(schedule: .fixed(date), attributes: attrs, stopIntent: nil, secondaryIntent: nil, sound: .default)
-            _ = try await m.schedule(id: UUID(), configuration: cfg)
-            n += 1
+            // Innerhalb der nächsten 23 Stunden als Uhrzeit-Wecker (wie Apples eigenes Beispiel): der klingelt verlässlich zur Minute.
+            // Weiter entfernte Wecker bekommen ein festes Datum und werden beim nächsten Öffnen der App umgestellt.
+            let schedule: Alarm.Schedule
+            if date.timeIntervalSinceNow < 23 * 3600 {
+                let t = Alarm.Schedule.Relative.Time(hour: cal.component(.hour, from: date), minute: cal.component(.minute, from: date))
+                schedule = .relative(.init(time: t, repeats: .never))
+            } else {
+                schedule = .fixed(date)
+            }
+            let cfg = AlarmManager.AlarmConfiguration<MirellaAlarmMeta>.alarm(schedule: schedule, attributes: attrs, stopIntent: nil, secondaryIntent: nil, sound: .default)
+            do {
+                _ = try await m.schedule(id: UUID(), configuration: cfg)
+                n += 1
+            } catch {
+                if fehler.isEmpty { fehler = String(describing: error) }
+            }
         }
-        return (name(st), n)
+        return (name(st), n, fehler)
     }
 }
 #endif

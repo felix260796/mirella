@@ -29,9 +29,20 @@ jobs:
           npm install
           npx cap sync ios
       - name: Apple-Schlüssel ablegen
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
+          # Schlüssel säubern (Windows-Zeilenenden, fehlende Umbrüche) und prüfen,
+          # damit ein Tippfehler im Secret sofort verständlich gemeldet wird.
           mkdir -p ~/private_keys
-          echo "${{ secrets.ASC_KEY_P8 }}" > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          F=~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          if [ -z "$ASC_KEY_P8" ]; then echo "::error::Secret ASC_KEY_P8 ist leer oder fehlt."; exit 1; fi
+          BODY=$(printf '%s' "$ASC_KEY_P8" | tr -d '\r' | sed -e 's/-----[A-Z ]*-----//g' | tr -d ' \n\t')
+          { echo "-----BEGIN PRIVATE KEY-----"; printf '%s\n' "$BODY" | fold -w 64; echo "-----END PRIVATE KEY-----"; } > "$F"
+          if ! openssl pkey -in "$F" -noout 2>/dev/null; then
+            echo "::error::Secret ASC_KEY_P8 ist kein gültiger Schlüssel (Länge ohne Rahmen: ${#BODY} Zeichen, erwartet etwa 200). Bitte den ganzen Inhalt der Datei AuthKey_….p8 einfügen."; exit 1; fi
+          if [ ${#ASC_KEY_ID} -ne 10 ]; then echo "::warning::ASC_KEY_ID hat ${#ASC_KEY_ID} Zeichen, üblich sind 10."; fi
+          if [ ${#ASC_ISSUER_ID} -ne 36 ]; then echo "::warning::ASC_ISSUER_ID hat ${#ASC_ISSUER_ID} Zeichen, üblich sind 36 (Form 12345678-abcd-…)."; fi
       - name: Bauen und hochladen
         working-directory: native/ios/App
         run: |

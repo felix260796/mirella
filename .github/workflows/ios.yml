@@ -10,7 +10,7 @@ on:
 
 jobs:
   testflight:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -43,24 +43,26 @@ jobs:
             echo "::error::Secret ASC_KEY_P8 ist kein gültiger Schlüssel (Länge ohne Rahmen: ${#BODY} Zeichen, erwartet etwa 200). Bitte den ganzen Inhalt der Datei AuthKey_….p8 einfügen."; exit 1; fi
           if [ ${#ASC_KEY_ID} -ne 10 ]; then echo "::warning::ASC_KEY_ID hat ${#ASC_KEY_ID} Zeichen, üblich sind 10."; fi
           if [ ${#ASC_ISSUER_ID} -ne 36 ]; then echo "::warning::ASC_ISSUER_ID hat ${#ASC_ISSUER_ID} Zeichen, üblich sind 36 (Form 12345678-abcd-…)."; fi
+      - name: Xcode wählen
+        run: |
+          # Apple nimmt nur noch Apps an, die mit Xcode 26 oder neuer gebaut sind.
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+          xcodebuild -version
+      - name: Signatur einrichten
+        run: python3 native/signatur.py einrichten
       - name: Bauen und hochladen
         working-directory: native/ios/App
         run: |
           VERSION=$(node -p "require('../../package.json').version")
-          AUTH="-allowProvisioningUpdates -authenticationKeyPath $HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8 -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
-          # Archiv ohne Apple-Profil bauen (nur lokal signiert, Berechtigungen bleiben drin).
-          # So braucht es kein Entwicklungsprofil und kein angemeldetes Gerät.
           xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
             -destination 'generic/platform=iOS' -archivePath $RUNNER_TEMP/Mirella.xcarchive \
-            DEVELOPMENT_TEAM=$APPLE_TEAM_ID CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES PROVISIONING_PROFILE_SPECIFIER= \
             MARKETING_VERSION=$VERSION CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             archive
-          APP=$RUNNER_TEMP/Mirella.xcarchive/Products/Applications/App.app
-          if ! codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q aps-environment; then
-            echo "::error::Im Archiv fehlt die Push-Berechtigung (aps-environment)."; exit 1; fi
-          # Erst beim Export signiert Apple mit dem Vertriebszertifikat und lädt zu TestFlight hoch.
-          cp ../../ExportOptions.plist $RUNNER_TEMP/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" $RUNNER_TEMP/ExportOptions.plist
           xcodebuild -exportArchive -archivePath $RUNNER_TEMP/Mirella.xcarchive \
-            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist -exportPath $RUNNER_TEMP/export $AUTH
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist -exportPath $RUNNER_TEMP/export \
+            -authenticationKeyPath $HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID
+      - name: Signatur aufräumen
+        if: always()
+        run: python3 native/signatur.py aufraeumen

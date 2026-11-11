@@ -1,0 +1,34 @@
+name: Briefing-Mitteilung ans iPhone
+
+# Sobald ein neues Briefing in app/briefings.json landet, bekommt Felix eine Push-Mitteilung.
+on:
+  push:
+    branches: [main]
+    paths: ["app/briefings.json"]
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+      - name: Neues Briefing?
+        id: neu
+        run: |
+          NEU=$(jq -r '.items[0].id // ""' app/briefings.json)
+          ALT=$(git show HEAD~1:app/briefings.json 2>/dev/null | jq -r '.items[0].id // ""' || true)
+          ART=$(jq -r '.items[0].kind // ""' app/briefings.json)
+          ZEIT=$(jq -r '.items[0].time // ""' app/briefings.json)
+          echo "neu=$([ -n "$NEU" ] && [ "$NEU" != "$ALT" ] && echo ja || echo nein)" >> $GITHUB_OUTPUT
+          case "$ART" in nachmittag) T="Dein Nachmittags-Briefing ist da";; wochenende) T="Dein Wochenend-Briefing ist da";; *) T="Dein Morgen-Briefing ist da";; esac
+          echo "titel=$T" >> $GITHUB_OUTPUT
+          echo "zeit=$ZEIT" >> $GITHUB_OUTPUT
+      - name: Mitteilung senden
+        if: steps.neu.outputs.neu == 'ja' && env.SUPABASE_ACCESS_TOKEN != ''
+        run: |
+          PUSH_SECRET=$(printf '%s' "mirella-push:$SUPABASE_ACCESS_TOKEN" | sha256sum | cut -c1-48)
+          curl -fsS -X POST "https://xcanrhlwcopamhnmmlja.supabase.co/functions/v1/push" \
+            -H "x-push-secret: $PUSH_SECRET" -H "Content-Type: application/json" \
+            -d "{\"title\":\"${{ steps.neu.outputs.titel }}\",\"body\":\"Antippen zum Lesen (${{ steps.neu.outputs.zeit }} Uhr)\",\"view\":\"briefings\"}"

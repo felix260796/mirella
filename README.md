@@ -1,5 +1,77 @@
 # Mirella, die Sekretärin
 
+## Neu in 0.17 (Runde 7)
+- Ausführliche Wetterseite (`app/wetter.js`): jetzt, Regen als Satz mit Uhrzeit, Prozent und Millimetern, Stunde für Stunde (24 h), Wind, Luftfeuchte, UV, Sonne, 8 Tage. Öffnet beim Antippen des Wetters auf „Heute“ und über das Menü („Wetter“ ganz oben).
+- Wetter auf „Heute“: alle Hinweise direkt sichtbar, nichts mehr zum Ausklappen. Regen- und Sturm-Hinweis schauen nur noch auf die restlichen Stunden des Tages.
+- Fehler behoben: Spracheingabe ließ sich nicht speichern (Namensgleichheit `readItem` in app.js und bereiche.js).
+- Logik `L.rainSpans` mit Test.
+
+## Stand 0.16 (2026-11-10): Runde 6
+
+- Heute: Telefon-Symbol beim Anruf wählt sofort die Nummer (danach fragt Mirella, wie es lief).
+- Einkaufsmodus: Warengruppen groß und fett mit Linie, mehr Abstand zwischen den Gruppen.
+- Kontakt: „Bearbeiten“ sitzt jetzt oben rechts in der Akte statt neben „Mirella“; Profilbild per Antippen aufs Bild (quadratisch zugeschnitten, gleicht mit ab); „Wird 30 Jahre alt“ bei runden Geburtstagen und 18 in Rot.
+- Neue Aufgabe: Datum und Uhrzeit so hoch wie alle anderen Felder.
+- To-dos: Nerv-Modus direkt in den To-do-Einstellungen (Titel „To-dos“ antippen).
+- Farbe (eigene Datei app/farbe.css, eigener Commit): aktiver Reiter unten farbig, Einstellungs-Symbole auf farbigen Kreisen, Initialen zart blau, Wetter himmelblau, Geburtstags-Kacheln warm, Einkaufsmodus grün. Rückgängig: farbe.css-Zeile aus index.html nehmen.
+- Gezeichnete Symbole statt Emojis: Einstellungen-Rädchen im Menü und in den Bereichen, Einstellungs-Liste (Heute, Kontakte, To-dos, Kalender wie unten in der Leiste; Nerv-Modus, Konto, Datensicherung, Über Mirella).
+
+## Stand 0.15 (2026-11-10): eine Schrift, ruhigere Akte, Einkaufsmodus
+
+- Schrift: überall dieselbe, ruhige Systemschrift (auf dem iPhone San Francisco, am PC Segoe UI); keine Zierschrift mehr, nichts wird mehr künstlich fett und unscharf.
+- Deutsch: „Heute steht eine Aufgabe an“ statt „stehen“, Einzahl/Mehrzahl auch bei Tagen, Dokumenten und Kontakten.
+- Wetter auf „Heute“ kompakt: eine Zeile Wetter mit Tag- und Nachttemperatur, der wichtigste Hinweis, die übrigen per Antippen.
+- Akte: Geburtstag als ruhige Kacheln „Geboren“ und „Alter“ plus eine Zeile „Wird 28 Jahre alt am …“; nächster Anruf kleiner; leere Listen („Noch keine Notizen“) klein und kursiv, deutlich unter der Überschrift; Kontaktdaten (Telefon, E-Mail, Adresse, Spitzname) alle gleich aufgebaut mit Knopf rechts.
+- Todestag: „Verstorben am“ im Kontakt. Dann „Lebensdaten“ mit Geboren und Gestorben nebeneinander, keine Anrufe, kein Alter, keine Geburtstagserinnerung; am Geburts- und Todestag ein stiller Eintrag „In Gedenken“ auf „Heute“ und im Kalender.
+- Einkaufsmodus: großer Knopf „Einkaufen gehen“ oben auf der Einkaufsliste (und auf „Heute“). Nur die Liste, große Zeilen, ganze Zeile antippen = im Wagen, Fortschrittsbalken, Bildschirm bleibt an, „Einkauf fertig“ unten.
+- PC-Sicherung: Fenster bleibt beim Einrichten offen (Fehler sichtbar), Doppelklick auf das Programm ohne Einrichtung startet die Einrichtung.
+
+## Stand 0.14.1 (2026-11-10): automatische PC-Sicherung
+
+- Neues PC-Programm in `tools/pc-sicherung`: einmal **EINRICHTEN.cmd** doppelklicken, Mirella-E-Mail und Passwort eingeben, fertig. Jede Nacht um 2 Uhr holt es Excel, alle PDFs und Fotos und die Wiederherstellungs-Datei vom Server in `05_Sicherung` (die letzten 14 Tage bleiben liegen). Anleitung: `tools/pc-sicherung/LIESMICH.md`.
+- Hängt nur am Server (Supabase), nicht an der Web-App, und läuft deshalb mit der iPhone-App unverändert weiter.
+
+## Stand 0.13 (2026-11-10): Einkaufsmodus, Anrufplan, PC-Sicherung
+- Schrift: Überschriften in der Serifenschrift groß und fett, Text klar davon abgesetzt; alles größer, „Mirella“ oben rechts markanter.
+- Anrufe auf „Heute“: Telefon-Symbol wählt direkt die Nummer, danach fragt Mirella, wie es lief. Antippen des Kontakts: erledigt, probiert, später, Kontaktprofil. Höchstens 3 pro Werktag (auch in der Kontaktliste: „morgen“ oder Datum), „Weitere Anrufe vorziehen“.
+- Kontakte: E-Mail und Telefon werden beim Eintippen geprüft (Tippfehler wie „gmial.com“, zu kurze Nummern). Runde Geburtstage ein halbes Jahr vorher auf „Heute“.
+- Dokumente an jeden Eintrag und jede Aufgabe (z. B. Rechnung zur Zahnreinigung), eigene Ordner anlegbar.
+- Einkauf: nach Warengruppen sortiert, Abgehaktes bleibt sichtbar bis „Einkauf fertig“, übliche Einheiten (Eier = Packung, Butter = Stück, lernt deine Änderungen), „Wohl bald wieder fällig“ nach deinem Rhythmus, Einkaufszettel fotografieren.
+- Aufgaben: Erledigtes bleibt (heute sichtbar, danach im Archiv), „Mirella merkt“ mit kleinen Auswertungen.
+- Verträge: Erinnerung 2 Wochen, 1, 2 oder 3 Monate vorher.
+- Einstellungen: „Zurück“ landet wieder an derselben Stelle.
+- Gesamtprüfung aller Wünsche seit dem ersten Entwurf, dabei nachgezogen:
+  - Kontakte archivieren (keine Anrufe, keine Geburtstage, Verlauf bleibt, zurückholbar). Nach 5 Fehlversuchen hintereinander hört Mirella auf zu nerven und fragt auf „Heute“: weiter versuchen oder archivieren (Einstellungen › Kontakte › „Nerven aufhören“).
+  - Krank-Modus: „Ich bin krank“ (Sprache oder Gesundheit › Plus) schiebt die Anrufe der Krankheitstage nach hinten und legt Arbeitgeber und Arzttermin als Aufgaben an; „Wieder gesund“ auf „Heute“.
+  - Sparziele unter Finanzen mit Fortschritt und Betrag pro Monat bis zum Zieldatum, auch in der Excel-Sicherung.
+- PC-Sicherung (export.js): ein ZIP mit Excel (alle Kontakte mit allen Infos, Aufgaben, Einkauf, Verträge, Dokumente, Ausgaben, Notizen), allen PDFs/Fotos nach Bereich/Ordner benannt und der Wiederherstellungs-Datei. Erinnerung auf „Heute“ (Standard wöchentlich).
+
+## Stand 0.12 (2026-11-10): Feinschliff nach dem ersten Ausprobieren
+- Oben links: Logo **und** Seitentitel öffnen die Einstellungen dieser Seite (größere Fläche, auch in jedem Bereich); „Zurück“ führt direkt zur Seite zurück.
+- Kontakt: Alter klein neben dem Geburtstag („36 Jahre alt“).
+- Nerv-Modus ist bei neuen Aufgaben standardmäßig an, großes Häkchenfeld; Abhak-Kästchen größer.
+- Einkaufs-Vorlagen direkt in der Einkaufsliste löschbar (✕, mit Rückfrage).
+- „Alle Bereiche“: Briefings ganz unten.
+- Verträge & Versicherungen: PDF hochladen oder Foto/Scan, fest mit dem Eintrag verknüpft.
+- Supplements stehen in den Tages-To-dos: morgens Hoch, mittags Mittel, abends Niedrig, steigen zur Einnahmezeit auf.
+- Schrift größer und kräftiger, Bereiche mit dezenten Farben, erledigte Häkchen grün.
+
+## Stand 0.11 (2026-11-10): Mirella denkt mit wie eine Sekretärin
+- **Rubriken neu:** Wecker, Finanzen, Verträge & Versicherungen, Gesundheit, Zuhause, Auto & E-Bike, Arbeit, Sport & Hobby, Dokumente, Reisen, Briefings (ganz hinten). Jede Rubrik hat eigene Einträge (z. B. Vertrag, Versicherung, Fahrzeug, Zähler, Wohnung, Gerät, Arzt, wiederkehrender Termin, Supplement, Reise, Auslage zum Erstatten, Verein). Aus jedem Eintrag legt Mirella automatisch die passenden Erinnerungen an (Kündigungsfrist, TÜV, Inspektion, Reifen, Ablesen, Zahnreinigung, Nachbestellen, Packen, Check-in …), `app/bereiche.js`.
+- **Plus** öffnet zuerst eine Auswahl je Rubrik, keine Tastatur.
+- **Finanzen:** Monat wählbar, Einnahmen/Fixkosten/Ausgaben/Übrig, Tortendiagramm, 6-Monats-Entwicklung, Hinweise, Budgets und eigene Kategorien.
+- **Briefe ablegen** (`app/scan.js`): Papier wird erkannt, zugeschnitten und entzerrt, Text wird auf dem Gerät gelesen (Tesseract), Bereich/Art/Betrag/Frist werden vorgeschlagen, auf Wunsch mit Aufgabe. PDFs aus der Dateien-App.
+- **Kontakte** (vorher „Menschen“): Vor-/Nachname untereinander, Gruppen (Familie, Freunde, Bekannte, Geschäftlich + eigene), Geburtstag tippen ohne Kalender, Ländervorwahl, Rhythmus „nie“, ganzer Anrufverlauf (letzte 3 + alle).
+- **Entwürfe:** Jede Eingabe wird sofort gemerkt; schließt sich ein Fenster, ist beim nächsten Öffnen alles wieder da. Fotos werden sofort zwischengespeichert.
+- **To-dos** mit Priorität (rot/orange/blau), **Einkaufsliste** mit Mengen, „Oft gekauft“ und Vorlagen.
+- **Kalender:** Tag/Woche/Monat/Liste, Monats-/Jahresauswahl per Tipp auf den Titel, Filter Geburtstage/Erinnerungen/To-dos/Anrufe.
+- **Einstellungen** gegliedert (Seiten, Bereiche, Mirella); das Logo links oben öffnet die Einstellungen der jeweiligen Seite.
+- **Wecker** (`app/wecker.js`): Ziel + Ankunft, Fahrzeit (Google Routes API mit eigenem Schlüssel, sonst OSRM + Berufsverkehr-Zuschlag), Zeit daheim, Puffer, mehrere Wecker im Abstand; Übergabe an Kurzbefehl „Mirella Wecker“ oder Kalender-Alarm. Echter Wecker mit der iPhone-App (AlarmKit).
+- **Nerv-Modus** einzeln je Art einschaltbar, Fenster mit Ton beim Öffnen und wiederholt.
+- **Suche über alles** und „Mirella fragen“ (eingebaute Hilfe, `app/suche.js`).
+- Kein Zoomen/Verrutschen, Sicherheitsrückfrage bei jedem Löschen, Briefings nur noch als PDF.
+- Rechenlogik in `app/logik.js`, Tests in `tests/logik.test.ts` (`npm test`).
+
 ## Stand 0.9.1 (2026-11-10): Arbeitsversion läuft auf GitHub Pages
 - `app/` ist die lauffähige App (reine Web-App ohne Build). Sie wird bei jedem Push auf `main` automatisch über GitHub Pages veröffentlicht (`.github/workflows/pages.yml`): https://felix260796.github.io/mirella/
 - Daten liegen bis zum Supabase-Sync nur auf dem Gerät (localStorage, Fotos/PDFs in IndexedDB); Sicherung als JSON in den Einstellungen.

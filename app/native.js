@@ -143,23 +143,24 @@
       if (pend.length) await P.LocalNotifications.cancel({ notifications: pend.map(x => ({ id: x.id })) });
       const now = Date.now(), list = []; let id = 1;
       const add = (at, title, body, extra) => { if (at > now + 30e3 && list.length < 60) list.push({ id: id++, title, body, schedule: { at: new Date(at), allowWhileIdle: true }, extra: extra || {} }); };
-      const st = S.settings, nagMin = +(st.nagMinutes || 30);
+      const st = S.settings, nagMin = +(st.nervEvery || 30), nv = st.nerv || {};
       for (const t of S.todos) {
         if (t.done || !t.date) continue;
         const at = new Date(t.date + "T" + (t.time || "09:00") + ":00").getTime();
         add(at, t.list === "shop" ? "Einkaufen" : "Mirella", t.t, { todo: t.id });
-        if (t.nerv) for (let k = 1; k <= 6; k++) { const n2 = new Date(Math.max(at, now) + k * nagMin * 60e3); if (inWin(n2, 8, 21)) add(n2.getTime(), "Noch offen", t.t, { todo: t.id }); }
+        if (t.nerv && nv.aufgaben !== 0) for (let k = 1; k <= 6; k++) { const n2 = new Date(Math.max(at, now) + k * nagMin * 60e3); if (inWin(n2, 8, 21)) add(n2.getTime(), "Noch offen", t.t, { todo: t.id }); }
       }
       // Anrufe: werktags um 8 Uhr eine Sammel-Erinnerung, Nerv-Modus bis 18 Uhr
-      const due = S.people.filter(p => { const n = nextDue(p); return n && n <= today(); });
+      const live = S.people.filter(p => !p.arch);
+      const due = live.filter(p => { const n = nextDue(p); return n && n <= today(); });
       for (let dd = 0; dd < 3; dd++) {
         const day = new Date(); day.setDate(day.getDate() + dd); if (day.getDay() === 0 || day.getDay() === 6) continue;
-        const names = (dd === 0 ? due : S.people.filter(p => { const n = nextDue(p); return n && n <= isoOf(day.getTime()); })).slice(0, st.maxCalls || 3).map(p => p.first || fullName(p));
+        const names = (dd === 0 ? due : live.filter(p => { const n = nextDue(p); return n && n <= isoOf(day.getTime()); })).slice(0, st.maxCalls || 3).map(p => p.first || fullName(p));
         if (!names.length) continue;
-        for (const hh of [8, 11, 14, 17]) { day.setHours(hh, 0, 0, 0); add(day.getTime(), "Anrufen", names.join(", ")); }
+        for (const hh of (nv.anrufe === 0 ? [8] : [8, 11, 14, 17])) { day.setHours(hh, 0, 0, 0); add(day.getTime(), "Anrufen", names.join(", ")); }
       }
       // Geburtstage um 9 Uhr
-      for (const p of S.people) {
+      for (const p of live) {
         const b = nextBirthday(p); if (!b) continue;
         const at = new Date(b + "T09:00:00").getTime(); if (at - now > 30 * 864e5) continue;
         add(at, "Geburtstag", (p.first || fullName(p)) + " hat heute Geburtstag 🎉");
@@ -181,15 +182,15 @@
   P.PushNotifications.addListener("pushNotificationActionPerformed", a => { const d = a.notification && a.notification.data || {}; if (d.view) { view = d.view; render(); } });
   P.LocalNotifications.addListener("localNotificationActionPerformed", a => { const x = a.notification && a.notification.extra || {}; if (x.todo) { view = "todos"; render(); } });
 
-  /* ---------- Einstellungen ---------- */
+  /* ---------- Einstellungen › iPhone ---------- */
+  SETNAMES.iphone = "iPhone";
+  SETS.iphone = () => `<p class="hint" style="margin-top:0">Kontakte und Geburtstage gleicht Mirella stündlich mit deinem iPhone ab. Neue Kontakte erscheinen auf „Heute“ zum Übernehmen. Wie oft Mirella nervt, stellst du unter Nerv-Modus ein.</p>
+    <div class="row2" style="margin-top:8px"><button class="btn" data-act="nkontakte">Kontakte jetzt abgleichen</button><button class="btn" data-act="nfreigaben">Freigaben prüfen</button></div>`;
   const origEinst2 = R.einstellungen;
   R.einstellungen = function () {
-    const h = origEinst2.call(this);
-    const blk = `<div class="sec sethead"><span class="label">iPhone</span></div>
-      <div class="set"><span>Nerv-Modus<small>so oft erinnern, bis erledigt</small></span><select data-set="nagMinutes">${[[15, "alle 15 Min"], [30, "alle 30 Min"], [60, "jede Stunde"], [120, "alle 2 Std"]].map(([v, l]) => `<option value="${v}"${String(S.settings.nagMinutes || 30) === String(v) ? " selected" : ""}>${l}</option>`).join("")}</select></div>
-      <div class="row2" style="margin-top:8px"><button class="btn" data-act="nkontakte">Kontakte abgleichen</button><button class="btn" data-act="nfreigaben">Freigaben prüfen</button></div>`;
-    const i = h.indexOf('<div class="sec sethead"><span class="label">Datensicherung');
-    return i < 0 ? h + blk : h.slice(0, i) + blk + h.slice(i);
+    const h = origEinst2.call(this); if (setSec) return h;
+    const row = `<button class="drow" data-act="setsec" data-k="iphone">${IC.bell || ""}<span class="dt"><b>iPhone</b><small>Kontakte, Kalender, Freigaben</small></span><span class="chev">›</span></button>`;
+    const i = h.indexOf('<div class="sethead2">Mirella</div>'); return i < 0 ? h + row : h.slice(0, i + '<div class="sethead2">Mirella</div>'.length) + row + h.slice(i + '<div class="sethead2">Mirella</div>'.length);
   };
   ACT.nkontakte = async () => { toast("Gleiche Kontakte ab …"); const r = await contactsSync(false); const b = await calendarBirthdays(); render(true); toast(`${r.fresh} neue Kontakte, ${r.linked} zusammengeführt, ${b} Geburtstage ergänzt`); };
   ACT.nfreigaben = () => { N.setup = false; nSave(); wizard(); };

@@ -1263,7 +1263,7 @@ function voiceStart() {
   sheetCleanup = recStop;
 }
 function recStart() {
-  recStop();
+  recStop(); recStart.n = 0;
   try {
     rec = new SR(); rec.lang = "de-DE"; rec.interimResults = true; rec.continuous = true;
     const base = $("#v-text").value ? $("#v-text").value.trim() + " " : "";
@@ -1279,7 +1279,12 @@ function recStart() {
       else if (e.error === "no-speech") st.textContent = "Ich habe nichts gehört. Tippe auf „Nochmal“.";
       else st.textContent = "Spracheingabe gerade nicht möglich (" + e.error + "). Tippe oder nutze das Tastatur-Mikrofon.";
     };
-    rec.onend = () => { recOn = false; const d = $("#v-dot"), st = $("#v-state"), m = $("#mic"); d && d.classList.remove("on"); m.classList.remove("rec"); if (st && st.textContent.startsWith("Ich höre")) st.textContent = "Fertig zugehört. Prüfen und auf „Weiter“ tippen."; };
+    let failed = false; const prevErr = rec.onerror; rec.onerror = e => { failed = true; prevErr(e); };
+    rec.onend = () => {
+      // Länger am Stück zuhören: Macht das iPhone nach einer Pause Schluss und es kam neuer Text dazu, hört Mirella gleich weiter zu (höchstens 8 Mal).
+      const ta0 = $("#v-text");
+      if (NATIVE && !failed && ta0 && ta0.value.trim() !== base.trim() && recStart.n < 8) { recStart.n++; rec = null; recOn = false; setTimeout(() => { if ($("#v-text") && !recOn) { const n = recStart.n; recStart(); recStart.n = n; } }, 200); return; }
+      recOn = false; const d = $("#v-dot"), st = $("#v-state"), m = $("#mic"); d && d.classList.remove("on"); m.classList.remove("rec"); if (st && st.textContent.startsWith("Ich höre")) st.textContent = "Fertig zugehört. Prüfen und auf „Weiter“ tippen."; };
     rec.start(); recOn = true;
     $("#v-dot") && $("#v-dot").classList.add("on"); $("#mic").classList.add("rec");
     $("#v-state") && ($("#v-state").textContent = "Ich höre zu … tippe auf „Weiter“, wenn du fertig bist.");

@@ -11,6 +11,9 @@ import AppIntents
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
+#if canImport(ActivityKit)
+import ActivityKit
+#endif
 
 /// Was das iPhone selbst kann, für Mirella gebündelt. Aus der Web-App erreichbar als Capacitor.Plugins.MirellaSystem:
 /// ocr (Apple-Texterkennung), liveScan (Kamera liest Nummern und Daten), faceId, Anruf-Ende (Ereignis "callEnded"),
@@ -28,7 +31,9 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
         CAPPluginMethod(name: "ki", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "takeIntent", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveFile", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "removeFile", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "removeFile", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "losStart", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "losEnd", returnType: CAPPluginReturnPromise)
     ]
 
     private let calls = CXCallObserver()
@@ -207,6 +212,42 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
 
     @objc func removeFile(_ call: CAPPluginCall) {
         if let path = call.getString("path"), let url = docURL(path) { try? FileManager.default.removeItem(at: url) }
+        call.resolve(["ok": true])
+    }
+
+    // MARK: Live-Anzeige „Jetzt musst du los“ (Sperrbildschirm, Dynamic Island)
+
+    /// titel, ziel, info, los (Millisekunden seit 1970). Ersetzt eine laufende Anzeige. Geht nur, solange Mirella offen ist.
+    @objc func losStart(_ call: CAPPluginCall) {
+        #if canImport(ActivityKit)
+        if #available(iOS 16.2, *) {
+            guard ActivityAuthorizationInfo().areActivitiesEnabled else { call.resolve(["ok": false, "reason": "aus"]); return }
+            let los = Date(timeIntervalSince1970: (call.getDouble("los") ?? 0) / 1000)
+            let attrs = MirellaLosAttributes(titel: call.getString("titel") ?? "Mirella", ziel: call.getString("ziel") ?? "")
+            let state = MirellaLosAttributes.ContentState(los: los, info: call.getString("info") ?? "")
+            Task {
+                for a in Activity<MirellaLosAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
+                do {
+                    _ = try Activity.request(attributes: attrs, content: ActivityContent(state: state, staleDate: los.addingTimeInterval(20 * 60)))
+                    call.resolve(["ok": true])
+                } catch { call.resolve(["ok": false, "reason": error.localizedDescription]) }
+            }
+            return
+        }
+        #endif
+        call.resolve(["ok": false, "reason": "unavailable"])
+    }
+
+    @objc func losEnd(_ call: CAPPluginCall) {
+        #if canImport(ActivityKit)
+        if #available(iOS 16.2, *) {
+            Task {
+                for a in Activity<MirellaLosAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
+                call.resolve(["ok": true])
+            }
+            return
+        }
+        #endif
         call.resolve(["ok": true])
     }
 

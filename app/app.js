@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.23";
+const VERSION = "0.24";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -304,7 +304,7 @@ const R = {
     const shownCalls = dueCalls, doneCalls = callsToday(), pool = pullPool();
     const leave = S.todos.filter(x => x.list === "todo" && !x.done && x.trig === "verlassen");
     const dueTodos = S.todos.filter(x => x.list === "todo" && !x.done && x.trig !== "verlassen" && ((x.date && x.date <= t) || (+x.prio === 1 && !x.date))).sort((a, b) => (a.date + (a.time || "")) < (b.date + (b.time || "")) ? -1 : 1);
-    const bdays = S.people.map(p => [p, nextBirthday(p)]).filter(([, b]) => b && diffDays(t, b) <= S.settings.giftLead).sort((a, b) => a[1] < b[1] ? -1 : 1);
+    const bdays = S.people.filter(p => !heuteSkip(p)).map(p => [p, nextBirthday(p)]).filter(([, b]) => b && diffDays(t, b) <= S.settings.giftLead).sort((a, b) => a[1] < b[1] ? -1 : 1);
     const docs = S.docs.filter(x => x.until && diffDays(t, x.until) <= 60).sort((a, b) => a.until < b.until ? -1 : 1);
     const shop = S.todos.filter(x => x.list === "einkauf" && !x.done).length;
     const asks = [];
@@ -331,7 +331,7 @@ const R = {
     const quit = S.people.filter(p => !p.arch && gaveUp(p));
     if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
     if (bdays.length) h2 += `<div class="sec"><span class="label">Geburtstage</span></div>${bdays.map(([p, b]) => { const n = diffDays(t, b), age = ageAt(p, b); return `<div class="card ${n === 0 ? "due" : ""}" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0"><div class="t">${esc(fullName(p))}${age ? ` wird ${age}` : ""}</div><div class="s">${n === 0 ? "heute! Gratulieren" : (n === 1 ? "morgen" : "in " + n + " Tagen") + " · " + fmtDate(b)}${p.gift && n > 0 ? " · Geschenk besorgen" : ""}</div></span>${n === 0 ? '<span class="pill acc">heute</span>' : p.gift ? '<span class="pill">Geschenk</span>' : ""}</div>`; }).join("")}`;
-    const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && !p.death && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
+    const rounds = S.people.map(p => [p, (+S.settings.roundLead ? L.roundBday(p.bday, t, +S.settings.roundLead, S.settings.roundAges) : null)]).filter(([p, r]) => r && !p.death && !heuteSkip(p) && r.days > S.settings.giftLead && p.roundAck !== r.date).sort((a, b) => a[1].days - b[1].days);
     if (rounds.length) h2 += `<div class="sec"><span class="label">Runde Geburtstage</span></div>${rounds.map(([p, r]) => { const mo = Math.round(r.days / 30.4); return `<div class="card round" role="button" tabindex="0" data-act="person" data-id="${p.id}"><span class="av">🎉</span><span style="min-width:0"><div class="t">Achtung: ${esc(p.first || fullName(p))} wird ${r.age}</div><div class="s">${mo >= 5 ? "in einem halben Jahr" : mo >= 2 ? "in " + mo + " Monaten" : "in " + r.days + " Tagen"} · ${esc(fmtDate(r.date))}. Zeit für eine Idee.</div></span><button class="mini" data-act="roundack" data-id="${p.id}" data-d="${r.date}">Notiert</button></div>`; }).join("")}`;
     const md = t.slice(5), mem = [];
     S.people.forEach(p => { if (!p.death || p.arch) return; if (p.death.slice(5) === md) mem.push([p, "Todestag"]); if (p.bday && p.bday.slice(5) === md) mem.push([p, "Geburtstag"]); });
@@ -362,8 +362,9 @@ const R = {
     const list = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="emptyline">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
     const calls = (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1);
     return `${subtop("Kontakte", "go\" data-v=\"menschen")}
-    <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>
+    <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>${p.woher ? `<p>Kennen uns: ${esc(p.woher)}</p>` : ""}
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
+    ${(p.tels || []).map(x => `<a class="mini" href="tel:${esc(x.n.replace(/[^\d+]/g, ""))}" style="text-decoration:none;display:block;margin:0 0 6px">${IC.call} ${esc(x.n)}${x.l ? " · " + esc(x.l) : ""}</a>`).join("")}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${p.death ? "" : p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
     ${bdayBlock(p, nb)}
@@ -952,6 +953,7 @@ function personForm(p) {
   <div class="fld"><label>Gruppe</label><div class="chips" id="c-grps">${grpChips(v.group)}</div><input type="hidden" id="c-grp" value="${esc(v.group || "")}"></div>
   <div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}${c === "nie" ? " (nur Geburtstag merken)" : ""}</option>`).join("")}</select></div>
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.bday))}" autocomplete="off"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
+  <div class="fld"><label for="c-woher">Woher kenne ich ihn/sie?</label><input id="c-woher" list="c-woher-l" value="${esc(v.woher || "")}" placeholder="z. B. Schule, Verein, Arbeit" autocomplete="off"><datalist id="c-woher-l">${[...new Set(S.people.map(x => x.woher).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de")).map(x => `<option value="${esc(x)}">`).join("")}</datalist></div>
   <label class="tgl"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
   <div class="fld" style="margin-top:8px;position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
   <div class="fld"><label for="c-death">Verstorben am (nur falls zutreffend)</label><input id="c-death" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.death || ""))}" autocomplete="off"></div>
@@ -1000,10 +1002,18 @@ function findDups(d, exceptId) {
   const n1 = normName(d.first + " " + d.last), n2 = normName(d.last + " " + d.first), tk = telKey(d.tel), em = (d.email || "").trim().toLowerCase();
   return S.people.filter(p => p.id !== exceptId && (
     (n1.length > 2 && (normName(fullName(p)) === n1 || normName(fullName(p)) === n2)) ||
-    (tk && telKey(p.tel) === tk) || (em && (p.email || "").toLowerCase() === em)));
+    (tk && (telKey(p.tel) === tk || (p.tels || []).some(x => telKey(x.n) === tk))) || (em && (p.email || "").toLowerCase() === em)));
 }
-function mergeInto(t, src) {
-  for (const k of ["first", "last", "tel", "email", "addr", "bday", "nick", "group"]) if (!t[k] && src[k]) t[k] = src[k];
+/* Kontakte, die auf „Heute“ nichts zu suchen haben (die iPhone-App blendet hier ungeprüfte, übernommene Kontakte aus) */
+let heuteSkip = () => false;
+function mergeInto(t, src, label) {
+  for (const k of ["first", "last", "tel", "email", "addr", "bday", "nick", "group", "woher"]) if (!t[k] && src[k]) t[k] = src[k];
+  // andere Nummern gehen nicht verloren: sie stehen als weitere Nummer am Kontakt
+  for (const x of [src.tel ? { n: src.tel, l: label || "" } : null, ...(src.tels || [])]) {
+    if (!x || !telKey(x.n) || telKey(x.n) === telKey(t.tel) || (t.tels || []).some(y => telKey(y.n) === telKey(x.n))) continue;
+    (t.tels = t.tels || []).push({ n: x.n, l: x.l || "" });
+  }
+  if (src.email && t.email && src.email.toLowerCase() !== t.email.toLowerCase() && !(t.notes || []).some(n => n.t.includes(src.email))) (t.notes = t.notes || []).unshift({ id: uid(), t: "Weitere E-Mail: " + src.email, d: today() });
   if (noCycle(t.cyc) && src.cyc) t.cyc = src.cyc;
   t.gift = t.gift || !!src.gift;
   for (const k of ["calls", "notes", "ask", "gifts"]) t[k] = [...(t[k] || []), ...(src[k] || [])];
@@ -1011,7 +1021,7 @@ function mergeInto(t, src) {
 }
 function readPersonForm() {
   const bd = L.parseBday($("#c-bday").value), dd = L.parseBday($("#c-death").value);
-  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim() };
+  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), woher: $("#c-woher") ? $("#c-woher").value.trim() : "" };
 }
 function savePerson(id) {
   const data = readPersonForm(), first = data.first, last = data.last;

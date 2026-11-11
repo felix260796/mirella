@@ -12,47 +12,67 @@ async function geocode(q) {
   return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], name: fmtAddr(f.properties) || q };
 }
 async function routeOSRM(a, b) {
-  const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`);
+  const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false&alternatives=3&steps=true`);
   const j = await r.json(); if (!j.routes || !j.routes[0]) throw new Error("Keine Route gefunden");
-  return { min: j.routes[0].duration / 60, km: j.routes[0].distance / 1000 };
+  return j.routes.slice(0, 3).map(x => ({ min: x.duration / 60, free: x.duration / 60, km: x.distance / 1000, desc: (x.legs || []).map(l => l.summary).filter(Boolean).join(", ") }));
 }
-/* Google Routes API: Fahrzeit mit vorhergesagtem Verkehr zur geplanten Abfahrt */
+/* Google Routes API: Fahrzeit mit vorhergesagtem Verkehr zur geplanten Abfahrt, dazu die Fahrzeit ohne Verkehr und andere Routen */
 async function routeGoogle(a, b, depart) {
-  const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": S.settings.gmapsKey, "X-Goog-FieldMask": "routes.duration,routes.distanceMeters" },
-    body: JSON.stringify({ origin: { location: { latLng: { latitude: a.lat, longitude: a.lon } } }, destination: { location: { latLng: { latitude: b.lat, longitude: b.lon } } }, travelMode: "DRIVE", routingPreference: "TRAFFIC_AWARE_OPTIMAL", departureTime: depart.toISOString(), languageCode: "de-DE" })
-  });
-  const j = await r.json(); if (!r.ok || !j.routes || !j.routes[0]) throw new Error((j.error && j.error.message) || "Google Maps antwortet nicht");
-  return { min: parseInt(j.routes[0].duration) / 60, km: (j.routes[0].distanceMeters || 0) / 1000 };
+  const ask1 = async alt => {
+    const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": S.settings.gmapsKey, "X-Goog-FieldMask": "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description" },
+      body: JSON.stringify(Object.assign({ origin: { location: { latLng: { latitude: a.lat, longitude: a.lon } } }, destination: { location: { latLng: { latitude: b.lat, longitude: b.lon } } }, travelMode: "DRIVE", routingPreference: "TRAFFIC_AWARE_OPTIMAL", departureTime: depart.toISOString(), languageCode: "de-DE" }, alt ? { computeAlternativeRoutes: true } : {}))
+    });
+    const j = await r.json(); if (!r.ok || !j.routes || !j.routes[0]) throw new Error((j.error && j.error.message) || "Google Maps antwortet nicht");
+    return j.routes.slice(0, 3).map(x => ({ min: parseInt(x.duration) / 60, free: parseInt(x.staticDuration || x.duration) / 60, km: (x.distanceMeters || 0) / 1000, desc: x.description || "" }));
+  };
+  try { return await ask1(true); } catch (_) { return ask1(false); }
+}
+const HERE = "Mein Standort";
+let wHere = null;
+async function herePos() {
+  const G = NATIVE && window.Capacitor.Plugins.Geolocation, o = { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }, bad = "Start: Mirella bekommt deinen Standort gerade nicht. Bitte den Standort für Mirella erlauben oder eine Adresse eintragen";
+  try {
+    if (G) { await G.requestPermissions(); const p = await G.getCurrentPosition(o); return { lat: p.coords.latitude, lon: p.coords.longitude }; }
+    return await new Promise((res, rej) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => res({ lat: p.coords.latitude, lon: p.coords.longitude }), rej, o) : rej());
+  } catch (_) { throw new Error(bad); }
 }
 async function planAlarm(w) {
   const s = S.settings;
   let from = w.fromLat != null ? { lat: w.fromLat, lon: w.fromLon } : null, to = w.toLat != null ? { lat: w.toLat, lon: w.toLon } : null;
-  if (!from) { if (w.from) from = await geocode(w.from); else if (s.homeLat != null) from = { lat: s.homeLat, lon: s.homeLon }; else if (s.wxLat != null) from = { lat: s.wxLat, lon: s.wxLon }; }
+  if (!from) { if (w.from === HERE) from = await herePos(); else if (w.from) from = await geocode(w.from); else if (s.homeLat != null) from = { lat: s.homeLat, lon: s.homeLon }; else if (s.wxLat != null) from = { lat: s.wxLat, lon: s.wxLon }; }
   if (!to) to = await geocode(w.to);
-  if (!from) throw new Error("Start unbekannt: Zuhause-Adresse unter Einstellungen › Wecker eintragen");
+  if (!from) throw new Error("Start unbekannt: Zuhause-Adresse unter Einstellungen › Wecker eintragen oder „Mein Standort“ antippen");
   if (!to) throw new Error("Ziel nicht gefunden");
   w.fromLat = from.lat; w.fromLon = from.lon; w.toLat = to.lat; w.toLon = to.lon; if (to.name && !w.toName) w.toName = to.name;
-  const base = await routeOSRM(from, to);
-  let min = base.min * L.trafficFactor(w.date, w.arrive), src = "Route ohne Live-Verkehr, mit Zuschlag für Berufsverkehr";
+  /* die gewählte Route wiederfinden: erst am Namen (z. B. „A81“), sonst an der Stelle in der Liste */
+  const pick = rs => (w.routeDesc && rs.find(r => r.desc === w.routeDesc)) || (w.routeDesc == null && rs[w.routeIx | 0]) || rs[0];
+  const f = L.trafficFactor(w.date, w.arrive);
+  let rs = (await routeOSRM(from, to)).map(r => Object.assign(r, { min: r.min * f })), live = false, src = "Route ohne Live-Verkehr, mit Zuschlag für Berufsverkehr";
   if (s.gmapsKey) {
     try {
-      for (let i = 0; i < 2; i++) { const p = L.wakePlan({ date: w.date, arrive: w.arrive, travelMin: min, prepMin: 0, bufMin: w.bufMin, count: 1 }); const dep = new Date(p.leaveDate + "T" + p.leave + ":00"); if (dep < new Date()) break; min = (await routeGoogle(from, to, dep)).min; src = "Google Maps mit Verkehrsvorhersage"; }
+      for (let i = 0; i < 2; i++) { const p = L.wakePlan({ date: w.date, arrive: w.arrive, travelMin: pick(rs).min, prepMin: 0, bufMin: w.bufMin, count: 1 }); const dep = new Date(p.leaveDate + "T" + p.leave + ":00"); if (dep < new Date()) break; rs = await routeGoogle(from, to, dep); live = true; src = "Google Maps mit Verkehrsvorhersage für deine Abfahrtszeit"; }
     } catch (e) { src = "Google Maps nicht erreichbar (" + e.message + "), daher mit Zuschlag gerechnet"; }
   }
-  w.travelMin = Math.round(min); w.km = Math.round(base.km); w.src = src; w.checked = Date.now();
+  const r = pick(rs), km = x => x < 10 ? Math.round(x * 10) / 10 : Math.round(x);
+  w.travelMin = Math.round(r.min); w.km = km(r.km); w.via = r.desc || ""; w.stauMin = Math.max(0, Math.round(r.min - r.free)); w.live = live; w.src = src; w.checked = Date.now();
+  w.routes = rs.map(x => ({ desc: x.desc || "", min: Math.round(x.min), km: km(x.km), on: x === r }));
   Object.assign(w, L.wakePlan({ date: w.date, arrive: w.arrive, travelMin: w.travelMin, prepMin: w.prepMin, bufMin: w.bufMin, count: w.count, gap: w.gap }));
   return w;
 }
+const kmTxt = k => String(k).replace(".", ",") + " km";
+/* Name eines Weckers: eigener Name, sonst das Ziel */
+const weckerName = w => (w.name || "").trim() || String(w.to || "").split(",")[0].trim() || "Wecker";
 
 function weckerForm(w, preset = {}) {
-  const s = S.settings;
+  const s = S.settings; wDraft = null; wHere = null;
   const v = w || Object.assign({ to: "", from: "", date: addDays(today(), 1), arrive: "08:00", prepMin: s.prepMin, bufMin: s.bufMin, count: s.alarmCount, gap: s.alarmGap }, preset);
   openSheet(`<div data-draft="wecker:${w ? w.id : "new"}"><p class="stitle">⏰ ${w ? "Wecker ändern" : "Neuer Wecker"}</p>
   <div class="fld" style="position:relative"><label for="w-to">Wo musst du hin?</label><input id="w-to" value="${esc(v.to)}" placeholder="z. B. Remseck, Hauptstraße 5" autocomplete="off"><div id="w-to-sug" class="sug" hidden></div></div>
   <div class="fgrid"><div class="fld"><label for="w-date">Wann?</label><input id="w-date" type="date" value="${esc(v.date)}"></div><div class="fld"><label for="w-arr">Ankommen um</label><input id="w-arr" type="time" value="${esc(v.arrive)}"></div></div>
-  <div class="fld" style="position:relative"><label for="w-from">Start</label><input id="w-from" value="${esc(v.from)}" placeholder="${esc(s.homeAddr ? "Zuhause: " + s.homeAddr : "Zuhause (in Einstellungen eintragen)")}" autocomplete="off"><div id="w-from-sug" class="sug" hidden></div></div>
+  <div class="fld" style="position:relative"><label for="w-from">Start</label><input id="w-from" value="${esc(v.from)}" placeholder="${esc(s.homeAddr ? "Zuhause: " + s.homeAddr : "Zuhause (in Einstellungen eintragen)")}" autocomplete="off"><div id="w-from-sug" class="sug" hidden></div><button type="button" class="mini" data-act="whier" style="margin-top:6px">📍 Mein Standort als Start</button></div>
+  <div class="fld"><label for="w-nm">Name des Weckers (freiwillig)</label><input id="w-nm" value="${esc(v.name || "")}" placeholder="z. B. Frühschicht, Kundentermin" autocomplete="off"></div>
   <div class="fgrid"><div class="fld"><label for="w-prep">Zeit daheim (Duschen …)</label><select id="w-prep">${[15, 20, 30, 45, 60, 75, 90].map(m => `<option value="${m}"${+v.prepMin === m ? " selected" : ""}>${m} Min.</option>`).join("")}</select></div><div class="fld"><label for="w-buf">Puffer unterwegs</label><select id="w-buf">${[0, 5, 10, 15, 20, 30].map(m => `<option value="${m}"${+v.bufMin === m ? " selected" : ""}>${m} Min.</option>`).join("")}</select></div></div>
   <div class="fgrid"><div class="fld"><label for="w-cnt">Anzahl Wecker</label><select id="w-cnt">${[1, 2, 3, 4, 5].map(m => `<option value="${m}"${+v.count === m ? " selected" : ""}>${m}</option>`).join("")}</select></div><div class="fld"><label for="w-gap">Abstand</label><select id="w-gap">${[3, 5, 10].map(m => `<option value="${m}"${+v.gap === m ? " selected" : ""}>${m} Min.</option>`).join("")}</select></div></div>
   <div id="w-res"></div>
@@ -62,15 +82,19 @@ function weckerForm(w, preset = {}) {
   });
 }
 function resHTML(w) {
-  return `<div class="wres"><div class="wbig">${esc(w.alarms.join(" · "))}</div><small>${w.wakeDate !== w.date ? "am Vortag · " : ""}Aufstehen ${esc(w.wake)} · Losfahren ${esc(w.leave)} · ${w.travelMin} Min. Fahrt (${w.km} km)</small><small>${esc(w.src)}</small></div>
-  <div style="display:grid;gap:8px;margin-top:8px"><button class="btn pri" data-act="savewecker" data-id="${w.id || ""}">Wecker speichern</button><button class="btn" data-act="shortcut" data-id="${w.id || ""}">In den iPhone-Wecker (Kurzbefehl)</button><button class="btn" data-act="wics" data-id="${w.id || ""}">Als Kalender-Alarm</button></div>`;
+  const others = (w.routes || []).map((r, i) => ({ r, i })).filter(x => !x.r.on);
+  const verkehr = w.live ? (w.stauMin >= 2 ? `Davon etwa ${w.stauMin} Min. durch Verkehr, der um diese Uhrzeit zu erwarten ist.` : "Um diese Uhrzeit ist voraussichtlich freie Fahrt.") : (w.stauMin >= 2 ? `Davon ${w.stauMin} Min. geschätzter Zuschlag für Berufsverkehr.` : "");
+  return `<div class="wres"><div class="wbig">${esc(w.alarms.join(" · "))}</div><small>${w.wakeDate !== w.date ? "am Vortag · " : ""}Aufstehen ${esc(w.wake)} · Losfahren ${esc(w.leave)}</small><small><b>Strecke: ${kmTxt(w.km)}</b> · ${w.travelMin} Min. Fahrt${w.via ? " über " + esc(w.via) : ""}</small>${verkehr ? `<small>${verkehr}</small>` : ""}<small>${esc(w.src)}</small></div>
+  <div style="display:grid;gap:8px;margin-top:8px">${w.routes ? (others.length ? others.map(x => `<button class="btn" data-act="altroute" data-i="${x.i}" data-id="${w.id || ""}">Andere Route${x.r.desc ? " über " + esc(x.r.desc) : ""}: ${x.r.min} Min. · ${kmTxt(x.r.km)}</button>`).join("") : '<small class="hint" style="margin:0">Eine sinnvolle andere Route gibt es für diese Strecke nicht.</small>') : ""}<button class="btn pri" data-act="savewecker" data-id="${w.id || ""}">Wecker speichern</button>${NATIVE ? "" : `<button class="btn" data-act="shortcut" data-id="${w.id || ""}">In den iPhone-Wecker (Kurzbefehl)</button><button class="btn" data-act="wics" data-id="${w.id || ""}">Als Kalender-Alarm</button>`}</div>`;
 }
 let wDraft = null;
 function readWecker(id) {
-  const old = id && S.alarms.find(x => x.id === id);
-  const w = Object.assign({}, old || {}, { to: $("#w-to").value.trim(), from: $("#w-from").value.trim(), date: $("#w-date").value, arrive: $("#w-arr").value, prepMin: +$("#w-prep").value, bufMin: +$("#w-buf").value, count: +$("#w-cnt").value, gap: +$("#w-gap").value });
+  const saved = id && S.alarms.find(x => x.id === id), old = wDraft && (wDraft.id || "") === (id || "") ? wDraft : saved;
+  const w = Object.assign({}, old || {}, { to: $("#w-to").value.trim(), from: $("#w-from").value.trim(), name: $("#w-nm").value.trim(), date: $("#w-date").value, arrive: $("#w-arr").value, prepMin: +$("#w-prep").value, bufMin: +$("#w-buf").value, count: +$("#w-cnt").value, gap: +$("#w-gap").value });
   if (old && (old.to !== w.to)) { delete w.toLat; delete w.toLon; delete w.toName; }
   if (old && (old.from !== w.from)) { delete w.fromLat; delete w.fromLon; }
+  if (old && (old.to !== w.to || old.from !== w.from)) { delete w.routeDesc; delete w.routeIx; }
+  if (w.from === HERE && wHere) { w.fromLat = wHere.lat; w.fromLon = wHere.lon; }
   return w;
 }
 function alarmTimes(w) { return w.alarms.map(t => new Date(w.wakeDate + "T" + t + ":00")); }
@@ -83,8 +107,8 @@ function weckerICS(w) {
 AREA_VIEW.wecker = () => {
   const t = today(), list = S.alarms.filter(w => w.date >= t).sort((a, b) => (a.wakeDate + a.wake) < (b.wakeDate + b.wake) ? -1 : 1), old = S.alarms.filter(w => w.date < t);
   return `<button class="btn pri" data-act="newwecker" style="width:100%;margin-bottom:10px">⏰ Neuer Wecker nach Ankunftszeit</button>
-  ${list.length ? list.map(w => `<div class="card${w.date === addDays(t, 1) || w.date === t ? " due" : ""}" role="button" tabindex="0" data-act="openwecker" data-id="${w.id}"><span class="av">⏰</span><span style="min-width:0"><div class="t">${esc(w.alarms.join(" · "))}</div><div class="s">${esc(relDate(w.date))}: um ${esc(w.arrive)} in ${esc(w.to)} · losfahren ${esc(w.leave)}</div></span><span class="chev">›</span></div>`).join("") : empty("Kein Wecker geplant. Sag abends einfach: „Ich muss morgen um 6 in Remseck sein.“")}
-  <div class="hint"><b>So funktioniert’s:</b> Ziel und Ankunft eintragen. Mirella rechnet die Fahrzeit${S.settings.gmapsKey ? " mit Google Maps und Verkehrsvorhersage" : " (ohne Google-Schlüssel mit Zuschlag für Berufsverkehr)"}, zieht Puffer und deine Zeit zu Hause ab und schlägt ${S.settings.alarmCount} Wecker im ${S.settings.alarmGap}-Minuten-Abstand vor. Ist Mirella morgens offen, rechnet sie mit dem aktuellen Verkehr nach und meldet sich, wenn du früher los musst.<br><br>Ein echter Wecker, der auch bei geschlossener App und Stummschaltung klingelt, kommt mit der iPhone-App. Bis dahin: „In den iPhone-Wecker“ (einmal einen Kurzbefehl anlegen, Anleitung unter Einstellungen › Wecker) oder „Als Kalender-Alarm“.</div>
+  ${list.length ? list.map(w => `<div class="card${w.date === addDays(t, 1) || w.date === t ? " due" : ""}" role="button" tabindex="0" data-act="openwecker" data-id="${w.id}"><span class="av">⏰</span><span style="min-width:0"><div class="t">${esc(w.alarms.join(" · "))}</div><div class="s">${w.name ? "<b>" + esc(w.name) + "</b> · " : ""}${esc(relDate(w.date))}: um ${esc(w.arrive)} in ${esc(w.to)} · losfahren ${esc(w.leave)}${w.km ? " · " + kmTxt(w.km) : ""}</div></span><span class="chev">›</span></div>`).join("") : empty("Kein Wecker geplant. Sag abends einfach: „Ich muss morgen um 6 in Remseck sein.“")}
+  <div class="hint"><b>So funktioniert’s:</b> Ziel und Ankunft eintragen. Mirella rechnet die Fahrzeit${S.settings.gmapsKey ? " mit Google Maps und Verkehrsvorhersage" : " (ohne Google-Schlüssel mit Zuschlag für Berufsverkehr)"}, zieht Puffer und deine Zeit zu Hause ab und schlägt ${S.settings.alarmCount} Wecker im ${S.settings.alarmGap}-Minuten-Abstand vor. Ist Mirella morgens offen, rechnet sie mit dem aktuellen Verkehr nach und meldet sich, wenn du früher los musst.${NATIVE ? "" : "<br><br>Ein echter Wecker, der auch bei geschlossener App und Stummschaltung klingelt, kommt mit der iPhone-App. Bis dahin: „In den iPhone-Wecker“ (einmal einen Kurzbefehl anlegen, Anleitung unter Einstellungen › Wecker) oder „Als Kalender-Alarm“."}</div>
   ${old.length ? `<button class="mini" data-act="clearwecker">${old.length} alte Wecker löschen</button>` : ""}`;
 };
 function weckerSettings() {
@@ -93,7 +117,7 @@ function weckerSettings() {
   ${setH("Standard")}${setSel("prepMin", "Zeit zu Hause", "Duschen, Frühstücken", [[15, "15 Min."], [20, "20 Min."], [30, "30 Min."], [45, "45 Min."], [60, "60 Min."], [90, "90 Min."]])}${setSel("bufMin", "Puffer unterwegs", "Parkplatz, Stau", [[0, "keiner"], [5, "5 Min."], [10, "10 Min."], [15, "15 Min."], [20, "20 Min."]])}${setSel("alarmCount", "Anzahl Wecker", "", [[1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"]])}${setSel("alarmGap", "Abstand", "zwischen den Weckern", [[3, "3 Min."], [5, "5 Min."], [10, "10 Min."]])}
   ${setH("Verkehr live (Google Maps)")}${setTxt("gmapsKey", "Google-Maps-Schlüssel", s.gmapsKey ? "eingetragen" : "freiwillig, für echte Verkehrslage", "AIza…")}
   <p class="hint">Für die echte Verkehrslage braucht Mirella einen eigenen Schlüssel für die Google „Routes API“ (in der Google Cloud Console anlegen, Abrechnungskonto nötig, für den privaten Gebrauch im kostenlosen Rahmen). Den Schlüssel in der Google Cloud Console auf die „Routes API“ beschränken (API-Einschränkung). Für die iPhone-App keine Website-Einschränkung setzen, sonst lehnt Google die Anfrage ab. Ohne Schlüssel rechnet Mirella mit der freien Route und einem Zuschlag für den Berufsverkehr.</p>
-  ${setH("Kurzbefehl „Mirella Wecker“ (einmalig)")}<p class="hint" style="margin-top:0">Damit „In den iPhone-Wecker“ echte Wecker stellt, einmal in der Kurzbefehle-App einen Kurzbefehl anlegen: Name „Mirella Wecker“. Aktion 1: „Text aufteilen“ (Text: Kurzbefehleingabe, bei: Neue Zeilen). Aktion 2: „Wiederholen mit jedem Objekt“, darin „Wecker erstellen“ mit Uhrzeit = Wiederholungsobjekt und Bezeichnung „Mirella“. Fertig: Mirella übergibt dann alle Weckzeiten auf einmal.</p>`;
+  ${NATIVE ? "" : `${setH("Kurzbefehl „Mirella Wecker“ (einmalig)")}<p class="hint" style="margin-top:0">Damit „In den iPhone-Wecker“ echte Wecker stellt, einmal in der Kurzbefehle-App einen Kurzbefehl anlegen: Name „Mirella Wecker“. Aktion 1: „Text aufteilen“ (Text: Kurzbefehleingabe, bei: Neue Zeilen). Aktion 2: „Wiederholen mit jedem Objekt“, darin „Wecker erstellen“ mit Uhrzeit = Wiederholungsobjekt und Bezeichnung „Mirella“. Fertig: Mirella übergibt dann alle Weckzeiten auf einmal.</p>`}`;
 }
 
 /* Morgens neu rechnen, wenn die App offen ist */
@@ -181,6 +205,14 @@ Object.assign(ACT, {
     const res = $("#w-res"); res.innerHTML = '<div class="hint">Mirella rechnet die Route …</div>';
     try { await planAlarm(w); wDraft = w; res.innerHTML = resHTML(w); res.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
     catch (e) { res.innerHTML = `<div class="hint" style="border:1px solid var(--late)">${esc(e.message || "Route konnte nicht berechnet werden")}${/^Start/.test(e.message) ? "" : ". Prüfe die Adresse oder die Internetverbindung."}</div>`; }
+  },
+  whier: async () => { const inp = $("#w-from"); if (!inp) return; toast("Mirella sucht deinen Standort …"); try { wHere = await herePos(); inp.value = HERE; toast("Start ist dein jetziger Standort"); } catch (e) { toast(e.message.replace(/^Start: /, "")); } },
+  altroute: async el => {
+    const base = wDraft || S.alarms.find(x => x.id === el.dataset.id); if (!base || !base.routes) return;
+    const w = Object.assign({}, base), r = w.routes[+el.dataset.i]; if (!r) return;
+    if (r.desc) { w.routeDesc = r.desc; delete w.routeIx; } else { delete w.routeDesc; w.routeIx = +el.dataset.i; }
+    const res = $("#w-res"); res.innerHTML = '<div class="hint">Mirella rechnet die andere Route …</div>';
+    try { await planAlarm(w); wDraft = w; res.innerHTML = resHTML(w); toast("Andere Route gewählt. Mit „Wecker speichern“ übernehmen."); } catch (e) { res.innerHTML = resHTML(base); toast("Die andere Route ließ sich gerade nicht berechnen"); }
   },
   savewecker: el => { const w = wDraft || readWecker(el.dataset.id); if (!w.wake) return; if (!w.id) { w.id = uid(); S.alarms.push(w); } else { const i = S.alarms.findIndex(x => x.id === w.id); if (i >= 0) S.alarms[i] = w; else S.alarms.push(w); } wDraft = null; draftClear(); save(); closeSheet(); area = "wecker"; view = "bereich"; render(); toast(`Wecker gespeichert: ${w.alarms.join(", ")}`); },
   shortcut: el => { const w = wDraft || S.alarms.find(x => x.id === el.dataset.id); if (!w || !w.alarms) return; location.href = "shortcuts://run-shortcut?name=" + encodeURIComponent("Mirella Wecker") + "&input=text&text=" + encodeURIComponent(w.alarms.join("\n")); },

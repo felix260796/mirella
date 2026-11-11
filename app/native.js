@@ -83,25 +83,85 @@
   /* first = beim Einrichten alle übernehmen; danach landen neue iPhone-Kontakte als Vorschlag auf „Heute“ */
   async function contactsSync(first) {
     const res = { added: 0, linked: 0, fresh: 0 };
+    if (contactsBusy) return res; contactsBusy = true;
     try {
-      const perm = await P.Contacts.checkPermissions(); if (perm.contacts !== "granted" && perm.contacts !== "limited") return res;
+      const perm = await P.Contacts.checkPermissions(); if (perm.contacts !== "granted" && perm.contacts !== "limited") { contactsBusy = false; return res; }
       const { contacts } = await P.Contacts.getContacts({ projection: { name: true, phones: true, emails: true, birthday: true, postalAddresses: true } });
-      const known = new Set(S.people.map(p => p.appleId).filter(Boolean)), ign = new Set(S.settings.appleIgnored);
+      N.aid = N.aid || {}; N.cs = N.cs || {};
+      // Die iPhone-Kennung ist auf jedem Gerät anders: N.aid merkt sich die Kennung dieses Geräts je Mirella-Kontakt
+      const known = new Map(); for (const p of S.people) { const k = N.aid[p.id] || p.appleId; if (k) known.set(k, p); }
+      const ign = new Set(S.settings.appleIgnored), linked = new Set(), writes = [];
       const fresh = [];
       for (const raw of contacts || []) {
         const c = fromApple(raw); if (!c.first && !c.last) continue;
-        if (known.has(c.appleId)) { const p = S.people.find(x => x.appleId === c.appleId); for (const k of ["tel", "email", "bday", "addr"]) if (!p[k] && c[k]) p[k] = c[k]; continue; }
+        if (known.has(c.appleId)) { const p = known.get(c.appleId); linked.add(p.id); if (twoWay(p, c, raw, writes)) res.linked++; continue; }
         if (isIgnored(c, ign)) continue;
         const d0 = findDups(c, null)[0];
-        if (d0) { const before = JSON.stringify(d0); mergeInto(d0, c); if (!d0.appleId) d0.appleId = c.appleId; if (JSON.stringify(d0) !== before) res.linked++; continue; }
+        if (d0) { const before = JSON.stringify(d0); mergeInto(d0, c); if (!d0.appleId) d0.appleId = c.appleId; N.aid[d0.id] = c.appleId; linked.add(d0.id); if (JSON.stringify(d0) !== before) res.linked++; continue; }
         if (first || N.contactsDone !== true) { S.people.push(isNewPerson(c)); res.added++; }
         else fresh.push(c);
       }
-      N.contactsDone = true; N.freshContacts = fresh; res.fresh = fresh.length; nSave();
+      N.contactsDone = true; N.freshContacts = fresh; res.fresh = fresh.length;
+      // Neu in Mirella angelegte Kontakte auch im iPhone-Telefonbuch anlegen (nur ab dem Tag, an dem das Zurückschreiben eingeschaltet wurde)
+      if (!N.twoWayFrom) N.twoWayFrom = today();
+      if (twoWayOn()) for (const p of S.people) {
+        if (linked.has(p.id) || p.appleId || N.aid[p.id] || p.arch || p.death || !(p.first || p.last) || !p.created || p.created < N.twoWayFrom || N.cs[p.id]) continue;
+        writes.push({ p, neu: true, o: { given: p.first || "", family: p.last || "", birthday: p.bday || "", phone: p.tel || "", email: p.email || "" } });
+      }
+      nSave();
       if (res.added || res.linked) save();
+      if (writes.length) res.written = await writeBack(writes);
     } catch (e) { console.warn("Kontakte", e); }
+    contactsBusy = false; peopleSig = pSig();
     return res;
   }
+
+  /* ---------- Beidseitig: Änderungen aus Mirella ins iPhone-Telefonbuch und umgekehrt ---------- */
+  const twoWayOn = () => N.twoWay !== false && !!P.MirellaContacts;
+  const hsh = a => { let h = 5381; const s2 = a.join("\u0001"); for (let i = 0; i < s2.length; i++) h = ((h << 5) + h + s2.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+  const CF = ["first", "last", "tel", "email", "bday"];
+  const md = b => (b || "").slice(5), hasYear = b => !!b && !b.startsWith("1604");
+  function twoWay(p, c, raw, writes) {
+    const before = JSON.stringify(p);
+    const tels = new Set((raw.phones || []).map(x => telKey(x.number)).filter(Boolean)), mails = new Set((raw.emails || []).map(x => (x.address || "").toLowerCase()).filter(Boolean));
+    const st = N.cs[p.id], mh = hsh(CF.map(k => p[k] || "")), ah = hsh(CF.map(k => c[k] || ""));
+    const mCh = st && st.m !== mh, aCh = st && st.a !== ah;
+    // 1. iPhone -> Mirella: Leeres immer auffüllen; Geändertes übernehmen, wenn nur das iPhone geändert wurde
+    for (const k of ["tel", "email", "bday", "addr"]) if (!p[k] && c[k]) p[k] = c[k];
+    if (aCh && !mCh) {
+      if (c.first || c.last) { p.first = c.first; p.last = c.last; }
+      if (c.tel && p.tel && !tels.has(telKey(p.tel))) p.tel = c.tel;
+      if (c.email && p.email && !mails.has(p.email.toLowerCase())) p.email = c.email;
+      if (c.bday && (md(c.bday) !== md(p.bday) || (hasYear(c.bday) && c.bday !== p.bday))) p.bday = c.bday;
+    }
+    // 2. Mirella -> iPhone: was dem iPhone fehlt, immer; Geändertes, wenn es in Mirella geändert wurde
+    if (twoWayOn()) {
+      const o = {};
+      if (mCh && (p.first !== c.first || p.last !== c.last) && (p.first || p.last)) { o.given = p.first || ""; o.family = p.last || ""; }
+      if (p.bday && (!c.bday || (mCh && p.bday !== c.bday) || (hasYear(p.bday) && !hasYear(c.bday) && md(p.bday) === md(c.bday)))) o.birthday = p.bday;
+      if (p.tel && telKey(p.tel) && !tels.has(telKey(p.tel))) o.phone = p.tel;
+      if (p.email && !mails.has(p.email.toLowerCase())) o.email = p.email;
+      if (Object.keys(o).length) { o.id = c.appleId; writes.push({ p, o }); }
+    }
+    N.cs[p.id] = { m: hsh(CF.map(k => p[k] || "")), a: ah };
+    return JSON.stringify(p) !== before;
+  }
+  async function writeBack(writes) {
+    let n = 0;
+    for (const w of writes.slice(0, 300)) {
+      try {
+        const r = await P.MirellaContacts.upsert(w.o);
+        if (w.neu && r.id) { N.aid[w.p.id] = r.id; if (!w.p.appleId) w.p.appleId = r.id; N.cs[w.p.id] = { m: hsh(CF.map(k => w.p[k] || "")), a: "" }; }
+        if (r.changed) n++;
+      } catch (e) { console.warn("Telefonbuch", e); }
+    }
+    nSave(); if (writes.some(w => w.neu)) save();
+    if (n) toast(n === 1 ? "1 Kontakt im iPhone-Telefonbuch aktualisiert" : n + " Kontakte im iPhone-Telefonbuch aktualisiert");
+    return n;
+  }
+  const pSig = () => hsh(S.people.map(p => p.id + CF.map(k => p[k] || "").join("|")));
+  let contactsBusy = false, peopleSig = "", pT = null;
+  function peopleChanged() { if (!N.setup || !twoWayOn() || contactsBusy) return; const s2 = pSig(); if (s2 === peopleSig) return; peopleSig = s2; clearTimeout(pT); pT = setTimeout(async () => { await contactsSync(false); render(true); }, 2500); }
   ACT.newcadd = el => { const c = (N.freshContacts || []).find(x => x.appleId === el.dataset.id); if (!c) return; S.people.push(isNewPerson(c)); N.freshContacts = N.freshContacts.filter(x => x !== c); nSave(); save(); render(true); toast((c.first || c.last) + " übernommen"); };
   ACT.newcign = el => { const c0 = (N.freshContacts || []).find(x => x.appleId === el.dataset.id); S.settings.appleIgnored.push(c0 ? ckey(c0) : el.dataset.id); N.freshContacts = (N.freshContacts || []).filter(x => x.appleId !== el.dataset.id); nSave(); save(); render(true); };
   function freshBlock() {
@@ -184,8 +244,9 @@
       const evs = (await P.CapacitorCalendar.listEventsInRange({ from, to })).result || [];
       const bc = new Set(N.bcals || []), names = Object.fromEntries((N.cals || []).map(c => [c.id, c.title]));
       const out = [];
+      try { await calSync(evs); } catch (e2) { console.warn("Kalender-Abgleich", e2); }
       for (const e of evs) {
-        if (bc.has(e.calendarId) || e.birthdayContactIdentifier) continue;
+        if (bc.has(e.calendarId) || e.birthdayContactIdentifier || (N.mcal && e.calendarId === N.mcal)) continue;
         const d0 = isoOf(e.startDate), d1 = isoOf(Math.max(e.startDate, (e.endDate || e.startDate) - 1));
         const dt = new Date(e.startDate), time = e.isAllDay ? "" : pad2(dt.getHours()) + ":" + pad2(dt.getMinutes());
         out.push({ id: e.id + "@" + d0, t: e.title || "(ohne Titel)", d: d0, e: d1 > d0 ? d1 : "", time, cal: names[e.calendarId] || "", loc: e.location || "" });
@@ -194,6 +255,65 @@
       return out.length;
     } catch (e) { console.warn("Termine", e); return 0; }
   }
+  /* ---------- Beidseitig: Mirella-Termine stehen im iPhone-Kalender „Mirella“, Änderungen dort kommen zurück ---------- */
+  const calMode = () => N.calMode || "zeit"; // zeit = alles mit Uhrzeit, alle = alles mit Datum, aus
+  const calWanted = t => calMode() !== "aus" && t.list === "todo" && t.date && !t.ref && !t.auto && !t.area && t.trig !== "verlassen" && (t.time || t.cal || calMode() === "alle");
+  const tSig = t => [t.t, t.date, t.time || ""].join("|");
+  const eTime = e => { const d = new Date(e.startDate); return e.isAllDay ? "" : pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
+  const eSig = e => [e.title || "", isoOf(e.startDate), eTime(e)].join("|");
+  const evTimes = t => { const allDay = !t.time, start = new Date(t.date + "T" + (t.time || "00:00") + ":00").getTime(); return { startDate: start, endDate: allDay ? start + 864e5 - 1 : start + 60 * 60e3, isAllDay: allDay }; };
+  async function mirellaCal() {
+    const cals = (await P.CapacitorCalendar.listCalendars()).result || [];
+    let c = cals.find(x => x.id === N.mcal) || cals.find(x => (x.title || "") === "Mirella" && x.allowsContentModifications !== false);
+    if (!c) { const r = await P.CapacitorCalendar.createCalendar({ title: "Mirella", color: "#111111" }); c = { id: r.id }; }
+    if (N.mcal !== c.id) { N.mcal = c.id; nSave(); }
+    return c.id;
+  }
+  let calBusy = false;
+  async function calSync(evs) {
+    if (calBusy || calMode() === "aus") return; calBusy = true;
+    try {
+      const map = N.cev = N.cev || {}, gone = N.cgone = N.cgone || {}; let changed = false;
+      const need = S.todos.some(t => calWanted(t) && !t.done && !map[t.id] && !gone[t.id]);
+      if (!N.mcal && !need) return;
+      const cal = await mirellaCal(), C = P.CapacitorCalendar;
+      const mine = evs.filter(e => e.calendarId === cal), byId = new Map(mine.map(e => [e.id, e]));
+      const lo = Date.now() - 60 * 864e5, hi = Date.now() + 398 * 864e5;
+      // 1. Vom iPhone nach Mirella
+      for (const [tid, m] of Object.entries(map)) {
+        const t = S.todos.find(x => x.id === tid), e = byId.get(m.id);
+        if (!t || !t.date) { if (e) try { await C.deleteEvent({ id: m.id }); } catch (_) { } delete map[tid]; continue; }
+        if (!e) { const at = new Date(m.sig.split("|")[1] + "T12:00:00").getTime(); if (at > lo && at < hi) { delete map[tid]; gone[tid] = 1; } continue; }
+        if (eSig(e) !== m.sig && tSig(t) === m.sig) { t.t = e.title || t.t; t.date = isoOf(e.startDate); t.time = eTime(e); m.sig = tSig(t); changed = true; }
+      }
+      const tracked = new Set(Object.values(map).map(m => m.id));
+      for (const e of mine) {
+        if (tracked.has(e.id) || e.isPartOfSeries) continue;
+        const mark = /Mirella:([\w-]+)/.exec(e.description || "");
+        let t = (mark && S.todos.find(x => x.id === mark[1] && !map[x.id])) || S.todos.find(x => x.list === "todo" && !map[x.id] && tSig(x) === eSig(e));
+        if (!t) { if (e.startDate < Date.now() - 864e5) continue; t = { id: uid(), t: e.title || "Termin", list: "todo", done: false, created: today(), date: isoOf(e.startDate), time: eTime(e), cal: 1 }; S.todos.push(t); changed = true; }
+        map[t.id] = { id: e.id, sig: eSig(e) }; tracked.add(e.id);
+      }
+      // 2. Von Mirella aufs iPhone
+      for (const t of S.todos) {
+        const m = map[t.id];
+        if (!calWanted(t)) continue;
+        const s2 = tSig(t);
+        if (!m) {
+          if (t.done || gone[t.id] || t.date < isoOf(lo)) continue;
+          const r = await C.createEvent(Object.assign({ title: t.t, calendarId: cal, alerts: [], description: "Aus Mirella. Mirella:" + t.id, commit: true }, evTimes(t)));
+          if (r && r.id) map[t.id] = { id: r.id, sig: s2 };
+        } else if (m.sig !== s2) { try { await C.modifyEvent(Object.assign({ id: m.id, title: t.t }, evTimes(t))); m.sig = s2; } catch (e2) { console.warn("Termin ändern", e2); } }
+      }
+      nSave();
+      if (changed) { todoSig = dSig(); save(); render(true); }
+    } finally { calBusy = false; }
+  }
+  const dSig = () => hsh(S.todos.filter(t => t.list === "todo" && (t.date || (N.cev || {})[t.id])).map(t => t.id + tSig(t) + (t.cal || "")));
+  let todoSig = "", dT = null;
+  function todosChanged() { if (!N.setup || calMode() === "aus") return; const s2 = dSig(); if (s2 === todoSig) return; todoSig = s2; clearTimeout(dT); dT = setTimeout(async () => { await calendarEvents(); render(true); }, 2500); }
+  ACT.ncalmode = async el => { N.calMode = el.dataset.m; nSave(); render(true); if (N.calMode !== "aus") { await calendarEvents(); render(true); } };
+  ACT.ntwoway = async () => { N.twoWay = N.twoWay === false; nSave(); render(true); if (N.twoWay) { await contactsSync(false); render(true); } };
   if (!CALF.some(x => x[0] === "termin")) CALF.push(["termin", "iPhone-Termine"]);
   if (S.settings.calFilter.termin === undefined) S.settings.calFilter.termin = 1;
   HOOKS.events.push((from, to) => {
@@ -222,6 +342,7 @@
       let ok = await calOk(); if (!ok) ok = (await P.CapacitorCalendar.requestFullCalendarAccess()).result === "granted";
       if (!ok) { origIcs && origIcs(t); return; }
       const allDay = !t.time, start = new Date((t.date || today()) + "T" + (t.time || "09:00") + ":00").getTime();
+      if (calMode() !== "aus" && t.id && t.date && S.todos.includes(t)) { t.cal = 1; if (N.cgone) delete N.cgone[t.id]; save(); await calendarEvents(); toast("Steht im iPhone-Kalender „Mirella“"); return; }
       await P.CapacitorCalendar.createEvent({ title: t.t, startDate: start, endDate: allDay ? start + 864e5 - 1 : start + 30 * 60e3, isAllDay: allDay, alerts: allDay ? [] : [0], description: "Aus Mirella", commit: true });
       toast("In deinen Kalender eingetragen");
     } catch (e) { toast("Kalender: " + (e && e.message || e)); }
@@ -299,7 +420,7 @@
   ACT.nwecker = async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; nSave(); await alarmSync(true); render(true); } catch (_) { toast("Das hat nicht geklappt"); } };
   let schedT = null;
   const origSave2 = save;
-  save = function () { const ok = origSave2(); clearTimeout(schedT); schedT = setTimeout(scheduleLocal, 1500); return ok; };
+  save = function () { const ok = origSave2(); clearTimeout(schedT); schedT = setTimeout(scheduleLocal, 1500); try { peopleChanged(); todosChanged(); } catch (_) { } return ok; };
 
   /* ---------- Push vom Server (z. B. „Dein Briefing ist da“) ---------- */
   P.PushNotifications.addListener("registration", async t => {
@@ -408,7 +529,12 @@
     <button class="btn" data-act="querv" style="width:100%;margin-top:8px">Geburtstags-Kalender zuordnen (${bOpen().length} offen)</button>
     ${S.settings.appleIgnored.length ? `<button class="btn" data-act="nunignore" style="width:100%;margin-top:8px">Aussortierte wieder vorschlagen (${S.settings.appleIgnored.length})</button>` : ""}
     ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${N.alarmN ? " Gestellt: " + N.alarmN + "." : ""}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}` : ""}
-    <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>`;
+    <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>
+    ${setH("In beide Richtungen")}
+    ${P.MirellaContacts ? `<button class="drow" data-act="ntwoway"><span class="dt"><b>Kontakte ins iPhone-Telefonbuch schreiben</b><small>${N.twoWay === false ? "aus" : "an: Name, Geburtstag, neue Nummer und E-Mail. Es wird nie etwas gelöscht."}</small></span><span class="chev">${N.twoWay === false ? "○" : "●"}</span></button>` : ""}
+    <p class="hint" style="margin-bottom:6px"><b>Mirella-Termine im iPhone-Kalender „Mirella“</b></p>
+    <div class="seg">${[["zeit", "Mit Uhrzeit"], ["alle", "Alle mit Datum"], ["aus", "Aus"]].map(([v, l]) => `<button data-act="ncalmode" data-m="${v}" aria-pressed="${calMode() === v}">${l}</button>`).join("")}</div>
+    <p class="hint">Was du in Mirella einträgst, steht im iPhone-Kalender „Mirella“. Änderst du den Termin dort, ändert er sich auch in Mirella. Neue Termine, die du am iPhone in den Kalender „Mirella“ legst, erscheinen hier als Aufgabe.</p>`;
   const origEinst2 = R.einstellungen;
   R.einstellungen = function () {
     const h = origEinst2.call(this); if (setSec) return h;

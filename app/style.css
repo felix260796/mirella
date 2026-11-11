@@ -599,3 +599,10 @@ input[type=date]::-webkit-date-and-time-value,input[type=time]::-webkit-date-and
 .wxdt b{width:30px}
 .wxrange{flex:1;height:6px;background:var(--surface-2);border-radius:3px;position:relative}
 .wxrange i{position:absolute;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#7DB5E0,#F2B24C)}
+
+/* iPhone-Termine im Kalender, Kontakte aufräumen */
+.dots i.d-termin{background:#8a5cf5}.cf-termin i{background:#8a5cf5}.ev-termin{border-color:#8a5cf5}
+.clrow{gap:12px}.clbox{flex:none;width:26px;height:26px;border:2px solid var(--ink-3);border-radius:8px;display:grid;place-items:center;font-weight:700;font-size:15px}
+.clrow[aria-pressed="true"] .clbox{background:var(--ink);border-color:var(--ink);color:#fff}
+.clbar{display:flex;gap:8px;width:100%;margin-top:8px}
+.clbar .btn{flex:1;padding-top:10px;padding-bottom:10px}.clbar .btn[disabled]{opacity:.45}

@@ -785,6 +785,22 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     };
     setTimeout(filesSync, 8000); setInterval(filesSync, 60000);
     ACT.nfiles = () => { N.files = N.files === false; nSave(); render(true); if (N.files) filesSync(); toast(N.files ? "Dokumente erscheinen in der Dateien-App" : "Es werden keine neuen Kopien mehr abgelegt"); };
+    // Live-Anzeige „Jetzt musst du los“: Countdown auf Sperrbildschirm und Dynamic Island, ab 3 Stunden vor dem Losgehen.
+    // iOS lässt eine App die Anzeige nur starten, solange sie offen ist. Darum prüft Mirella bei jedem Öffnen und jede Minute.
+    const nextLos = () => {
+      const now = Date.now(), out = [];
+      for (const w of S.alarms || []) { if (!w.wake || w.off || !w.leave) continue; out.push({ at: +new Date((w.leaveDate || w.date) + "T" + w.leave + ":00"), titel: weckerName(w), ziel: String(w.to || "").split(",")[0], info: (w.travelMin ? w.travelMin + " Min. unterwegs · " : "") + "Ankunft " + w.arrive }); }
+      for (const t of S.todos) { if (t.done || !t.los || !t.ort || !t.time) continue; out.push({ at: +new Date((t.losDate || t.date) + "T" + t.los + ":00"), titel: t.t, ziel: String(t.ort).split(",")[0], info: t.fahrt + " Min. mit dem Auto · Ankunft " + t.time }); }
+      return out.filter(x => x.at > now - 10 * 60e3 && x.at < now + 3 * 3600e3).sort((a, b) => a.at - b.at)[0] || null;
+    };
+    const liveSync = async () => {
+      if (N.live === false || document.hidden) return;
+      const x = nextLos(), sig = x ? x.at + "|" + x.titel + "|" + x.info : "";
+      if (sig === (N.liveSig || "")) return;
+      try { if (x) { const r = await SY.losStart({ los: x.at, titel: x.titel, ziel: x.ziel, info: x.info }); if (!r.ok) { N.liveErr = r.reason || ""; nSave(); if (r.reason === "unavailable" || r.reason === "aus") { N.liveSig = sig; nSave(); } return; } N.liveErr = ""; } else await SY.losEnd(); N.liveSig = sig; nSave(); } catch (_) { }
+    };
+    setTimeout(liveSync, 4000); setInterval(liveSync, 60000); document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(liveSync, 800); });
+    ACT.nlive = () => { N.live = N.live === false; N.liveSig = ""; nSave(); if (N.live) liveSync(); else SY.losEnd().catch(() => { }); render(true); toast(N.live ? "Countdown auf dem Sperrbildschirm ist an" : "Countdown ist aus"); };
     // Face ID: nur als Schalter in den Einstellungen, zunächst aus
     let lockedAt = 0;
     const lock = async () => {
@@ -802,6 +818,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       ${(N.places || []).map(o => `<div class="listrow"><span class="grow">${esc(o.name)}<small>${o.exit ? "beim Weggehen" : "beim Ankommen"}${o.text ? " · " + esc(o.text) : ""}${o.shop ? " · mit Einkaufsliste" : ""}</small></span><button class="mini" data-act="nplacedel" data-id="${o.id}">Löschen</button></div>`).join("") || '<p class="hint" style="margin-top:0">Noch keine. Beispiel: „Du bist bei Rewe, 6 Sachen auf der Liste“ oder beim Verlassen der Wohnung „Schlüssel, Fenster zu?“.</p>'}
       <button class="btn" data-act="nplace" style="width:100%;margin-top:8px">+ Ort hinzufügen</button>
       ${setH("Sicherheit und Apple-KI")}
+      <button class="drow" data-act="nlive"><span class="dt"><b>Countdown „Jetzt musst du los“ auf dem Sperrbildschirm</b><small>${N.live === false ? "aus" : "an: ab 3 Stunden vorher, für Wecker und Termine mit Ort" + (N.liveErr === "aus" ? ". Live-Aktivitäten sind am iPhone ausgeschaltet (Einstellungen › Mirella)." : "")}</small></span><span class="chev">›</span></button>
       <button class="drow" data-act="nfiles"><span class="dt"><b>Dokumente auch in der Dateien-App</b><small>${N.files === false ? "aus" : "an: Auf meinem iPhone › Mirella, nach Ordnern (" + Object.keys(N.filed || {}).length + " abgelegt)"}</small></span><span class="chev">›</span></button>
       <button class="drow" data-act="nfaceid"><span class="dt"><b>Mirella nur mit Face ID öffnen</b><small>${N.faceId ? "an" : "aus"}</small></span><span class="chev">›</span></button>
       <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;

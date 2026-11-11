@@ -1,6 +1,6 @@
 /* Mirella Service Worker: erst Netz, sonst Zwischenspeicher (Updates kommen sofort an, App startet auch offline) */
-const C = "mirella-v20";
-const FILES = ["./", "./index.html", "./style.css?v=20", "./farbe.css?v=20", "./logik.js?v=20", "./app.js?v=20", "./bereiche.js?v=20", "./scan.js?v=20", "./wecker.js?v=20", "./suche.js?v=20", "./ki.js?v=20", "./export.js?v=20", "./wetter.js?v=20", "./viewer.js?v=20", "./sync.js?v=20", "./native.js?v=20", "./logo-final.svg", "./manifest.webmanifest", "./app-icon-180.png"];
+const C = "mirella-v21";
+const FILES = ["./", "./index.html", "./style.css?v=21", "./farbe.css?v=21", "./logik.js?v=21", "./app.js?v=21", "./bereiche.js?v=21", "./scan.js?v=21", "./wecker.js?v=21", "./suche.js?v=21", "./ki.js?v=21", "./export.js?v=21", "./wetter.js?v=21", "./viewer.js?v=21", "./sync.js?v=21", "./native.js?v=21", "./logo-final.svg", "./manifest.webmanifest", "./app-icon-180.png"];
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(FILES)).catch(() => {})); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== C).map(x => caches.delete(x)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {

@@ -801,6 +801,22 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     };
     setTimeout(liveSync, 4000); setInterval(liveSync, 60000); document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(liveSync, 800); });
     ACT.nlive = () => { N.live = N.live === false; N.liveSig = ""; nSave(); if (N.live) liveSync(); else SY.losEnd().catch(() => { }); render(true); toast(N.live ? "Countdown auf dem Sperrbildschirm ist an" : "Countdown ist aus"); };
+    // Teilen nach Mirella: was aus Mail, Safari, Fotos … geteilt wurde, beim Öffnen einsortieren
+    let shareBusy = false;
+    const sharedIn = async () => {
+      if (shareBusy || !N.setup || document.hidden) return; shareBusy = true;
+      try {
+        const items = ((await SY.takeShared()) || {}).items || []; let files = 0; const texts = [];
+        for (const it of items) {
+          if (it.kind === "file" && it.data) { const bin = atob(it.data), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); await addDocFile(new File([u8], it.name || "Geteilt", { type: it.mime || "application/octet-stream" })); files++; }
+          else if (it.text) texts.push(it.kind === "url" ? "Link ansehen: " + it.text : it.text);
+        }
+        if (files) toast(files === 1 ? "Geteiltes Dokument abgelegt" : files + " geteilte Dokumente abgelegt");
+        if (texts.length) { closeAll(); voiceStart(); recStop(); $("#v-text").value = texts.join("\n"); const st = $("#sheetbody .stitle"); if (st) st.textContent = "Geteilt an Mirella"; }
+      } catch (_) { }
+      shareBusy = false;
+    };
+    setTimeout(sharedIn, 2500); document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(sharedIn, 700); });
     // Face ID: nur als Schalter in den Einstellungen, zunächst aus
     let lockedAt = 0;
     const lock = async () => {

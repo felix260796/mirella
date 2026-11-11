@@ -33,7 +33,8 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
         CAPPluginMethod(name: "saveFile", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeFile", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "losStart", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "losEnd", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "losEnd", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise)
     ]
 
     private let calls = CXCallObserver()
@@ -249,6 +250,13 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
         }
         #endif
         call.resolve(["ok": true])
+    }
+
+    // MARK: Teilen nach Mirella
+
+    /// Holt ab, was über „Teilen › Mirella“ aus anderen Apps kam: items [{kind: text|url|file, text?, name?, mime?, data?}]
+    @objc func takeShared(_ call: CAPPluginCall) {
+        call.resolve(["items": MirellaShareBox.take()])
     }
 
     // MARK: Siri / Kurzbefehle

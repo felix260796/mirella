@@ -25,6 +25,7 @@ const HELP = [
   { q: "Wie packe ich für eine Reise?", k: ["reise", "urlaub", "packliste", "packen", "flug", "check-in", "reisepass"], a: "Reisen › Plus › Reise. Mirella legt eine Packliste an, erinnert 3 Tage vorher ans Packen, bei Flügen an den Online-Check-in und warnt, wenn dein Reisepass vorher abläuft.", go: ["area", "frei"] },
   { q: "Wie lege ich ein Fahrzeug an?", k: ["auto", "fahrzeug", "tüv", "hu", "inspektion", "reifen", "ebike", "e-bike", "fahrrad"], a: "Auto & E-Bike › Plus › Fahrzeug anlegen. TÜV-Monat, nächste Inspektion und Reifenwechsel eintragen; beim Firmenwagen erinnert Mirella nur an die Termine, die Wartung läuft über die Firma.", go: ["area", "auto"] },
   { q: "Wie kommen meine Kontakte vom iPhone rein?", k: ["import", "vcard", "icloud", "kontakte", "iphone"], a: "Einstellungen › Kontakte › Kontakte importieren (vCard). In der iPhone-App liest Mirella die Kontakte später direkt.", go: ["set", "kontakte"] },
+  { q: "Was kann die Mirella-KI (Claude)?", k: ["ki", "claude", "schlüssel", "schluessel", "api", "modell", "haiku", "opus", "fragen"], a: "Mit deinem Claude-Schlüssel versteht Mirella Gesprochenes genauer, schlägt Folge-Erinnerungen vor und beantwortet freie Fragen über die Lupe. Eintragen unter Einstellungen › Mirella-KI. Dort wählst du auch Sparsam, Automatisch oder Beste Qualität. Der Schlüssel bleibt nur auf diesem Gerät.", go: "einstellungen" },
   { q: "Wie funktionieren die Briefings?", k: ["briefing", "briefings", "zeitung", "nachrichten", "pdf"], a: "Dein Briefing kommt einmal am Tag automatisch als PDF auf „Heute“: jeden Tag um 8 Uhr, spätestens bis 9 Uhr ist es da. Tipp darauf öffnet direkt das PDF. Nach 7 Tagen werden sie gelöscht.", go: ["go", "briefings"] }
 ];
 function searchAll(q) {
@@ -60,7 +61,7 @@ function askMirella(q) {
 function helpShow(h) {
   openSheet(`<p class="stitle">${esc(h.q)}</p><p style="font-size:16px;line-height:1.55;margin:0 0 12px">${esc(h.a)}</p>
   <div class="row2">${h.go ? `<button class="btn pri" data-act="helpgo" data-i="${HELP.indexOf(h)}">Dorthin</button>` : ""}<button class="btn" data-act="search">Weitere Fragen</button></div>
-  <p class="swipehint">Mit dem Claude-Schlüssel beantwortet Mirella später auch freie Fragen.</p>`);
+  <p class="swipehint">${typeof kiOn === "function" && kiOn() ? "Freie Fragen beantwortet Mirella über die Lupe mit Claude." : "Mit deinem Claude-Schlüssel (Einstellungen › Mirella-KI) beantwortet Mirella auch freie Fragen."}</p>`);
 }
 Object.assign(ACT, {
   search: () => searchOpen(""),

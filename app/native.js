@@ -54,11 +54,11 @@
     N.setup = true; N.asked = Object.assign(N.asked || {}, { ki: 1, gmaps: 1 }); nSave(); save();
     lg.innerHTML += "<div>Ich übernehme jetzt deine Kontakte und Geburtstage …</div>";
     const r = await contactsSync(true); await calendarBirthdays(); await calendarEvents();
-    lg.innerHTML += `<div>✓ ${r.added} Kontakte übernommen, ${r.linked} zusammengeführt.</div>`;
+    lg.innerHTML += `<div>✓ ${(N.cards || []).length} Einträge im Telefonbuch gefunden. Du gehst sie im Reiter Kontakte Karte für Karte durch.</div>`;
     await scheduleLocal();
     el.textContent = "Fertig"; el.disabled = false; el.dataset.act = "wizdone";
   };
-  ACT.wizdone = () => { closeAll(); view = "heute"; render(); if (S.people.length > 1 && typeof ACT.dupscan === "function") setTimeout(() => ACT.dupscan(), 400); };
+  ACT.wizdone = () => { closeAll(); view = "heute"; render(); };
 
   /* ---------- iPhone-Kontakte ---------- */
   function fromApple(c) {
@@ -86,25 +86,30 @@
     if (contactsBusy) return res; contactsBusy = true;
     try {
       const perm = await P.Contacts.checkPermissions(); if (perm.contacts !== "granted" && perm.contacts !== "limited") { contactsBusy = false; return res; }
-      const { contacts } = await P.Contacts.getContacts({ projection: { name: true, phones: true, emails: true, birthday: true, postalAddresses: true } });
+      const { contacts } = await P.Contacts.getContacts({ projection: { name: true, phones: true, emails: true, birthday: true, postalAddresses: true, organization: true } });
       N.aid = N.aid || {}; N.cs = N.cs || {};
       // Die iPhone-Kennung ist auf jedem Gerät anders: N.aid merkt sich die Kennung dieses Geräts je Mirella-Kontakt
       const known = new Map(); for (const p of S.people) { const k = N.aid[p.id] || p.appleId; if (k) known.set(k, p); }
-      const ign = new Set(S.settings.appleIgnored), linked = new Set(), writes = [];
+      const ign = new Set(S.settings.appleIgnored), linked = new Set(), writes = [], cards = [], live = new Set((contacts || []).map(x => x.contactId));
       const fresh = [];
       for (const raw of contacts || []) {
         const c = fromApple(raw); if (!c.first && !c.last) continue;
         if (known.has(c.appleId)) { const p = known.get(c.appleId); linked.add(p.id); if (twoWay(p, c, raw, writes)) res.linked++; continue; }
         if (isIgnored(c, ign)) continue;
-        const d0 = findDups(c, null)[0];
-        if (d0) { const before = JSON.stringify(d0); mergeInto(d0, c); if (!d0.appleId) d0.appleId = c.appleId; N.aid[d0.id] = c.appleId; linked.add(d0.id); if (JSON.stringify(d0) !== before) res.linked++; continue; }
-        S.people.push(isNewPerson(c)); res.added++; // neue iPhone-Kontakte landen ungeprüft im Aufräum-Stapel (Einstellungen › Kontakte), nicht auf „Heute“
+        // Derselbe Kontakt auf einem anderen Gerät (iPad): gleicher Name und gleiche Nummer, hier noch nicht verknüpft. Das ist nur Wiedererkennen, kein Zusammenführen.
+        const twin = ckey(c).length > 3 && S.people.find(p => !linked.has(p.id) && !p.local && !p.arch && !live.has(N.aid[p.id] || p.appleId || "") && ckey(p) === ckey(c));
+        if (twin) { N.aid[twin.id] = c.appleId; linked.add(twin.id); if (twoWay(twin, c, raw, writes)) res.linked++; continue; }
+        cards.push(cardOf(raw, c)); // wartet als Karte, bis Felix entschieden hat
       }
+      // Karten vom letzten Mal behalten, was Felix schon daran gemacht hat (Geburtstag aus dem Kalender, Notizen)
+      const oldC = new Map((N.cards || []).map(x => [x.appleId, x]));
+      for (const x of cards) { const o = oldC.get(x.appleId); if (o) { if (!x.bday && o.bday) x.bday = o.bday; if (o.notes) x.notes = o.notes; } }
+      res.added = cards.filter(x => !oldC.has(x.appleId)).length; N.cards = cards; liveIds = live;
       N.contactsDone = true; N.freshContacts = fresh; res.fresh = fresh.length;
       // Neu in Mirella angelegte Kontakte auch im iPhone-Telefonbuch anlegen (nur ab dem Tag, an dem das Zurückschreiben eingeschaltet wurde)
       if (!N.twoWayFrom) N.twoWayFrom = today();
       if (twoWayOn()) for (const p of S.people) {
-        if (linked.has(p.id) || p.appleId || N.aid[p.id] || p.arch || p.death || !(p.first || p.last) || !p.created || p.created < N.twoWayFrom || N.cs[p.id]) continue;
+        if (linked.has(p.id) || p.appleId || N.aid[p.id] || p.local || p.arch || p.death || !(p.first || p.last) || !p.created || p.created < N.twoWayFrom || N.cs[p.id]) continue;
         writes.push({ p, neu: true, o: { given: p.first || "", family: p.last || "", birthday: p.bday || "", phone: p.tel || "", email: p.email || "" } });
       }
       nSave();
@@ -216,7 +221,6 @@
         if (links[b.key] && links[b.key] !== "x" && !p) { delete links[b.key]; changed = true; }
         if (!links[b.key]) {
           p = b.cid && S.people.find(x => x.appleId === b.cid) || null;
-          if (!p) { const c = bCandidates(b).filter(x => x.sure); if (c.length === 1) p = c[0].p; }
           if (p) { links[b.key] = p.id; changed = true; }
         }
         if (p && bApply(b, p)) { n++; changed = true; }
@@ -321,7 +325,7 @@
     }
     // Geburtstage aus dem Kalender, die noch keinem Kontakt zugeordnet sind
     const y0 = +from.slice(0, 4), y1 = +to.slice(0, 4), links = bLinks();
-    for (const b of N.bdays || []) { if (links[b.key] && links[b.key] !== "x") continue; for (let y = y0; y <= y1; y++) { const d = y + "-" + b.md; if (d >= from && d <= to) out.push({ d, c: "geb", k: "Geburtstag", t: b.title, act: "querv", id: "" }); } }
+    for (const b of N.bdays || []) { if (links[b.key] && links[b.key] !== "x") continue; for (let y = y0; y <= y1; y++) { const d = y + "-" + b.md; if (d >= from && d <= to) out.push({ d, c: "geb", k: "Geburtstag", t: b.title, act: "kopen", id: "" }); } }
     return out;
   });
   ACT.iosev = el => {
@@ -647,11 +651,289 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     S.people = S.people.filter(p => !(p.appleId && !p.rev && untouched(p) && ign.has(ckey(p))));
     if (S.people.length !== n0) save();
   }
-  /* Aufräumen steht in Einstellungen › Kontakte (Wunsch Felix), nicht auf „Heute“ oder über der Kontaktliste */
+
+  /* ---------- Kontakte neu: Karte für Karte (Konzept vom 11.11.2026) ----------
+     Jeder Eintrag im iPhone-Telefonbuch, der noch nicht in Mirella ist, ist eine Karte. Mirella führt nie still zusammen.
+     Je Karte: 1. zusammenführen? 2. Rein / Nicht in Mirella / Ganz löschen / Später. 3. gleich fertig pflegen. */
+  const MC = P.MirellaContacts;
+  let liveIds = new Set(), kCur = null, kStep = "karte", kPid = null, kQ = "", kFind = false;
+  const phoneLabel = x => { const s = ((x.type || "") + " " + (x.label || "")).toLowerCase(); return /work|arbeit|gesch/.test(s) ? "Geschäft" : /mobile|iphone|cell|handy/.test(s) ? "Handy" : /home|privat/.test(s) ? "Privat" : /main|festnetz/.test(s) ? "Festnetz" : ""; };
+  function cardOf(raw, c) {
+    const phones = raw.phones || [], main = phones.find(x => telKey(x.number) === telKey(c.tel));
+    const tels = []; for (const x of phones) { const k = telKey(x.number); if (!k || k === telKey(c.tel) || tels.some(t => telKey(t.n) === k)) continue; tels.push({ n: x.number, l: phoneLabel(x) }); }
+    return Object.assign({}, c, { telL: main ? phoneLabel(main) : "", tels, emails: (raw.emails || []).map(x => x.address).filter(Boolean), org: (raw.organization && raw.organization.company) || "" });
+  }
+  const liveAid = p => { const a = N.aid[p.id] || p.appleId; return a && liveIds.has(a) ? a : ""; };
+  const bPend = () => (N.bpend = N.bpend || {});
+  const kKey = c => c.b ? "b:" + c.key : "a:" + c.appleId;
+  const dropCard = aid => { N.cards = (N.cards || []).filter(c => c.appleId !== aid); };
+  function kQueue() {
+    const ign = new Set(S.settings.appleIgnored), links = bLinks(), have = new Set(S.people.map(p => N.aid[p.id] || p.appleId).filter(Boolean)), lt = N.later || {};
+    const a = (N.cards || []).filter(c => !isIgnored(c, ign) && !have.has(c.appleId));
+    const b = (N.bdays || []).filter(x => !links[x.key] && !bPend()[x.key] && !x.cid).map(x => ({ b: 1, key: x.key, title: x.title, md: x.md, year: x.year, tok: x.tok }));
+    const nm = x => x.b ? normName(x.title) : normName((x.last || "") + " " + (x.first || ""));
+    return a.concat(b).sort((x, y) => (lt[kKey(x)] || 0) - (lt[kKey(y)] || 0) || nm(x).localeCompare(nm(y)));
+  }
+  const nameToks = s => normName(s).split(" ").filter(w => w.length > 1);
+  const subset = (a, b) => a.length > 0 && a.every(t => b.includes(t));
+  /* kind: c = Karte aus dem Telefonbuch, p = Kontakt in Mirella, b = Geburtstag aus dem Kalender */
+  function ent(x, kind) {
+    if (kind === "b") return { kind, x, id: "b:" + x.key, key: "b:" + x.key, toks: x.tok || [], tels: [], mails: [], md: x.md, name: bName(x) };
+    const tels = [x.tel, ...(x.tels || []).map(t => t.n)].map(telKey).filter(Boolean), mails = [x.email, ...(x.emails || [])].filter(Boolean).map(m => m.toLowerCase());
+    return { kind, x, id: kind === "p" ? "p:" + x.id : "a:" + x.appleId, key: kind === "p" ? "p:" + x.id : "c:" + ckey(x), toks: nameToks([x.first, x.last, kind === "p" ? x.nick : ""].filter(Boolean).join(" ")), tels, mails, md: (x.bday || "").slice(5), name: fullName(x) };
+  }
+  function matchWhy(a, b) {
+    if (a.kind === "b" || b.kind === "b") {
+      const bb = a.kind === "b" ? a : b, o = a.kind === "b" ? b : a; if (o.kind === "b" || !bb.toks.length) return "";
+      const hit = bb.toks.filter(t => o.toks.some(x => tokHit(t, x))).length;
+      if (hit === bb.toks.length && (hit >= 2 || (bb.md && bb.md === o.md))) return "Im Geburtstags-Kalender steht derselbe Name";
+      if (hit >= 1 && bb.md && bb.md === o.md) return "Gleicher Geburtstag und ähnlicher Name";
+      return "";
+    }
+    if (a.tels.some(t => b.tels.includes(t))) return "Gleiche Nummer";
+    if (a.mails.some(m => b.mails.includes(m))) return "Gleiche E-Mail";
+    if (a.toks.length && a.toks.slice().sort().join(" ") === b.toks.slice().sort().join(" ")) return "Gleicher Name";
+    if (a.toks.length >= 2 && b.toks.length >= 2 && (subset(a.toks, b.toks) || subset(b.toks, a.toks))) return "Name fast gleich";
+    return "";
+  }
+  const nsKey = (a, b) => [a.key, b.key].sort().join("~");
+  function kCands(card) {
+    const me = ent(card, card.b ? "b" : "c"), ns = new Set(S.settings.notSame || []), out = [];
+    for (const p of S.people) { if (p.arch) continue; const e = ent(p, "p"), w = matchWhy(me, e); if (w && !ns.has(nsKey(me, e))) out.push({ e, w }); }
+    for (const c of kQueue()) { if (kKey(c) === kKey(card)) continue; const e = ent(c, c.b ? "b" : "c"), w = matchWhy(me, e); if (w && !ns.has(nsKey(me, e))) out.push({ e, w }); }
+    return out;
+  }
+  const kCard = () => { const q = kQueue(); return q.find(c => kKey(c) === kCur) || q[0] || null; };
+  function kEnt(id) {
+    if (id.startsWith("p:")) { const p = S.people.find(x => x.id === id.slice(2)); return p ? ent(p, "p") : null; }
+    const c = kQueue().find(x => kKey(x) === id); return c ? ent(c, c.b ? "b" : "c") : null;
+  }
+  const fmtB = b => !b ? "" : b.startsWith("1604") ? fmtMd(b.slice(5)) : longDate(b);
+  const extraLabel = (drop, keep) => { const kt = nameToks(fullName(keep)); const w = fullName(drop).split(/\s+/).filter(x => normName(x).length > 1 && !kt.includes(normName(x))); return w.join(" ") || drop.telL || ""; };
+  const entSub = e => e.kind === "b" ? "Geburtstag im Kalender am " + fmtMd(e.x.md) + (e.x.year ? e.x.year : "") : [e.kind === "p" ? "schon in Mirella" : "weiterer Eintrag im Telefonbuch", e.x.tel, ...(e.x.tels || []).map(t => t.n), e.x.email, e.x.bday ? "* " + fmtB(e.x.bday) : ""].filter(Boolean).join(" · ");
+
+  async function kMerge(c, o) {
+    if (c.b && o.kind === "b") return false;
+    if (c.b) {
+      if (o.kind === "p") { bLinks()[c.key] = o.x.id; bApply(c, o.x); toast("Der Geburtstag steht jetzt bei " + fullName(o.x)); kCur = null; }
+      else { bApply(c, o.x); bPend()[c.key] = o.x.appleId; kCur = "a:" + o.x.appleId; toast("Geburtstag übernommen"); }
+      return true;
+    }
+    if (o.kind === "b") { bApply(o.x, c); bPend()[o.x.key] = c.appleId; toast("Geburtstag übernommen. Der Kalender bleibt, wie er ist."); return true; }
+    if (o.kind === "p") {
+      const p = o.x, aid = liveAid(p);
+      if (aid && aid !== c.appleId) {
+        if (!ask(`„${fullName(c)}“ zu „${fullName(p)}“ dazufügen?\n\nIm iPhone-Telefonbuch bleibt ein Eintrag mit allen Nummern. Der zweite Eintrag wird dort gelöscht.`)) return false;
+        await MC.merge({ keep: aid, drop: c.appleId });
+      } else {
+        if (!ask(`„${fullName(c)}“ zu „${fullName(p)}“ dazufügen?`)) return false;
+        N.aid[p.id] = c.appleId; p.appleId = c.appleId; delete p.local;
+      }
+      mergeInto(p, c, extraLabel(c, p)); delete N.cs[p.id];
+      for (const [k, v] of Object.entries(bPend())) if (v === c.appleId) { bLinks()[k] = p.id; delete bPend()[k]; }
+      dropCard(c.appleId); kCur = null; toast("Dazugefügt zu " + fullName(p));
+      return true;
+    }
+    const other = o.x, keep = nameToks(fullName(other)).length < nameToks(fullName(c)).length ? other : c, drop = keep === c ? other : c;
+    if (!ask(`„${fullName(c)}“ und „${fullName(other)}“ zusammenführen?\n\nIm iPhone-Telefonbuch bleibt „${fullName(keep)}“ mit allen Nummern. Der zweite Eintrag wird dort gelöscht.`)) return false;
+    await MC.merge({ keep: keep.appleId, drop: drop.appleId });
+    const live = (N.cards || []).find(x => x.appleId === keep.appleId) || keep;
+    mergeInto(live, drop, extraLabel(drop, keep)); live.emails = [...new Set([...(live.emails || []), ...(drop.emails || [])])];
+    for (const [k, v] of Object.entries(bPend())) if (v === drop.appleId) bPend()[k] = keep.appleId;
+    dropCard(drop.appleId); kCur = "a:" + keep.appleId; toast("Zusammengeführt: " + fullName(live));
+    return true;
+  }
+  function kTake(c) {
+    let p;
+    if (c.b) { const nm = bName(c).split(" "); p = isNewPerson({ first: nm.shift() || c.title, last: nm.join(" "), tel: "", email: "", bday: (c.year || 1604) + "-" + c.md, addr: "", local: true }); bLinks()[c.key] = p.id; }
+    else {
+      p = isNewPerson({ appleId: c.appleId, first: c.first, last: c.last, tel: c.tel, telL: c.telL || "", tels: c.tels || [], email: c.email, bday: c.bday, addr: c.addr });
+      if ((c.notes || []).length) p.notes = c.notes;
+      N.aid[p.id] = c.appleId;
+      for (const [k, v] of Object.entries(bPend())) if (v === c.appleId) { bLinks()[k] = p.id; delete bPend()[k]; }
+      dropCard(c.appleId);
+    }
+    p.cyc = "nie"; p.rev = today(); S.people.push(p); return p;
+  }
+  const kAfter = () => { nSave(); save(); render(); const sc = $("#screen"); if (sc) sc.scrollTop = 0; };
+  ACT.kopen = () => { closeAll(); kStep = "karte"; kPid = null; kFind = false; kQ = ""; view = "kdurch"; render(); };
+  ACT.kback = () => { if (kStep === "pflege" && kPid) kSave(); view = "menschen"; render(); };
+  ACT.kfind = () => { kFind = !kFind; kQ = ""; render(); const i = $("#kq"); if (i) i.focus(); };
+  ACT.kmerge = async el => {
+    const c = kCard(), o = kEnt(el.dataset.k || ""); if (!c || !o) return;
+    try { if (await kMerge(c, o)) kFind = false; } catch (e) { alert("Das Zusammenführen ging nicht: " + (e && e.message || e)); }
+    kAfter();
+  };
+  ACT.knotsame = el => { const c = kCard(), o = kEnt(el.dataset.k || ""); if (!c || !o) return; (S.settings.notSame = S.settings.notSame || []).push(nsKey(ent(c, c.b ? "b" : "c"), o)); kAfter(); };
+  ACT.klater = () => { const c = kCard(); if (!c) return; (N.later = N.later || {})[kKey(c)] = Date.now(); kCur = null; kFind = false; kAfter(); toast("Kommt am Ende nochmal"); };
+  ACT.krein = () => { const c = kCard(); if (!c) return null; const p = kTake(c); kPid = p.id; kStep = "pflege"; kCur = null; kFind = false; kAfter(); return p; };
+  ACT.knicht = () => {
+    const c = kCard(); if (!c) return;
+    if (c.b) bLinks()[c.key] = "x";
+    else { S.settings.appleIgnored.push(c.appleId, ckey(c)); for (const [k, v] of Object.entries(bPend())) if (v === c.appleId) { bLinks()[k] = "x"; delete bPend()[k]; } dropCard(c.appleId); }
+    kCur = null; kAfter(); toast(c.b ? "Kommt nicht nach Mirella. Der Kalender bleibt." : "Bleibt im Telefonbuch, kommt nicht nach Mirella");
+  };
+  ACT.kdel = async () => {
+    const c = kCard(); if (!c || c.b) return;
+    if (!ask(`„${fullName(c)}“ ganz löschen?\n\nDer Eintrag verschwindet auch aus dem iPhone-Telefonbuch und über iCloud von deinen anderen Geräten.`)) return;
+    try { await MC.remove({ id: c.appleId }); } catch (e) { alert("Das Löschen ging nicht: " + (e && e.message || e)); return; }
+    for (const [k, v] of Object.entries(bPend())) if (v === c.appleId) delete bPend()[k];
+    dropCard(c.appleId); kCur = null; kAfter(); toast("Gelöscht, auch im Telefonbuch");
+  };
+  /* Pflege gleich nach „Rein“ */
+  function kSave() {
+    const p = S.people.find(x => x.id === kPid); if (!p || !$("#kp-first")) return "";
+    const bd = L.parseBday($("#kp-bday").value), dd = L.parseBday($("#kp-death").value);
+    if (bd === null) return "Geburtstag bitte als TT.MM.JJJJ, z. B. 07041964";
+    if (dd === null) return "Todestag bitte als TT.MM.JJJJ";
+    const first = $("#kp-first").value.trim(), last = $("#kp-last").value.trim(); if (!first && !last) return "Bitte einen Namen eintragen";
+    Object.assign(p, { first, last, bday: bd || "", death: dd || "", cyc: dd || !p.tel ? "nie" : $("#kp-cyc").value, lunch: dd ? "" : $("#kp-lunch").value, group: $("#kp-grp").value, gift: !dd && $("#kp-gift").checked });
+    const gi = $("#kp-gidea").value.trim(), no = $("#kp-note").value.trim();
+    if (gi) (p.gifts = p.gifts || []).push({ id: uid(), t: gi, d: today() });
+    if (no) (p.notes = p.notes || []).unshift({ id: uid(), t: no, d: today() });
+    nSave(); save(); return "";
+  }
+  function kPflege(p) {
+    const par = p.parent && S.people.find(x => x.id === p.parent), kids = kidsOf(p), sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    return `<div class="block"><h4>${esc(fullName(p))} ist drin</h4><p class="hint" style="margin:4px 0 0">Jetzt kurz pflegen, dann ist der Kontakt fertig und kommt nicht wieder als Karte.${p.local ? " Ohne Nummer, deshalb steht er nur in Mirella." : ""}</p></div>
+    <div class="fgrid"><div class="fld"><label for="kp-first">Vorname</label><input id="kp-first" value="${esc(p.first || "")}" autocomplete="off"></div><div class="fld"><label for="kp-last">Nachname</label><input id="kp-last" value="${esc(p.last || "")}" autocomplete="off"></div></div>
+    <div class="fgrid"><div class="fld"><label for="kp-cyc">Anrufen</label>${p.tel ? sel("kp-cyc", CYCLES.map(c => [c, cycLabel(c)]), noCycle(p.cyc) ? "nie" : p.cyc) : '<select id="kp-cyc" disabled><option value="nie">ohne Nummer nicht</option></select>'}</div><div class="fld"><label for="kp-lunch">Mittagessen</label>${sel("kp-lunch", [["", "nie"], ...Object.keys(LUNCH).map(c => [c, c])], p.lunch || "")}</div></div>
+    <div class="fgrid"><div class="fld"><label for="kp-bday">Geburtstag</label><input id="kp-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(p.bday || ""))}" autocomplete="off"></div><div class="fld"><label for="kp-death">Verstorben am</label><input id="kp-death" inputmode="numeric" maxlength="10" placeholder="nur falls zutreffend" value="${esc(L.bdayToInput(p.death || ""))}" autocomplete="off"></div></div>
+    <div class="fld"><label for="kp-grp">Gruppe</label>${sel("kp-grp", [["", "keine"], ...S.groups.map(g => [g, g])], p.group || "")}</div>
+    <label class="tgl big"><input type="checkbox" id="kp-gift"${p.gift ? " checked" : ""}><span><b>An ein Geschenk erinnern</b><small>${S.settings.giftLead} Tage vor dem Geburtstag</small></span></label>
+    <div class="block"><div class="bh"><h4>Familie</h4></div>
+    ${par ? `<div class="listrow"><span class="grow">Kind von ${esc(fullName(par))}</span><button class="rowdel" data-act="kparentoff" aria-label="Verweis entfernen">✕</button></div>` : ""}
+    ${kids.map(k => `<div class="listrow"><span class="grow">${esc(fullName(k))}<small>${k.bday ? "* " + esc(fmtB(k.bday)) : "Geburtstag fehlt noch"}</small></span></div>`).join("")}
+    <div class="row2" style="margin-top:8px"><button class="btn" data-act="kparent">${par ? "Anderes Elternteil" : "Ist Kind von …"}</button><button class="btn" data-act="kkid">+ Kind eintragen</button></div></div>
+    <div class="fld"><label for="kp-gidea">Geschenkidee</label><input id="kp-gidea" placeholder="z. B. Kochkurs" autocomplete="off"></div>
+    <div class="fld"><label for="kp-note">Notiz</label><textarea id="kp-note" rows="2" placeholder="Was du dir merken willst"></textarea></div>
+    <button class="btn pri" data-act="kdone" style="width:100%;margin-top:6px">Fertig, nächste Karte</button>
+    <p class="hint">Per Sprache: „Monatlich anrufen“, „Mittagessen vierteljährlich“, „Kind von Max“, „Fertig“.</p>`;
+  }
+  ACT.kdone = () => { const err = kSave(); if (err) { toast(err); return; } kStep = "karte"; kPid = null; kAfter(); };
+  ACT.kkid = () => { const err = kSave(); if (err) { toast(err); return; } kidForm(kPid); };
+  ACT.kparentoff = () => { const p = S.people.find(x => x.id === kPid); if (!p) return; kSave(); delete p.parent; save(); render(true); };
+  const kParentList = ql => S.people.filter(x => x.id !== kPid && !x.arch && (!ql || normName(fullName(x)).includes(ql))).sort((a, b) => fullName(a).localeCompare(fullName(b), "de")).slice(0, 40).map(x => `<button class="drow" data-act="kparentset" data-id="${x.id}"><span class="dt"><b>${esc(fullName(x))}</b></span><span class="chev">›</span></button>`).join("") || '<p class="hint">Niemand gefunden. Das Elternteil muss schon in Mirella sein.</p>';
+  ACT.kparent = () => { const err = kSave(); if (err) { toast(err); return; } openSheet(`<p class="stitle">Kind von wem?</p><input class="search" id="kpq" type="search" placeholder="Name suchen" autocomplete="off"><div id="kpl">${kParentList("")}</div>`, () => $("#kpq").focus()); };
+  ACT.kparentset = el => { const p = S.people.find(x => x.id === kPid); if (!p) return; p.parent = el.dataset.id; if (!p.tel) p.local = true; save(); closeSheet(); render(true); };
+  document.addEventListener("input", e => {
+    const t = e.target; if (!t) return;
+    if (t.id === "kpq") { const l = $("#kpl"); if (l) l.innerHTML = kParentList(normName(t.value)); }
+    if (t.id === "kq") { kQ = t.value; const pos = t.selectionStart; render(true); const i = $("#kq"); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (_) { } } }
+  });
+  function kCardHTML(c) {
+    const rows = c.b ? [["Geburtstag", fmtMd(c.md) + (c.year || "")], ["Woher", "Nur im Geburtstags-Kalender, kein Eintrag im Telefonbuch"]]
+      : [c.org ? ["Firma", c.org] : null, c.tel ? [c.telL || "Nummer", c.tel] : null, ...(c.tels || []).map(t => [t.l || "Nummer", t.n]), ...[...new Set([c.email, ...(c.emails || [])].filter(Boolean))].map(m => ["E-Mail", m]), c.bday ? ["Geburtstag", fmtB(c.bday)] : null, c.addr ? ["Adresse", c.addr] : null].filter(Boolean);
+    return `<div class="block kcard"><h3>${esc(c.b ? bName(c) : fullName(c))}</h3>${rows.length ? rows.map(([l, v]) => `<div class="krow"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") : '<p class="hint" style="margin:0">Ohne Nummer, E-Mail und Geburtstag</p>'}</div>`;
+  }
+  R.kdurch = function () {
+    const q = kQueue(), head = `<div class="top"><button class="tleft tsetbtn" data-act="kback" aria-label="Zurück"><p class="big">‹ Kontakte</p></button><span class="tright"><span class="label">${q.length} offen</span></span></div>`;
+    if (kStep === "pflege") { const p = S.people.find(x => x.id === kPid); if (p) return head + kPflege(p); kStep = "karte"; }
+    const c = kCard();
+    if (!c) return head + `<div class="block"><h4>Alles durchgegangen</h4><p class="hint" style="margin:4px 0 0">Es wartet keine Karte mehr. Neue Einträge im Telefonbuch meldet Mirella oben im Reiter Kontakte.</p></div><button class="btn pri" data-act="kback" style="width:100%">Zu den Kontakten</button>`;
+    kCur = kKey(c);
+    const cands = kCands(c), cand = cands[0];
+    let body;
+    if (kFind) {
+      const ql = normName(kQ), me = kKey(c);
+      const all = S.people.filter(p => !p.arch).map(p => ent(p, "p")).concat(q.filter(x => kKey(x) !== me && !(c.b && x.b)).map(x => ent(x, x.b ? "b" : "c")));
+      const hits = ql ? all.filter(e => normName(e.name).includes(ql)).slice(0, 30) : [];
+      body = `<div class="block"><h4>Zu welchem Kontakt gehört das?</h4><input class="search" id="kq" type="search" placeholder="Name tippen" value="${esc(kQ)}" autocomplete="off" style="margin-top:8px">${hits.map(e => `<button class="drow" data-act="kmerge" data-k="${esc(e.id)}"><span class="dt"><b>${esc(e.name)}</b><small>${esc(entSub(e))}</small></span><span class="chev">›</span></button>`).join("") || `<p class="hint">${ql ? "Niemand gefunden." : "Tippe den Namen. Es geht mit Kontakten in Mirella und mit anderen Karten."}</p>`}<button class="btn" data-act="kfind" style="width:100%;margin-top:8px">Abbrechen</button></div>`;
+    } else if (cand) {
+      body = `<div class="block kq"><h4>Gehört das zusammen?</h4><p class="hint" style="margin:4px 0 8px">${esc(cand.w)}${cands.length > 1 ? ". Danach frage ich noch nach " + (cands.length - 1) + (cands.length === 2 ? " weiteren Treffer" : " weiteren Treffern") : ""}.</p>
+      <div class="listrow"><span class="grow"><b>${esc(cand.e.name)}</b><small>${esc(entSub(cand.e))}</small></span></div>
+      <div style="display:grid;gap:8px;margin-top:10px"><button class="btn pri" data-act="kmerge" data-k="${esc(cand.e.id)}">Zusammenführen</button><button class="btn" data-act="knotsame" data-k="${esc(cand.e.id)}">Gehört nicht zusammen</button><button class="btn" data-act="klater">Später nochmal fragen</button></div></div>
+      <button class="btn" data-act="kfind" style="width:100%">Zu einem anderen Kontakt dazufügen</button>`;
+    } else {
+      body = `<div style="display:grid;gap:8px"><button class="btn pri" data-act="krein">Rein in Mirella</button><button class="btn" data-act="knicht">Nicht in Mirella</button>${c.b ? "" : '<button class="btn danger" data-act="kdel">Ganz löschen (auch im Telefonbuch)</button>'}<button class="btn" data-act="klater">Später</button><button class="btn" data-act="kfind">Zu einem Kontakt dazufügen</button></div>
+      <p class="hint">${c.b ? "„Nicht in Mirella“ lässt den Kalender, wie er ist." : "„Nicht in Mirella“ lässt den Eintrag im Telefonbuch und fragt nie wieder."} Per Sprache: Mikrofon antippen und zum Beispiel „Nimm ihn rein“ sagen.</p>`;
+    }
+    return head + kCardHTML(c) + body;
+  };
+  /* Sprache im Durchgang: „Nimm ihn rein“, „Ja, zusammen“, „Monatlich anrufen“, „Kind von Max“, „Fertig“ */
+  const RHY = [["alle 2 wochen", /alle (2|zwei) wochen|vierzehn/], ["wöchentlich", /wöchentlich|jede woche/], ["alle 2 monate", /alle (2|zwei) monate/], ["vierteljährlich", /viertelj|alle (3|drei) monate|quartal/], ["halbjährlich", /halbj|alle (6|sechs) monate/], ["monatlich", /monatlich|jeden monat/], ["jährlich", /jährlich|jedes jahr|einmal im jahr/], ["nie", /\bnie\b|gar nicht/]];
+  function kVoice(txt) {
+    const t = txt.toLowerCase(), rh = (RHY.find(([, re]) => re.test(t)) || [])[0];
+    const kidOf = /kind von ([\wäöüß .-]+)/i.exec(txt);
+    const setParent = p => { if (!kidOf || !p) return; const ql = normName(kidOf[1]); const par = S.people.find(x => x.id !== p.id && normName(fullName(x)) === ql) || S.people.find(x => x.id !== p.id && normName(fullName(x)).includes(ql)) || S.people.find(x => x.id !== p.id && nameToks(fullName(x)).some(w => ql.split(" ").includes(w))); if (par) { p.parent = par.id; if (!p.tel) p.local = true; toast("Kind von " + fullName(par)); } else toast("„" + kidOf[1].trim() + "“ habe ich in Mirella nicht gefunden"); };
+    if (kStep === "pflege") {
+      const p = S.people.find(x => x.id === kPid); if (!p) return false;
+      const err = kSave(); if (err) { toast(err); return true; }
+      let did = false;
+      if (kidOf) { setParent(p); did = true; }
+      if (rh && /mittag|essen|lunch/.test(t)) { const lk = rh === "nie" ? "" : Object.keys(LUNCH).find(x => x.toLowerCase() === rh); if (lk !== undefined) { p.lunch = lk; did = true; } }
+      else if (rh && p.tel) { const ck = CYCLES.find(x => x.toLowerCase() === rh); if (ck) { p.cyc = ck; did = true; } }
+      const no = /^(notiz|merke?)[:,]?\s+(.+)/i.exec(txt), gi = /^(geschenk(idee)?)[:,]?\s+(.+)/i.exec(txt);
+      if (no) { (p.notes = p.notes || []).unshift({ id: uid(), t: no[2], d: today() }); did = true; }
+      if (gi) { (p.gifts = p.gifts || []).push({ id: uid(), t: gi[3], d: today() }); did = true; }
+      save();
+      if (/\b(fertig|weiter|nächste[rn]?)\b/.test(t)) { kStep = "karte"; kPid = null; kAfter(); return true; }
+      if (!did) { toast("Das habe ich hier nicht verstanden"); return true; }
+      render(true); return true;
+    }
+    const c = kCard(); if (!c) return false;
+    const cand = kFind ? null : kCands(c)[0];
+    if (/nicht zusammen|gehört nicht/.test(t) && cand) { ACT.knotsame({ dataset: { k: cand.e.id } }); return true; }
+    if (/zusammen/.test(t) && cand) { ACT.kmerge({ dataset: { k: cand.e.id } }); return true; }
+    if (/später|nachher|überspring/.test(t)) { ACT.klater(); return true; }
+    if (cand) { if (/^(ja|genau|richtig|stimmt)\b/.test(t)) { ACT.kmerge({ dataset: { k: cand.e.id } }); return true; } if (/^(nein|nee|falsch)\b/.test(t)) { ACT.knotsame({ dataset: { k: cand.e.id } }); return true; } toast("Erst bitte sagen, ob das zusammengehört"); return true; }
+    if (/nicht (in mirella|rein|aufnehmen|nehmen)|\braus\b|\bnein\b/.test(t)) { ACT.knicht(); return true; }
+    if (/lösch|\bweg damit\b/.test(t)) { ACT.kdel(); return true; }
+    if (/\brein\b|nimm|aufnehmen|\bja\b|behalten/.test(t)) { const p = ACT.krein(); if (p && kidOf) { setParent(p); save(); render(true); } return true; }
+    toast("Sag zum Beispiel „Nimm ihn rein“, „Nicht in Mirella“, „Löschen“ oder „Später“"); return true;
+  }
+  const kOrigReview = voiceReview;
+  voiceReview = function () {
+    const txt = (($("#v-text") || {}).value || "").trim();
+    if (view === "kdurch" && txt) { recStop(); closeSheet(); if (kVoice(txt)) return; }
+    return kOrigReview.apply(this, arguments);
+  };
+  /* Telefonbuch sichern und neu anfangen */
+  ACT.kbackup = async () => { if (!MC || !MC.backup) { toast("Dafür braucht es die neue iPhone-Version"); return; } try { const r = await MC.backup({ share: true }); N.kBackup = { at: Date.now(), n: r.count, file: r.file }; nSave(); render(true); toast(r.count + " Kontakte gesichert"); } catch (e) { alert("Die Sicherung ging nicht: " + (e && e.message || e)); } };
+  ACT.kneu = async () => {
+    if (!MC || !MC.backup) { toast("Dafür braucht es die neue iPhone-Version"); return; }
+    if (!ask(`Kontakte neu aufsetzen?\n\n1. Mirella sichert zuerst dein ganzes iPhone-Telefonbuch als Datei.\n2. Danach fragt sie noch einmal, bevor die ${S.people.length} Kontakte in Mirella wegkommen.\n3. Dein Telefonbuch bleibt dabei, wie es ist.`)) return;
+    let r; try { r = await MC.backup({ share: true }); } catch (e) { alert("Die Sicherung ging nicht, deshalb bleibt alles, wie es ist.\n" + (e && e.message || e)); return; }
+    N.kBackup = { at: Date.now(), n: r.count, file: r.file }; nSave();
+    openSheet(`<p class="stitle">Sicherung ist gemacht</p><p class="hint" style="margin-top:0">${r.count} Kontakte gesichert als „${esc(r.file)}“. Die Datei liegt in der Dateien-App unter „Auf meinem iPhone › Mirella › Sicherung“. Über das Teilen-Menü kannst du sie zusätzlich in deine Ablage legen.</p><p class="hint"><b>Jetzt alle ${S.people.length} Kontakte in Mirella entfernen?</b> Notizen, Anrufe und Geschenkideen gehen mit. Im Telefonbuch wird dabei nichts gelöscht. Danach gehst du jeden Eintrag als Karte durch.</p><div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn danger" data-act="kneugo">Ja, alles neu</button></div>`);
+  };
+  ACT.kneugo = async () => {
+    S.goneP = (S.goneP || []).concat(S.people.map(p => p.id)); S.people = [];
+    S.todos.forEach(t => { if (t.pid) delete t.pid; });
+    S.settings.appleIgnored = []; S.settings.bdayLinks = {}; S.settings.notSame = [];
+    N.aid = {}; N.cs = {}; N.cards = []; N.later = {}; N.bpend = {}; N.kNeu = today(); N.twoWayFrom = today(); N.grpNo = [];
+    nSave(); save(); closeSheet(); toast("Lese das Telefonbuch …");
+    await contactsSync(false); await calendarBirthdays();
+    kCur = null; kStep = "karte"; kPid = null; view = "kdurch"; render();
+  };
+  HOOKS.menschenTop.push(() => { const n = kQueue().length; return n ? `<div class="card due" role="button" tabindex="0" data-act="kopen"><span class="av">👤</span><span style="min-width:0"><div class="t">${n === 1 ? "1 neuer Kontakt zu prüfen" : n + " Kontakte zu prüfen"}</div><div class="s">Antippen und Karte für Karte durchgehen</div></span><span class="chev">›</span></div>` : ""; });
+  /* Löschen und Zusammenführen bei fertigen Kontakten wirkt auf Wunsch auch im Telefonbuch */
+  const kOrigDel = ACT.delperson;
+  ACT.delperson = async el => {
+    const p = S.people.find(x => x.id === el.dataset.id), aid = p && liveAid(p);
+    if (!aid || !MC || !MC.remove) return kOrigDel(el);
+    if (!ask(fullName(p) + " wirklich löschen? Notizen und Anrufverlauf gehen mit.")) return;
+    const both = ask("Auch aus dem iPhone-Telefonbuch löschen?\n\nOK: in Mirella und im Telefonbuch weg.\nAbbrechen: nur aus Mirella entfernen, im Telefonbuch bleibt der Kontakt.");
+    if (both) { try { await MC.remove({ id: aid }); } catch (e) { alert("Das Löschen im Telefonbuch ging nicht: " + (e && e.message || e)); return; } } else S.settings.appleIgnored.push(aid, ckey(p));
+    dropPerson(p); draftClear(); save(); closeSheet(); view = "menschen"; render(); toast(both ? "In Mirella und im Telefonbuch gelöscht" : "Aus Mirella entfernt, bleibt im Telefonbuch");
+  };
+  const kOrigDD = ACT.dodupmerge;
+  ACT.dodupmerge = async el => {
+    const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b), ia = a && liveAid(a), ib = b && liveAid(b);
+    if (!ia || !ib || ia === ib || !MC || !MC.merge) return kOrigDD(el);
+    if (!ask(`${fullName(b)} in ${fullName(a)} zusammenführen?\n\nAuch im iPhone-Telefonbuch bleibt dann nur ein Eintrag mit allen Nummern. Der zweite wird gelöscht.`)) return;
+    try { await MC.merge({ keep: ia, drop: ib }); } catch (e) { alert("Das Zusammenführen im Telefonbuch ging nicht: " + (e && e.message || e)); return; }
+    mergeInto(a, b); dropPerson(b); delete N.cs[a.id]; nSave(); save(); toast("Zusammengeführt: " + fullName(a)); ACT.dupscan();
+  };
+
+  /* Einstellungen › Kontakte: Durchgang, Sicherung, Neustart */
   const origSetK = SETS.kontakte;
   SETS.kontakte = function () {
-    const n = pending().length, nj = junkList().length;
-    return `<button class="btn${n ? " pri" : ""}" data-act="aufraeumen" data-from="set" style="width:100%;margin-bottom:8px">Kontakte aufräumen (${n} offen${nj ? ", " + nj + " vorsortiert" : ""})</button>` + origSetK.call(this);
+    const n = kQueue().length;
+    return `<button class="btn${n ? " pri" : ""}" data-act="kopen" style="width:100%;margin-bottom:8px">Kontakte durchgehen (${n} offen)</button>
+    <button class="btn" data-act="kbackup" style="width:100%;margin-bottom:8px">Telefonbuch als Datei sichern</button>${N.kBackup ? `<p class="hint" style="margin-top:0">Letzte Sicherung: ${esc(new Date(N.kBackup.at).toLocaleString("de-DE"))}, ${N.kBackup.n} Kontakte, „${esc(N.kBackup.file)}“.</p>` : ""}
+    <button class="btn danger" data-act="kneu" style="width:100%;margin-bottom:8px">Kontakte neu aufsetzen (alles leeren)</button>
+    <p class="hint" style="margin-top:0">Neu aufsetzen sichert erst das Telefonbuch, leert dann die Kontakte in Mirella und zeigt jeden Eintrag einzeln als Karte. Im Telefonbuch wird dabei nichts gelöscht.</p>` + origSetK.call(this).replace('<button class="btn" data-act="dupscan" style="width:100%;margin-bottom:8px">Doppelte Kontakte suchen</button>', "");
   };
 
   /* ---------- Querverweise: Geburtstags-Kalender ↔ Kontakte ---------- */
@@ -694,8 +976,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   SETNAMES.iphone = "iPhone";
   SETS.iphone = () => `<p class="hint" style="margin-top:0">Kontakte und Geburtstage gleicht Mirella stündlich mit deinem iPhone ab. Neue iPhone-Kontakte landen unter Einstellungen › Kontakte › Kontakte aufräumen. Wie oft Mirella nervt, stellst du unter Nerv-Modus ein.</p>
     <div class="row2" style="margin-top:8px"><button class="btn" data-act="nkontakte">Jetzt abgleichen</button><button class="btn" data-act="nfreigaben">Freigaben prüfen</button></div>
-    <button class="btn" data-act="aufraeumen" style="width:100%;margin-top:8px">Kontakte aufräumen (${pending().length} offen)</button>
-    <button class="btn" data-act="querv" style="width:100%;margin-top:8px">Geburtstags-Kalender zuordnen (${bOpen().length} offen)</button>
+    <button class="btn" data-act="kopen" style="width:100%;margin-top:8px">Kontakte durchgehen (${kQueue().length} offen)</button>
     ${S.settings.appleIgnored.length ? `<button class="btn" data-act="nunignore" style="width:100%;margin-top:8px">Aussortierte wieder vorschlagen (${S.settings.appleIgnored.length})</button>` : ""}
     ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${alarmDiag()}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}${N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nweckertest" style="width:100%;margin-top:8px">Wecker jetzt testen (klingelt in 1 bis 2 Minuten)</button>'}` : ""}
     <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>
@@ -710,7 +991,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     const row = `<button class="drow" data-act="setsec" data-k="iphone">${IC.bell || ""}<span class="dt"><b>iPhone</b><small>Kontakte, Kalender, Freigaben</small></span><span class="chev">›</span></button>`;
     const i = h.indexOf('<div class="sethead2">Mirella</div>'); return i < 0 ? h + row : h.slice(0, i + '<div class="sethead2">Mirella</div>'.length) + row + h.slice(i + '<div class="sethead2">Mirella</div>'.length);
   };
-  ACT.nkontakte = async () => { toast("Gleiche ab …"); const r = await contactsSync(false); const b = await calendarBirthdays(); const ev = await calendarEvents(); render(true); toast(`${r.fresh} neue Kontakte, ${b} Geburtstage ergänzt, ${ev} Termine geladen`); };
+  ACT.nkontakte = async () => { toast("Gleiche ab …"); const r = await contactsSync(false); const b = await calendarBirthdays(); const ev = await calendarEvents(); render(true); toast(`${kQueue().length === 1 ? "1 Karte" : kQueue().length + " Karten"} offen, ${b} Geburtstage ergänzt, ${ev} Termine geladen`); };
   ACT.nunignore = () => { if (!ask("Alle aussortierten Kontakte wieder als Vorschlag auf „Heute“ zeigen?")) return; S.settings.appleIgnored = []; N.lastContacts = 0; nSave(); save(); tick(); toast("Sie erscheinen gleich wieder als Vorschlag"); };
   ACT.nfreigaben = () => { N.setup = false; nSave(); wizard(); };
 

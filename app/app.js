@@ -83,7 +83,7 @@ const AREAS = [
 ];
 const areaById = id => AREAS.find(a => a.id === id);
 /* Andere Teile (bereiche.js, wecker.js …) hängen sich hier ein */
-const HOOKS = { heute: [], heuteTop: [], events: [], start: [], search: [] };
+const HOOKS = { heute: [], heuteTop: [], events: [], start: [], search: [], menschenTop: [] };
 
 function blank() {
   return {
@@ -97,7 +97,7 @@ function blank() {
       homeAddr: "", homeLat: null, homeLon: null, prepMin: 30, bufMin: 10, alarmCount: 3, alarmGap: 5, gmapsKey: ""
     },
     briefings: [],
-    people: [], todos: [], expenses: [], goals: [], sick: null, docs: [], notes: [], items: [], alarms: [], shopTpl: [], shopFreq: {}, shopUnits: {}, folders: [], groups: BASEGROUPS.slice()
+    people: [], todos: [], expenses: [], goals: [], sick: null, docs: [], notes: [], items: [], alarms: [], shopTpl: [], shopFreq: {}, shopUnits: {}, folders: [], groups: BASEGROUPS.slice(), goneP: []
   };
 }
 let S;
@@ -220,9 +220,20 @@ function kinSoon(maxDays) {
   for (const p of S.people) { if (p.arch) continue; for (const k of p.kin || []) { const b = nextBirthday({ bday: k.bday, death: k.death }); if (b && diffDays(t, b) <= maxDays) out.push({ p, k, b }); } }
   return out.sort((a, b) => a.b < b.b ? -1 : 1);
 }
+/* Kinder als eigene Kontakte (nur in Mirella, ohne Nummer): kind.parent = id des Elternteils */
+const kidsOf = p => S.people.filter(x => x.parent === p.id && !x.arch);
+/* Kontakt entfernen und merken, damit er über den Abgleich von einem anderen Gerät nicht zurückkommt */
+function dropPerson(p) { S.people = S.people.filter(x => x !== p); (S.goneP = S.goneP || []).push(p.id); S.people.forEach(x => { if (x.parent === p.id) delete x.parent; }); }
+function kidForm(parentId) {
+  const p = S.people.find(x => x.id === parentId); if (!p) return;
+  openSheet(`<p class="stitle">Kind von ${esc(fullName(p))}</p><p class="hint" style="margin-top:0">Bekommt einen eigenen Kontakt in Mirella, ohne Nummer. Im iPhone-Telefonbuch steht das Kind nicht.</p>
+  <div class="fgrid"><div class="fld"><label for="kd-first">Vorname</label><input id="kd-first" placeholder="z. B. Lena" autocomplete="off"></div><div class="fld"><label for="kd-last">Nachname</label><input id="kd-last" value="${esc(p.last || "")}" autocomplete="off"></div></div>
+  <div class="fld"><label for="kd-bday">Geburtstag</label><input id="kd-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" autocomplete="off"></div>
+  <div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="kidsave" data-id="${p.id}">Speichern</button></div>`, () => $("#kd-first").focus());
+}
 function kinBlock(p) {
-  const ks = p.kin || [];
-  return `<div class="block"><div class="bh"><h4>Familie</h4><button class="mini" data-act="kinedit" data-id="">+ Kind oder Angehörigen</button></div>${ks.length ? ks.map(k => { const nb = nextBirthday({ bday: k.bday, death: k.death }), age = nb && ageAt(k, nb); return `<div class="listrow"><span class="grow" role="button" tabindex="0" data-act="kinedit" data-id="${k.id}" style="cursor:pointer">${esc(k.name)}${k.rel ? " · " + esc(k.rel) : ""}<small>${k.bday ? "* " + esc(longDate(k.bday)) + (age ? " · wird " + age : "") : "Geburtstag fehlt noch"}${k.death ? " · † " + esc(longDate(k.death)) : ""}</small></span></div>`; }).join("") : '<p class="swipehint" style="text-align:left;margin:0">Kinder oder Partner mit Geburtstag, ohne eigenen Kontakt. Mirella erinnert trotzdem.</p>'}</div>`;
+  const ks = p.kin || [], kids = kidsOf(p), par = p.parent && S.people.find(x => x.id === p.parent);
+  return `${par ? `<div class="block"><div class="listrow"><span class="grow" role="button" tabindex="0" data-act="person" data-id="${par.id}" style="cursor:pointer">Kind von ${esc(fullName(par))}<small>antippen für die Akte</small></span><span class="chev">›</span></div></div>` : ""}<div class="block"><div class="bh"><h4>Kinder</h4><button class="mini" data-act="kidnew" data-id="${p.id}">+ Kind</button></div>${kids.length ? kids.map(k => { const nb = nextBirthday(k), age = nb && ageAt(k, nb); return `<div class="listrow"><span class="grow" role="button" tabindex="0" data-act="person" data-id="${k.id}" style="cursor:pointer">${esc(fullName(k))}<small>${k.bday ? "* " + esc(longDate(k.bday)) + (age ? " · wird " + age : "") : "Geburtstag fehlt noch"}</small></span><span class="chev">›</span></div>`; }).join("") : '<p class="swipehint" style="text-align:left;margin:0">Kinder bekommen einen eigenen Kontakt mit Geburtstag, Geschenkideen und Notizen.</p>'}</div>${ks.length ? `<div class="block"><div class="bh"><h4>Familie</h4><button class="mini" data-act="kinedit" data-id="">+ Kind oder Angehörigen</button></div>${ks.length ? ks.map(k => { const nb = nextBirthday({ bday: k.bday, death: k.death }), age = nb && ageAt(k, nb); return `<div class="listrow"><span class="grow" role="button" tabindex="0" data-act="kinedit" data-id="${k.id}" style="cursor:pointer">${esc(k.name)}${k.rel ? " · " + esc(k.rel) : ""}<small>${k.bday ? "* " + esc(longDate(k.bday)) + (age ? " · wird " + age : "") : "Geburtstag fehlt noch"}${k.death ? " · † " + esc(longDate(k.death)) : ""}</small></span></div>`; }).join("") : '<p class="swipehint" style="text-align:left;margin:0">Kinder oder Partner mit Geburtstag, ohne eigenen Kontakt. Mirella erinnert trotzdem.</p>'}</div>` : ""}`;
 }
 function kinForm(id) {
   const p = S.people.find(x => x.id === cur); if (!p) return; const k = (p.kin || []).find(x => x.id === id) || { name: "", rel: "Kind", bday: "", death: "" };
@@ -401,7 +412,7 @@ const R = {
     let body = "", have = new Set();
     if (az) { let cur0 = ""; for (const p of list) { const l = letter(p); if (l !== cur0) { cur0 = l; have.add(l); body += `<div class="sec" id="az-${l === "#" ? "x" : l}"><span class="label">${l}</span></div>`; } body += personCard(p, false); } }
     else body = list.map(p => personCard(p, false)).join("");
-    return `${topbar("Kontakte")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Gruppe oder Nummer" aria-label="Suchen" value="${esc(q)}">
+    return `${topbar("Kontakte")}${HOOKS.menschenTop.map(f => f()).join("")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Gruppe oder Nummer" aria-label="Suchen" value="${esc(q)}">
     ${grps.length ? `<div class="chips"><button class="chip2" data-act="grpf" data-g="" aria-pressed="${!grpFilter}">Alle</button>${grps.map(g => `<button class="chip2" data-act="grpf" data-g="${esc(g)}" aria-pressed="${grpFilter === g}">${esc(g)}</button>`).join("")}</div>` : ""}
     <div class="seg" style="margin-bottom:8px"><button data-act="psort" data-m="az" aria-pressed="${az}">A bis Z</button><button data-act="psort" data-m="dran" aria-pressed="${!az}">Wer ist dran</button></div>
     ${az ? "" : `<div class="sec"><span class="label">Wer zuerst dran ist</span><span class="label">${list.length}</span></div>`}
@@ -1568,7 +1579,7 @@ const ACT = {
   dupmerge: el => {
     const t = S.people.find(x => x.id === el.dataset.id), selfId = el.dataset.self;
     const data = readPersonForm(); delete data.bdayBad; delete data.deathBad;
-    if (selfId) { const me = S.people.find(x => x.id === selfId); Object.assign(me, data); mergeInto(t, me); S.people = S.people.filter(x => x !== me); } else mergeInto(t, data);
+    if (selfId) { const me = S.people.find(x => x.id === selfId); Object.assign(me, data); mergeInto(t, me); dropPerson(me); } else mergeInto(t, data);
     draftClear(); save(); closeSheet(); cur = t.id; view = "akte"; render(); toast("Zusammengeführt: " + fullName(t));
   },
   dupscan: () => {
@@ -1576,7 +1587,7 @@ const ACT = {
     for (const p of S.people) { if (seen.has(p.id)) continue; for (const d of findDups(p, p.id)) { if (seen.has(d.id)) continue; pairs.push([p, d]); } seen.add(p.id); }
     openSheet(`<p class="stitle">Doppelte Kontakte</p>${pairs.length ? pairs.map(([a, b]) => `<div class="pitem"><div><b>${esc(fullName(a))}</b>${a.tel ? " · " + esc(a.tel) : ""}</div><div><b>${esc(fullName(b))}</b>${b.tel ? " · " + esc(b.tel) : ""}</div><div class="row2" style="margin-top:8px"><button class="btn pri" data-act="dodupmerge" data-a="${a.id}" data-b="${b.id}">Zusammenführen</button></div></div>`).join("") : empty("Keine doppelten Kontakte gefunden.")}<div class="row2"><button class="btn" data-close="sheet">Schließen</button></div>`);
   },
-  dodupmerge: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b || !ask(`${fullName(b)} in ${fullName(a)} zusammenführen? Der zweite Eintrag wird dabei gelöscht.`)) return; mergeInto(a, b); S.people = S.people.filter(x => x !== b); save(); toast("Zusammengeführt: " + fullName(a)); ACT.dupscan(); },
+  dodupmerge: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b || !ask(`${fullName(b)} in ${fullName(a)} zusammenführen? Der zweite Eintrag wird dabei gelöscht.`)) return; mergeInto(a, b); dropPerson(b); save(); toast("Zusammengeführt: " + fullName(a)); ACT.dupscan(); },
   go: el => { closeAll(); setFrom = null; if (shopMode) { shopMode = false; wakeLock(false); } view = el.dataset.v; if (view === "einstellungen") setSec = el.dataset.k || ""; render(); },
   drawer: () => openDrawer(),
   photo: el => photoStart(el.dataset.kind, el.dataset.area || (view === "bereich" ? area : null)),
@@ -1654,7 +1665,7 @@ const ACT = {
   },
   kindel: el => { const p = S.people.find(x => x.id === cur), k = p && (p.kin || []).find(x => x.id === el.dataset.id); if (!k || !ask(`${k.name} aus der Familie von ${fullName(p)} löschen?`)) return; p.kin = p.kin.filter(x => x !== k); save(); closeSheet(); render(true); },
   psort: el => { S.settings.peopleSort = el.dataset.m; save(); render(); },
-  delperson: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!ask(fullName(p) + " wirklich löschen? Notizen und Anrufverlauf gehen mit.")) return; S.people = S.people.filter(x => x !== p); draftClear(); save(); closeSheet(); view = "menschen"; render(); toast("Gelöscht"); },
+  delperson: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!ask(fullName(p) + " wirklich löschen? Notizen und Anrufverlauf gehen mit.")) return; dropPerson(p); draftClear(); save(); closeSheet(); view = "menschen"; render(); toast("Gelöscht"); },
   askdone: el => { const p = S.people.find(x => x.id === cur), a = p.ask.find(x => x.id === el.dataset.id); a.done = !a.done; save(); render(true); },
   delakte: el => { const p = S.people.find(x => x.id === cur), it = p[el.dataset.k].find(x => x.id === el.dataset.id); if (!it || !ask(`„${it.t}“ löschen?`)) return; p[el.dataset.k] = p[el.dataset.k].filter(x => x !== it); save(); render(true); },
   toggle: el => toggleTodo(el.dataset.id),
@@ -1677,6 +1688,13 @@ const ACT = {
   deldoc: async el => { const d = S.docs.find(x => x.id === el.dataset.id); if (!ask(`„${d.name}“ löschen? Das Foto wird mit gelöscht.`)) return; if (d.photo) await photoDel(d.photo); S.docs = S.docs.filter(x => x !== d); save(); render(true); },
   delnote: el => { const n = S.notes.find(x => x.id === el.dataset.id); if (!n || !ask(`Notiz „${n.t}“ löschen?`)) return; S.notes = S.notes.filter(x => x !== n); save(); render(true); },
   vagain: () => recStart(),
+  kidnew: el => kidForm(el.dataset.id),
+  kidsave: el => {
+    const par = S.people.find(x => x.id === el.dataset.id), first = $("#kd-first").value.trim(), bd = L.parseBday($("#kd-bday").value); if (!par || !first) { toast("Bitte den Vornamen eintragen"); return; }
+    if (bd === null) { toast("Geburtstag bitte als TT.MM.JJJJ"); return; }
+    S.people.push({ id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [], cyc: "nie", group: par.group || "", gift: true, addr: "", first, last: $("#kd-last").value.trim(), tel: "", email: "", bday: bd || "", parent: par.id, local: true, rev: today() });
+    save(); closeSheet(); render(true); toast(first + " ist als Kind von " + (par.first || fullName(par)) + " eingetragen");
+  },
   lunchset: el => {
     const p = S.people.find(x => x.id === el.dataset.id); if (!p) return;
     let d = addDays(today(), 7); while ([0, 6].includes(D(d).getDay())) d = addDays(d, 1);

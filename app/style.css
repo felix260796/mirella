@@ -634,3 +634,10 @@ button.tgl.on{background:#2e9e5b}button.tgl.on i{left:23px}
 /* Routen-Symbol neben Adressen */
 a.mini.route{display:inline-flex;align-items:center;gap:6px;text-decoration:none;flex:none}
 .todo a.mini.route{align-self:center;margin-right:6px;padding:8px}
+
+/* Kontakte Karte für Karte */
+.kcard{border:1.5px solid var(--ink);padding:16px}
+.kcard h3{margin:0 0 8px;font-size:22px;line-height:1.2}
+.krow{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line);font-size:15px}
+.krow span{color:var(--ink-2);flex:none}.krow b{text-align:right;font-weight:600;overflow-wrap:anywhere}
+.block.kq{background:var(--surface)}

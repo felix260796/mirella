@@ -115,7 +115,7 @@ if (typeof window !== "undefined") {
     files.unshift({ name: `Mirella_Daten_${today()}.xlsx`, data: ZX.xlsx(sheets) });
     progress && progress("Wiederherstellungs-Datei …");
     const photos = {}; try { const all = await photoAll(); for (const [k, b] of Object.entries(all)) photos[k] = await blobToDataURL(b); } catch (_) { }
-    files.push({ name: `Wiederherstellen/Mirella-Sicherung_${today()}.json`, data: JSON.stringify({ app: "Mirella", version: VERSION, exported: new Date().toISOString(), data: S, photos }) });
+    files.push({ name: `Wiederherstellen/Mirella-Sicherung_${today()}.json`, data: JSON.stringify({ app: "Mirella", version: VERSION, exported: new Date().toISOString(), data: noKeys(S), photos }) });
     files.push({ name: "LIESMICH.txt", data: `Mirella-Sicherung vom ${de(today())}\r\n\r\nMirella_Daten_${today()}.xlsx: alle Kontakte, Aufgaben, Einkäufe, Verträge und Einträge, Dokumente, Ausgaben und Notizen. Mit Excel öffnen, jede Tabelle hat ein eigenes Blatt.\r\nDokumente/: alle PDFs und Fotos, nach Bereich und Ordner sortiert, Dateiname = Ablagedatum + Name. In der Excel (Blatt „Dokumente“) steht, wozu jedes Dokument gehört.\r\nBelege/: Fotos von Kassenbons zu den Ausgaben.\r\nWiederherstellen/: diese Datei in Mirella unter Einstellungen > Datensicherung > „Sicherung laden“ auswählen, dann ist alles wieder da.\r\n\r\nDiese Sicherung hängt nicht an Supabase oder an der App: Excel und PDFs lassen sich auch ohne Mirella öffnen.\r\n` });
     return { blob: new Blob([ZX.zip(files)], { type: "application/zip" }), count: files.length, docs: S.docs.length };
   }

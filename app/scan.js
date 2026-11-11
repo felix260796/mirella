@@ -4,7 +4,8 @@
    Das Foto wird sofort zwischengespeichert, damit nichts verloren geht, wenn das Fenster zugeht. */
 "use strict";
 const TMP = "mirella.tmpphoto", TMPID = "tmp_photo";
-const OCR_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+/* Texterkennung (tesseract.js 5.1.1) liegt fest in app/vendor: nichts wird zur Laufzeit von fremden Servern geladen */
+const OCR_BASE = new URL("./vendor/tesseract/", location.href).href, OCR_URL = OCR_BASE + "tesseract.min.js";
 let scan = null; // { img, w, h, pts:[[x,y]x4], bw }
 
 function tmpSet(ctx) { try { localStorage.setItem(TMP, JSON.stringify({ kind: ctx.kind, area: ctx.area, ref: ctx.ref || "", t: Date.now() })); } catch (_) { } }
@@ -112,7 +113,7 @@ function rotate() {
 
 /* ---------- Text lesen (auf dem Gerät, Tesseract) und einsortieren ---------- */
 let ocrP = null;
-function ocrLib() { if (window.Tesseract) return Promise.resolve(window.Tesseract); if (ocrP) return ocrP; ocrP = new Promise((res, rej) => { const s = document.createElement("script"); s.src = OCR_URL; s.onload = () => res(window.Tesseract); s.onerror = () => { ocrP = null; rej(new Error("Texterkennung nicht erreichbar")); }; document.head.appendChild(s); }); return ocrP; }
+function ocrLib() { if (window.Tesseract) return Promise.resolve(window.Tesseract); if (ocrP) return ocrP; ocrP = new Promise((res, rej) => { const s = document.createElement("script"); s.src = OCR_URL; s.onload = () => { const T = window.Tesseract, rec = T.recognize; T.recognize = (img, lang, o) => rec(img, lang, Object.assign({ workerPath: OCR_BASE + "worker.min.js", corePath: OCR_BASE, langPath: OCR_BASE + "lang", gzip: true, workerBlobURL: false }, o || {})); res(T); }; s.onerror = () => { ocrP = null; rej(new Error("Texterkennung nicht erreichbar")); }; document.head.appendChild(s); }); return ocrP; }
 async function readText() {
   const ctx = photoCtx; if (!ctx || !ctx.blob) return;
   const st = () => $("#ocr-state");

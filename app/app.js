@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.29";
+const VERSION = "0.30";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -617,8 +617,8 @@ function latestBriefing() { return S.briefings.slice().sort((a, b) => (b.d + (b.
 /* Seit 11.11.2026 gibt es nur noch ein Briefing pro Tag (8 Uhr, Mo–So); ältere Einträge behalten ihren Namen */
 function briefTitle(b) { return b.kind === "nachmittag" ? "Nachmittags-Briefing" : b.kind === "wochenende" ? "Wochenend-Briefing" : b.kind === "morgen" && b.d < "2026-11-11" ? "Morning Briefing" : "Tages-Briefing"; }
 function briefCard(b, del) {
-  if (b.remote) return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(briefTitle(b))}</div><div class="s">${esc(briefWhen(b))} · ${b.pdf ? "PDF öffnen" : "PDF wird noch abgelegt"}</div></span>${b.read ? '<span class="pill">PDF</span>' : '<span class="pill acc">neu</span>'}</div>`;
-  return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${b.id}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(briefTitle(b))}</div><div class="s">${esc(fmtDate(b.d))}${b.time ? " · " + esc(b.time) : ""} · ${esc(b.name)}</div></span>${b.read ? (del ? `<button class="rowdel" data-act="delbrief" data-id="${b.id}" aria-label="löschen">✕</button>` : '<span class="pill">PDF</span>') : '<span class="pill acc">neu</span>'}</div>`;
+  if (b.remote) return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${esc(b.id)}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(briefTitle(b))}</div><div class="s">${esc(briefWhen(b))} · ${b.pdf ? "PDF öffnen" : "PDF wird noch abgelegt"}</div></span>${b.read ? '<span class="pill">PDF</span>' : '<span class="pill acc">neu</span>'}</div>`;
+  return `<div class="card ${b.read ? "" : "due"}" role="button" tabindex="0" data-act="openbrief" data-id="${esc(b.id)}"><span class="av">${IC.doku}</span><span style="min-width:0"><div class="t">${esc(briefTitle(b))}</div><div class="s">${esc(fmtDate(b.d))}${b.time ? " · " + esc(b.time) : ""} · ${esc(b.name)}</div></span>${b.read ? (del ? `<button class="rowdel" data-act="delbrief" data-id="${b.id}" aria-label="löschen">✕</button>` : '<span class="pill">PDF</span>') : '<span class="pill acc">neu</span>'}</div>`;
 }
 async function addBriefings(files) {
   let n = 0;
@@ -659,8 +659,8 @@ async function syncBriefings() {
     const j = await r.json(); let neu = 0;
     for (const it of j.items || []) {
       const ex = S.briefings.find(b => b.id === "gm_" + it.id);
-      if (ex) { Object.assign(ex, { d: it.d, time: it.time, kind: it.kind, url: it.url, pdf: it.pdf || ex.pdf }); delete ex.quote; continue; }
-      S.briefings.push({ id: "gm_" + it.id, remote: true, d: it.d, time: it.time, kind: it.kind, title: "Briefing", url: it.url, pdf: it.pdf, name: "Briefing", read: false }); neu++;
+      if (ex) { Object.assign(ex, { d: it.d, time: it.time, kind: it.kind, pdf: it.pdf || ex.pdf }); delete ex.quote; delete ex.url; continue; }
+      S.briefings.push({ id: "gm_" + it.id, remote: true, d: it.d, time: it.time, kind: it.kind, title: "Briefing", pdf: it.pdf, name: "Briefing", read: false }); neu++;
     }
     const ids = new Set((j.items || []).map(it => "gm_" + it.id));
     const before = S.briefings.length;
@@ -1553,17 +1553,20 @@ function parseVCF(text) {
 async function exportData() {
   toast("Sicherung wird erstellt …");
   const photos = {}; try { const all = await photoAll(); for (const [k, b] of Object.entries(all)) photos[k] = await blobToDataURL(b); } catch (_) { }
-  const json = JSON.stringify({ app: "Mirella", version: VERSION, exported: new Date().toISOString(), data: S, photos });
+  const json = JSON.stringify({ app: "Mirella", version: VERSION, exported: new Date().toISOString(), data: noKeys(S), photos });
   const name = `Mirella-Sicherung_${today()}.json`, file = new File([json], name, { type: "application/json" });
   if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e.name === "AbortError") return; } }
   const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+/* Für Sicherungen: Kopie der Daten ohne Schlüssel (Google Maps). Schlüssel gehören nur auf das Gerät. */
+function noKeys(d) { const c = JSON.parse(JSON.stringify(d)); if (c.settings) delete c.settings.gmapsKey; return c; }
 async function importData(file) {
   try {
     const j = JSON.parse(await file.text()); if (!j || !j.data || !Array.isArray(j.data.people)) throw new Error();
     if (!confirm(`Sicherung vom ${new Date(j.exported).toLocaleString("de-DE")} laden? Die Daten auf diesem Gerät werden ersetzt.`)) return;
     await photoClear(); for (const [k, u] of Object.entries(j.photos || {})) await photoPut(k, await dataURLToBlob(u));
-    S = Object.assign(blank(), j.data); S.settings = Object.assign(blank().settings, j.data.settings || {});
+    const gk = S.settings.gmapsKey || (j.data.settings || {}).gmapsKey || "";
+    S = Object.assign(blank(), j.data); S.settings = Object.assign(blank().settings, j.data.settings || {}, { gmapsKey: gk });
     save(); view = "heute"; render(); toast("Sicherung geladen");
   } catch (_) { toast("Das ist keine gültige Mirella-Sicherung"); }
 }

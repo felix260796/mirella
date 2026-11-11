@@ -28,7 +28,7 @@ async function routeGoogle(a, b, when, mode) {
     if (alt) body.computeAlternativeRoutes = true;
     const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": S.settings.gmapsKey, "X-Goog-FieldMask": "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description" + (bahn ? ",routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.transitDetails" : "") },
+      headers: Object.assign(NATIVE ? { "X-Ios-Bundle-Identifier": "de.brenzinger.mirella" } : {}, { "Content-Type": "application/json", "X-Goog-Api-Key": S.settings.gmapsKey, "X-Goog-FieldMask": "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description" + (bahn ? ",routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.transitDetails" : "") }),
       body: JSON.stringify(body)
     });
     const j = await r.json(); if (!r.ok || !j.routes || !j.routes[0]) throw new Error((j.error && j.error.message) || (bahn ? "Keine Verbindung gefunden" : "Google Maps antwortet nicht"));

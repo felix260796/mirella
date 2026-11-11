@@ -812,10 +812,10 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   }
   ACT.kdone = () => { const err = kSave(); if (err) { toast(err); return; } kStep = "karte"; kPid = null; kAfter(); };
   ACT.kkid = () => { const err = kSave(); if (err) { toast(err); return; } kidForm(kPid); };
-  ACT.kparentoff = () => { const p = S.people.find(x => x.id === kPid); if (!p) return; kSave(); delete p.parent; save(); render(true); };
+  ACT.kparentoff = () => { const p = S.people.find(x => x.id === kPid); if (!p) return; kSave(); delete p.parent; save(); kFresh = true; render(true); };
   const kParentList = ql => S.people.filter(x => x.id !== kPid && !x.arch && (!ql || normName(fullName(x)).includes(ql))).sort((a, b) => fullName(a).localeCompare(fullName(b), "de")).slice(0, 40).map(x => `<button class="drow" data-act="kparentset" data-id="${x.id}"><span class="dt"><b>${esc(fullName(x))}</b></span><span class="chev">›</span></button>`).join("") || '<p class="hint">Niemand gefunden. Das Elternteil muss schon in Mirella sein.</p>';
   ACT.kparent = () => { const err = kSave(); if (err) { toast(err); return; } openSheet(`<p class="stitle">Kind von wem?</p><input class="search" id="kpq" type="search" placeholder="Name suchen" autocomplete="off"><div id="kpl">${kParentList("")}</div>`, () => $("#kpq").focus()); };
-  ACT.kparentset = el => { const p = S.people.find(x => x.id === kPid); if (!p) return; p.parent = el.dataset.id; if (!p.tel) p.local = true; save(); closeSheet(); render(true); };
+  ACT.kparentset = el => { const p = S.people.find(x => x.id === kPid); if (!p) return; p.parent = el.dataset.id; if (!p.tel) p.local = true; save(); closeSheet(); kFresh = true; render(true); };
   document.addEventListener("input", e => {
     const t = e.target; if (!t) return;
     if (t.id === "kpq") { const l = $("#kpl"); if (l) l.innerHTML = kParentList(normName(t.value)); }
@@ -869,7 +869,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       save();
       if (/\b(fertig|weiter|nächste[rn]?)\b/.test(t)) { kStep = "karte"; kPid = null; kAfter(); return true; }
       if (!did) { toast("Das habe ich hier nicht verstanden"); return true; }
-      render(true); return true;
+      kFresh = true; render(true); return true;
     }
     const c = kCard(); if (!c) return false;
     const cand = kFind ? null : kCands(c)[0];
@@ -879,7 +879,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     if (cand) { if (/^(ja|genau|richtig|stimmt)\b/.test(t)) { ACT.kmerge({ dataset: { k: cand.e.id } }); return true; } if (/^(nein|nee|falsch)\b/.test(t)) { ACT.knotsame({ dataset: { k: cand.e.id } }); return true; } toast("Erst bitte sagen, ob das zusammengehört"); return true; }
     if (/nicht (in mirella|rein|aufnehmen|nehmen)|\braus\b|\bnein\b/.test(t)) { ACT.knicht(); return true; }
     if (/lösch|\bweg damit\b/.test(t)) { ACT.kdel(); return true; }
-    if (/\brein\b|nimm|aufnehmen|\bja\b|behalten/.test(t)) { const p = ACT.krein(); if (p && kidOf) { setParent(p); save(); render(true); } return true; }
+    if (/\brein\b|nimm|aufnehmen|\bja\b|behalten/.test(t)) { const p = ACT.krein(); if (p && kidOf) { setParent(p); save(); kFresh = true; render(true); } return true; }
     toast("Sag zum Beispiel „Nimm ihn rein“, „Nicht in Mirella“, „Löschen“ oder „Später“"); return true;
   }
   const kOrigReview = voiceReview;
@@ -906,6 +906,18 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     await contactsSync(false); await calendarBirthdays();
     kCur = null; kStep = "karte"; kPid = null; view = "kdurch"; render();
   };
+  /* Während der Pflege darf ein Abgleich im Hintergrund nichts wegwischen, was gerade getippt wird */
+  let kFresh = false;
+  const kOrigRender = render;
+  render = function () {
+    let keep = null, pid = kPid;
+    if (!kFresh && view === "kdurch" && kStep === "pflege" && $("#kp-first")) keep = [...document.querySelectorAll("#screen input, #screen select, #screen textarea")].filter(e => e.id).map(e => ({ id: e.id, v: e.type === "checkbox" ? e.checked : e.value, f: document.activeElement === e, s: e.selectionStart }));
+    kFresh = false;
+    const r = kOrigRender.apply(this, arguments);
+    if (keep && view === "kdurch" && kStep === "pflege" && pid === kPid) for (const k of keep) { const e = document.getElementById(k.id); if (!e || e.disabled) continue; if (e.type === "checkbox") e.checked = k.v; else e.value = k.v; if (k.f) { e.focus(); try { e.setSelectionRange(k.s, k.s); } catch (_) { } } }
+    return r;
+  };
+  HOOKS.menschenTop.push(() => !N.kNeu && S.people.length ? `<div class="card" role="button" tabindex="0" data-act="kneu"><span class="av">↻</span><span style="min-width:0"><div class="t">Kontakte neu aufsetzen</div><div class="s" style="white-space:normal">Telefonbuch sichern, Mirella leeren, dann jeden Eintrag einzeln als Karte durchgehen</div></span><span class="chev">›</span></div>` : "");
   HOOKS.menschenTop.push(() => { const n = kQueue().length; return n ? `<div class="card due" role="button" tabindex="0" data-act="kopen"><span class="av">👤</span><span style="min-width:0"><div class="t">${n === 1 ? "1 neuer Kontakt zu prüfen" : n + " Kontakte zu prüfen"}</div><div class="s">Antippen und Karte für Karte durchgehen</div></span><span class="chev">›</span></div>` : ""; });
   /* Löschen und Zusammenführen bei fertigen Kontakten wirkt auf Wunsch auch im Telefonbuch */
   const kOrigDel = ACT.delperson;

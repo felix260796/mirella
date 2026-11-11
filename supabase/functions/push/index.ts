@@ -22,8 +22,18 @@ async function apnsJwt(): Promise<string> {
   return head + "." + body + "." + b64url(sig);
 }
 
+// Vergleich ohne Zeitunterschied, damit sich das Geheimnis nicht Zeichen für Zeichen erraten lässt
+async function sameSecret(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [ha, hb] = await Promise.all([crypto.subtle.digest("SHA-256", enc.encode(a)), crypto.subtle.digest("SHA-256", enc.encode(b))]);
+  const x = new Uint8Array(ha), y = new Uint8Array(hb);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
+}
+
 Deno.serve(async (req) => {
-  if (req.headers.get("x-push-secret") !== SECRET) return new Response("nein", { status: 401 });
+  if (!SECRET || !(await sameSecret(req.headers.get("x-push-secret") ?? "", SECRET))) return new Response("nein", { status: 401 });
   const { title, body, view } = await req.json();
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data: devices, error } = await db.from("mirella_device").select("token");

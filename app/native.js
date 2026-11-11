@@ -433,36 +433,73 @@
 
   /* ---------- Kontakte aufräumen ---------- */
   let clF = "alle", clSel = new Set(), clMax = 120, clQ = "";
-  const CLF = [["alle", "Alle"], ["kal", "Geburtstag im Kalender"], ["geb", "Mit Geburtstag"], ["ohnegeb", "Ohne Geburtstag"], ["ohnenr", "Ohne Nummer"], ["einname", "Nur ein Name"]];
+  /* Vorsortierung: was sehr wahrscheinlich kein Mensch ist (Servicenummern, Mailbox, Taxi, Hotline …) */
+  const JUNKW = /(^|[^a-zäöüß])(mailbox|mobilbox|voicemail|sprachbox|sprachnachricht\w*|hotline|service\w*|kundenservice|kundendienst|kundenbetreuung|kundencenter|pannenhilfe|pannendienst|pannen\w*|adac|avd|taxi\w*|notdienst\w*|notruf\w*|notfall\w*|notfinder|apotheke\w*|auskunft|info|infoservice|infoline|news|sms|mms|aufladen|aufladung|guthaben\w*|kontostand|kontoservice|sperr\w*|störung\w*|stoerung\w*|bestell\w*|pizza\w*|lieferservice|lieferando|zentrale|rezeption|support|helpdesk|vodafone|telekom|t-mobile|tmobile|o2|e-plus|eplus|congstar|aldi ?talk|1&1|d1|d2|lufthansa|reiseservice|fahrplan\w*|ansage\w*|zeitansage|wetter\w*|verkehrs\w*|staumeld\w*|bank ?card|kartensperr\w*|ec-karte\w*|kreditkarte\w*|visa|mastercard|paypal|amazon|ebay|dhl|hermes|dpd|ups|gewinnspiel\w*|abo|premium|flirt\w*|chat|voting|tarif\w*|prepaid|callya|xtra|datenvolumen|roaming|ausland\w*|konferenz\w*|einwahl\w*|faxabruf|fax)([^a-zäöüß]|$)/i;
+  function junkWhy(p) {
+    if ((N.junkAI || {})[p.id]) return N.junkAI[p.id];
+    const name = (fullName(p) || "").toLowerCase(), raw = (p.tel || "").replace(/[\s\-\/().]/g, ""), dig = raw.replace(/\D/g, "").replace(/^(0049|49)/, "0");
+    const m = JUNKW.exec(name); if (m) return "Name klingt nach Dienst: „" + m[2] + "“";
+    if (/[*#]/.test(raw)) return "Kurzwahl mit * oder #";
+    if (dig && dig.length <= 6) return "Kurzwahl-Nummer";
+    if (/^0(800|180|900|137|138|700|190|32)/.test(dig) || /^(118|116|115|110|112)/.test(dig)) return "Service- oder Sondernummer";
+    if (/^[\d\s+\-]*$/.test(name.replace("ohne namen", "")) ) return "Kein Name, nur Zahlen";
+    if (!p.tel && !p.email && !p.bday && !p.addr) return "Ohne Nummer, E-Mail und Geburtstag";
+    return "";
+  }
+  const junkList = () => { const linked = bLinkedIds(); return pending().filter(p => !linked.has(p.id) && junkWhy(p)); };
+  const CLF = [["muell", "Vermutlich unnötig"], ["alle", "Alle"], ["kal", "Geburtstag im Kalender"], ["geb", "Mit Geburtstag"], ["ohnegeb", "Ohne Geburtstag"], ["ohnenr", "Ohne Nummer"], ["einname", "Nur ein Name"]];
   function clList(f) {
     const linked = bLinkedIds(), ql = clQ.trim().toLowerCase();
-    return pending().filter(p => (f === "alle" || (f === "kal" && linked.has(p.id)) || (f === "geb" && p.bday) || (f === "ohnegeb" && !p.bday) || (f === "ohnenr" && !p.tel) || (f === "einname" && (!p.first || !p.last)))
+    return pending().filter(p => (f === "alle" || (f === "muell" && !linked.has(p.id) && junkWhy(p)) || (f === "kal" && linked.has(p.id)) || (f === "geb" && p.bday) || (f === "ohnegeb" && !p.bday) || (f === "ohnenr" && !p.tel) || (f === "einname" && (!p.first || !p.last)))
       && (!ql || (fullName(p) + " " + (p.tel || "") + " " + (p.email || "")).toLowerCase().includes(ql)))
       .sort((a, b) => fullName(a).localeCompare(fullName(b), "de"));
   }
   R.aufraeumen = function () {
     const all = pending(), list = clList(clF), linked = bLinkedIds();
-    const selN = list.filter(p => clSel.has(p.id)).length, nKal = all.filter(p => linked.has(p.id)).length;
+    const selN = list.filter(p => clSel.has(p.id)).length, nKal = all.filter(p => linked.has(p.id)).length, nJunk = clF === "muell" ? 0 : junkList().length;
     const bar = `<div class="clbar"><button class="btn pri" data-act="clkeep" ${selN ? "" : "disabled"}>Behalten${selN ? " (" + selN + ")" : ""}</button><button class="btn" data-act="cldrop" ${selN ? "" : "disabled"}>Aussortieren${selN ? " (" + selN + ")" : ""}</button></div>`;
     const head = `<div class="top" style="flex-wrap:wrap"><button class="tleft tsetbtn" data-act="clback" aria-label="Zurück"><p class="big">‹ Aufräumen</p></button>${all.length ? bar : ""}</div>`;
     if (!all.length) return head + empty("Alles aufgeräumt. Jeder übernommene Kontakt ist entweder behalten oder aussortiert.") + `<button class="btn" data-act="clback" style="width:100%;margin-top:10px">Zu den Kontakten</button>`;
     return `${head}
     <p class="hint" style="margin-top:0"><b>${all.length}</b> übernommene Kontakte hast du noch nicht angeschaut. Tipp Kontakte an und wähle oben <b>Behalten</b> oder <b>Aussortieren</b>. Aussortierte verschwinden nur aus Mirella, auf dem iPhone bleiben sie.</p>
     ${nKal ? `<div class="pitem"><b>Vorschlag:</b> ${nKal} dieser Kontakte stehen in deinem Geburtstags-Kalender. Die sind dir wahrscheinlich wichtig.<div class="row2" style="margin-top:8px"><button class="btn pri" data-act="clkeepkal">Diese ${nKal} behalten</button></div></div>` : ""}
+    ${nJunk ? `<div class="pitem"><b>Vorsortiert:</b> ${nJunk} Kontakte sind vermutlich keine Menschen (Mailbox, Hotline, Taxi, Servicenummern, leere Einträge). Schau kurz drüber und sortiere sie aus.<div class="row2" style="margin-top:8px"><button class="btn pri" data-act="cljunk">Diese ${nJunk} ansehen</button></div></div>` : ""}
+    ${typeof kiOn === "function" && kiOn() ? `<button class="btn" data-act="clki" style="width:100%;margin-bottom:8px">${N.junkAIAt ? "Mirella-KI noch einmal drüberschauen lassen" : "Mirella-KI genauer vorsortieren lassen"}</button>` : ""}
     ${bOpen().length ? `<button class="btn" data-act="querv" style="width:100%;margin-bottom:8px">${bOpen().length} Geburtstage ohne Kontakt zuordnen</button>` : ""}
     <input class="search" id="clq" type="search" placeholder="Suchen: Name oder Nummer" aria-label="Suchen" value="${esc(clQ)}">
     <div class="chips">${CLF.map(([k, l]) => `<button class="chip2" data-act="clf" data-k="${k}" aria-pressed="${clF === k}">${l} ${clList(k).length}</button>`).join("")}</div>
     <div class="sec"><span class="label">${list.length} in dieser Auswahl</span><button class="mini" data-act="clall">${selN === list.length ? "Auswahl aufheben" : "Alle auswählen"}</button></div>
-    ${list.slice(0, clMax).map(p => `<div class="listrow clrow" role="button" tabindex="0" data-act="cltog" data-id="${p.id}" aria-pressed="${clSel.has(p.id)}" style="cursor:pointer"><span class="clbox" aria-hidden="true">${clSel.has(p.id) ? "✓" : ""}</span><span class="grow">${esc(fullName(p) || "(ohne Namen)")}<small>${esc([p.tel, p.email, p.bday ? "Geburtstag " + fmtMd(p.bday.slice(5)) + (linked.has(p.id) ? " (im Kalender)" : "") : ""].filter(Boolean).join(" · ") || "keine Nummer, keine E-Mail")}</small></span></div>`).join("")}
+    ${list.slice(0, clMax).map(p => `<div class="listrow clrow" role="button" tabindex="0" data-act="cltog" data-id="${p.id}" aria-pressed="${clSel.has(p.id)}" style="cursor:pointer"><span class="clbox" aria-hidden="true">${clSel.has(p.id) ? "✓" : ""}</span><span class="grow">${esc(fullName(p) || "(ohne Namen)")}<small>${esc([p.tel, p.email, p.bday ? "Geburtstag " + fmtMd(p.bday.slice(5)) + (linked.has(p.id) ? " (im Kalender)" : "") : ""].filter(Boolean).join(" · ") || "keine Nummer, keine E-Mail")}</small>${clF === "muell" ? `<small style="color:var(--late)">${esc(junkWhy(p))}</small>` : ""}</span></div>`).join("")}
     ${list.length > clMax ? `<button class="btn" data-act="clmore" style="width:100%;margin-top:8px">Weitere ${Math.min(200, list.length - clMax)} zeigen</button>` : ""}`;
   };
   const clSelected = () => clList(clF).filter(p => clSel.has(p.id));
-  ACT.aufraeumen = () => { clSel = new Set(); clMax = 120; clQ = ""; view = "aufraeumen"; render(); };
-  ACT.clback = () => { view = "menschen"; render(); };
+  let clFrom = "";
+  ACT.aufraeumen = el => { clFrom = setSec || ""; clSel = new Set(); clMax = 120; clQ = ""; clF = junkList().length ? "muell" : "alle"; if (clF === "muell") clSel = new Set(junkList().map(p => p.id)); view = "aufraeumen"; render(); };
+  ACT.clback = () => { if (clFrom) { view = "einstellungen"; setSec = clFrom; } else view = "menschen"; render(); };
   ACT.clf = el => { clF = el.dataset.k; clMax = 120; render(); };
   ACT.cltog = el => { const id = el.dataset.id; clSel.has(id) ? clSel.delete(id) : clSel.add(id); render(true); };
   ACT.clall = () => { const l = clList(clF), allOn = l.every(p => clSel.has(p.id)); l.forEach(p => allOn ? clSel.delete(p.id) : clSel.add(p.id)); render(true); };
   ACT.clmore = () => { clMax += 200; render(true); };
+  ACT.cljunk = () => { clF = "muell"; clMax = 120; clQ = ""; clSel = new Set(junkList().map(p => p.id)); render(); toast("Alle vorgeschlagenen sind ausgewählt. Was bleiben soll, einfach antippen."); };
+  /* Mirella-KI schaut über die Namen: was ist kein Mensch? Es gehen nur Name und Art der Nummer an Claude. */
+  ACT.clki = async el => {
+    const rest = pending().filter(p => !junkWhy(p)); if (!rest.length) { toast("Nichts mehr zu prüfen"); return; }
+    if (!ask(`Mirella-KI schaut über ${rest.length} Kontakte. Dafür gehen die Namen (ohne Nummern) an Claude. In Ordnung?`)) return;
+    el.disabled = true; N.junkAI = N.junkAI || {}; let found = 0;
+    const schema = { type: "object", additionalProperties: false, required: ["treffer"], properties: { treffer: { type: "array", items: { type: "object", additionalProperties: false, required: ["nr", "grund"], properties: { nr: { type: "integer" }, grund: { type: "string" } } } } } };
+    const system = "Du hilfst, ein privates Telefonbuch aufzuräumen. Du bekommst eine nummerierte Liste von Kontaktnamen aus einem deutschen iPhone, dahinter in Klammern die Art des Eintrags. Finde die Einträge, die sehr wahrscheinlich KEINE Privatperson und kein persönlicher Ansprechpartner sind: Servicenummern, Hotlines, Mailbox, Mobilfunk-Dienste, Auskunft, Pannenhilfe, Taxi-Zentralen, Notdienst-Finder, Lieferdienste, Info- und Nachrichtendienste, Werbe- und Gewinnspielnummern, Test- oder Platzhalter-Einträge. Im Zweifel NICHT nennen: Menschen, Spitznamen, Familienbezeichnungen (Mama, Opa), Ärzte, Handwerker, Kollegen, Vereine und Firmen mit erkennbarem Ansprechpartner bleiben drin. Gib für jeden Treffer die Nummer aus der Liste und einen Grund in höchstens fünf deutschen Wörtern an.";
+    try {
+      for (let i = 0; i < rest.length; i += 250) {
+        el.textContent = `Mirella prüft … ${Math.min(i + 250, rest.length)} von ${rest.length}`;
+        const part = rest.slice(i, i + 250);
+        const user = part.map((p, k) => `${k + 1}. ${fullName(p)} (${[p.tel ? "mit Nummer" : "ohne Nummer", p.email ? "mit E-Mail" : "", p.bday ? "mit Geburtstag" : ""].filter(Boolean).join(", ")})`).join("\n");
+        const out = JSON.parse(await kiCall({ system, user, hard: false, schema, maxTokens: 8000 }));
+        for (const t of out.treffer || []) { const p = part[t.nr - 1]; if (p) { N.junkAI[p.id] = "Mirella-KI: " + String(t.grund || "kein Mensch").slice(0, 60); found++; } }
+      }
+      N.junkAIAt = Date.now(); nSave(); render(true);
+      toast(found ? found + " weitere Kontakte vorsortiert" : "Mirella-KI hat nichts Weiteres gefunden");
+    } catch (e) { nSave(); render(true); toast((e && e.message || "Das hat nicht geklappt") + "."); }
+  };
   ACT.clkeep = () => { const l = clSelected(); if (!l.length) return; l.forEach(p => { p.rev = today(); clSel.delete(p.id); }); save(); render(true); toast(l.length === 1 ? "1 Kontakt behalten" : l.length + " Kontakte behalten"); };
   ACT.clkeepkal = () => { const linked = bLinkedIds(), l = pending().filter(p => linked.has(p.id)); l.forEach(p => { p.rev = today(); clSel.delete(p.id); }); save(); render(true); toast(l.length + " Kontakte behalten"); };
   ACT.cldrop = () => {
@@ -481,12 +518,11 @@
     S.people = S.people.filter(p => !(p.appleId && !p.rev && untouched(p) && ign.has(ckey(p))));
     if (S.people.length !== n0) save();
   }
-  HOOKS.heuteTop.push(() => { const n = pending().length; return n >= 5 ? `<div class="card due" role="button" tabindex="0" data-act="aufraeumen"><span class="av">${n > 99 ? "99+" : n}</span><span style="min-width:0"><div class="t">Kontakte aufräumen</div><div class="s">${n} übernommene Kontakte warten: behalten oder aussortieren</div></span></div>` : ""; });
-  const origMenschen = R.menschen;
-  R.menschen = function () {
-    const h = origMenschen.call(this), n = pending().length; if (!n) return h;
-    const card = `<div class="card due" role="button" tabindex="0" data-act="aufraeumen"><span class="av">${n > 99 ? "99+" : n}</span><span style="min-width:0"><div class="t">Kontakte aufräumen</div><div class="s">${n} vom iPhone übernommen, noch nicht angeschaut</div></span></div>`;
-    const i = h.indexOf('<div class="sec">'); return i < 0 ? h + card : h.slice(0, i) + card + h.slice(i);
+  /* Aufräumen steht in Einstellungen › Kontakte (Wunsch Felix), nicht auf „Heute“ oder über der Kontaktliste */
+  const origSetK = SETS.kontakte;
+  SETS.kontakte = function () {
+    const n = pending().length, nj = junkList().length;
+    return `<button class="btn${n ? " pri" : ""}" data-act="aufraeumen" data-from="set" style="width:100%;margin-bottom:8px">Kontakte aufräumen (${n} offen${nj ? ", " + nj + " vorsortiert" : ""})</button>` + origSetK.call(this);
   };
 
   /* ---------- Querverweise: Geburtstags-Kalender ↔ Kontakte ---------- */

@@ -6,7 +6,7 @@
 const SB_URL = "https://xcanrhlwcopamhnmmlja.supabase.co";
 const SB_KEY = "sb_publishable_uxI3wI_MIx3CZOk-zoahpw_MBoVeQZc";
 const AUTH_KEY = "mirella.auth", META_KEY = "mirella.sync";
-const LOCAL_ONLY = ["geoAsked"]; // gilt nur für dieses Gerät
+const LOCAL_ONLY = ["geoAsked", "gmapsKey"]; // gilt nur für dieses Gerät. Der Google-Schlüssel bleibt auf dem Gerät: nicht im Abgleich, nicht in Sicherungen.
 
 const SY = {
   auth: null, meta: { ver: 0, dirty: false, last: 0, lastBackup: 0, pendingUp: [], pendingDel: [] },
@@ -53,6 +53,7 @@ function syPack() { const d = JSON.parse(JSON.stringify(S)); LOCAL_ONLY.forEach(
 function syApply(data) {
   const keep = {}; LOCAL_ONLY.forEach(k => { keep[k] = S.settings[k]; });
   S = Object.assign(blank(), data); S.settings = Object.assign(blank().settings, data.settings || {}, keep);
+  if ((S.goneP || []).length) { const g = new Set(S.goneP); S.people = S.people.filter(p => !g.has(p.id)); if (S.goneP.length > 3000) S.goneP = S.goneP.slice(-3000); }
 }
 /* Zusammenführen, wenn zwei Geräte gleichzeitig geändert haben: alle Einträge beider Seiten, bei gleicher ID gewinnt dieses Gerät */
 function syMerge(server, local) {

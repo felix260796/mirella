@@ -6,15 +6,13 @@
    "d": "2026-11-11",
    "time": "07:48",
    "kind": "morgen",
-   "pdf": "briefings/Briefing_2026-11-11_morgen.pdf",
-   "url": "https://mail.google.com/mail/?authuser=fjbrenzinger@gmail.com#all/thread-f:1881543525070211632"
+   "pdf": "briefings/Briefing_2026-11-11_morgen.pdf"
   },
   {
    "id": "1a1c3e0f9642bf59",
    "d": "2026-11-10",
    "time": "06:14",
    "kind": "morgen",
-   "url": "https://mail.google.com/mail/?authuser=fjbrenzinger@gmail.com#all/thread-f:1881446981000413017",
    "pdf": "briefings/2026-11-10.pdf"
   },
   {
@@ -22,7 +20,6 @@
    "d": "2026-11-09",
    "time": "16:29",
    "kind": "nachmittag",
-   "url": "https://mail.google.com/mail/?authuser=fjbrenzinger@gmail.com#all/thread-f:1881395076592843592",
    "pdf": "briefings/2026-11-09-2.pdf"
   },
   {
@@ -30,29 +27,25 @@
    "d": "2026-11-09",
    "time": "06:19",
    "kind": "morgen",
-   "url": "https://mail.google.com/mail/?authuser=fjbrenzinger@gmail.com#all/thread-f:1881356690209865273",
    "pdf": "briefings/2026-11-09.pdf"
   },
   {
    "id": "1a1ba72a762471b1",
    "d": "2026-11-08",
    "time": "10:17",
-   "kind": "wochenende",
-   "url": "https://mail.google.com/mail/?authuser=fjbrenzinger@gmail.com#all/thread-f:1881281070169878961"
+   "kind": "wochenende"
   },
   {
    "id": "1a1b256f8d0fd241",
    "d": "2026-11-06",
    "time": "20:30",
-   "kind": "nachmittag",
-   "url": "https://mail.google.com/mail/?authuser=fjbrenzinger@gmail.com#all/thread-f:1881138430395535937"
+   "kind": "nachmittag"
   },
   {
    "id": "1a1affee0bc10676",
    "d": "2026-11-06",
    "time": "09:34",
-   "kind": "morgen",
-   "url": "https://mail.google.com/mail/?authuser=fjbrenzinger@gmail.com#all/thread-f:1881097192245102198"
+   "kind": "morgen"
   }
  ]
 }

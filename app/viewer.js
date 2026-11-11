@@ -2,7 +2,8 @@
    Zwei Finger auseinanderziehen, doppelt tippen oder die Knöpfe − / +. PDFs zeichnet pdf.js als Seiten,
    damit sie auf dem iPhone auch in der Home-Bildschirm-App zoombar sind. */
 "use strict";
-const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/";
+/* pdf.js 3.11.174 liegt fest in app/vendor, nichts wird von fremden Servern geladen */
+const PDFJS = new URL("./vendor/pdfjs/", location.href).href;
 let pdfLibP = null;
 function pdfLib() {
   if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);

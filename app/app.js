@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.17";
+const VERSION = "0.18";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -715,7 +715,7 @@ function docRow(d) { return `<div class="listrow"><button data-act="viewphoto" d
 const CALF = [["geb", "Geburtstage"], ["erin", "Erinnerungen"], ["todo", "To-dos"], ["anruf", "Anrufe"]];
 const weekStart = k => addDays(k, -((D(k).getDay() + 6) % 7));
 function eventsRange(from, to, all) {
-  const f = all ? { geb: 1, erin: 1, todo: 1, anruf: 1 } : S.settings.calFilter;
+  const f = all ? { geb: 1, erin: 1, todo: 1, anruf: 1, termin: 1 } : S.settings.calFilter;
   const ev = {}, add = (d, c, k, t, act, id, time) => { if (f[c] && d >= from && d <= to) (ev[d] = ev[d] || []).push({ c, k, t, act, id, time: time || "" }); };
   for (const t of S.todos) {
     if (t.list !== "todo" || !t.date) continue;

@@ -1,14 +1,66 @@
 import WidgetKit
 import SwiftUI
 import ActivityKit
+#if canImport(AlarmKit)
+import AlarmKit
+#endif
 
 /// Erweiterung von Mirella: zeigt den Countdown „Jetzt musst du los“ auf dem Sperrbildschirm und in der Dynamic Island.
 @main
 struct MirellaLiveBundle: WidgetBundle {
     var body: some Widget {
         MirellaLosLive()
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            MirellaAlarmLive()
+        }
+        #endif
     }
 }
+
+#if canImport(AlarmKit)
+/// Anzeige für Mirellas Wecker auf dem Sperrbildschirm und in der Dynamic Island.
+@available(iOS 26.0, *)
+struct MirellaAlarmLive: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: AlarmAttributes<MirellaAlarmMeta>.self) { context in
+            HStack(spacing: 12) {
+                Image(systemName: "alarm.fill")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mirella Wecker")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.75))
+                    Text(context.attributes.presentation.alert.title)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .activityBackgroundTint(Color.black.opacity(0.88))
+            .activitySystemActionForegroundColor(.white)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Image(systemName: "alarm.fill").foregroundStyle(.orange)
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    Text(context.attributes.presentation.alert.title).font(.headline).lineLimit(1)
+                }
+            } compactLeading: {
+                Image(systemName: "alarm.fill").foregroundStyle(.orange)
+            } compactTrailing: {
+                Text("Wecker").font(.caption2)
+            } minimal: {
+                Image(systemName: "alarm.fill").foregroundStyle(.orange)
+            }
+        }
+    }
+}
+#endif
 
 struct MirellaCountdown: View {
     let los: Date

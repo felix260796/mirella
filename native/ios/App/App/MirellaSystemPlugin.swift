@@ -5,6 +5,7 @@ import Vision
 import VisionKit
 import LocalAuthentication
 import CallKit
+import AVFoundation
 import CoreLocation
 import UserNotifications
 import AppIntents
@@ -34,6 +35,7 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
         CAPPluginMethod(name: "removeFile", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "losStart", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "losEnd", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "audioRelease", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise)
     ]
 
@@ -237,6 +239,14 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
         }
         #endif
         call.resolve(["ok": false, "reason": "unavailable"])
+    }
+
+    /// Nach dem Diktieren: Ton-Sitzung beenden und anderen Apps Bescheid geben, damit Musik von selbst weiterläuft.
+    @objc func audioRelease(_ call: CAPPluginCall) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            call.resolve()
+        }
     }
 
     @objc func losEnd(_ call: CAPPluginCall) {

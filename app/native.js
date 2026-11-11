@@ -425,6 +425,16 @@
   const alarmDiag = () => N.alarmState !== "authorized" ? "" : (N.alarmErr ? ` <b>Achtung: Dein iPhone hat den letzten Wecker nicht angenommen (${esc(String(N.alarmErr).slice(0, 120))}). Die Mitteilung kommt trotzdem.</b>` : N.alarmAt ? ` Beim iPhone angemeldet: ${N.alarmN || 0}.` : "") + " Zur selben Minute kommt zusätzlich eine Mitteilung mit Ton als Sicherheit. In der Uhr-App von Apple steht der Wecker nicht, er gehört zu Mirella.";
   const origRes = resHTML;
   resHTML = function (w) { return origRes(w) + `<p class="hint">${alarmNote()}${alarmDiag()}</p>`; };
+  /* Probe: ein Wecker zur übernächsten vollen Minute, damit man den Sperrbildschirm prüfen kann */
+  ACT.nweckertest = async () => {
+    const A = P.MirellaAlarm; if (!A) return;
+    try {
+      const at = (Math.floor(Date.now() / 60e3) + 2) * 60e3, d = new Date(at), real = alarmList();
+      const r = await A.set({ alarms: real.concat([{ at, title: "Mirella Test-Wecker", near: 1 }]) });
+      N.alarmState = r.state; N.alarmSig = r.state === "authorized" ? JSON.stringify(real) : ""; N.alarmErr = r.error || ""; N.alarmN = r.count || 0; N.alarmAt = Date.now(); nSave(); render(true);
+      alert(r.state !== "authorized" ? "Mirella darf noch keine echten Wecker stellen (Zustand: " + r.state + "). Bitte unter Einstellungen › Apps › Mirella den Wecker erlauben." : r.error ? "Dein iPhone hat den Test-Wecker nicht angenommen:\n" + r.error : "Der Test-Wecker klingelt um " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + " Uhr. Sperre jetzt dein iPhone und warte. Er muss laut klingeln und groß auf dem Sperrbildschirm stehen.");
+    } catch (e) { alert("Der Test-Wecker ging nicht: " + (e && e.message || e)); }
+  };
   ACT.nwecker = async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; nSave(); await alarmSync(true); render(true); } catch (_) { toast("Das hat nicht geklappt"); } };
   let schedT = null;
   const origSave2 = save;
@@ -687,7 +697,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     <button class="btn" data-act="aufraeumen" style="width:100%;margin-top:8px">Kontakte aufräumen (${pending().length} offen)</button>
     <button class="btn" data-act="querv" style="width:100%;margin-top:8px">Geburtstags-Kalender zuordnen (${bOpen().length} offen)</button>
     ${S.settings.appleIgnored.length ? `<button class="btn" data-act="nunignore" style="width:100%;margin-top:8px">Aussortierte wieder vorschlagen (${S.settings.appleIgnored.length})</button>` : ""}
-    ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${alarmDiag()}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}` : ""}
+    ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${alarmDiag()}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}${N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nweckertest" style="width:100%;margin-top:8px">Wecker jetzt testen (klingelt in 1 bis 2 Minuten)</button>'}` : ""}
     <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>
     ${setH("In beide Richtungen")}
     ${P.MirellaContacts ? `<button class="drow" data-act="ntwoway"><span class="dt"><b>Kontakte ins iPhone-Telefonbuch schreiben</b><small>${N.twoWay === false ? "aus" : "an: Name, Geburtstag, neue Nummer und E-Mail. Es wird nie etwas gelöscht."}</small></span><span class="chev">${N.twoWay === false ? "○" : "●"}</span></button>` : ""}

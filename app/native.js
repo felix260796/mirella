@@ -98,8 +98,7 @@
         if (isIgnored(c, ign)) continue;
         const d0 = findDups(c, null)[0];
         if (d0) { const before = JSON.stringify(d0); mergeInto(d0, c); if (!d0.appleId) d0.appleId = c.appleId; N.aid[d0.id] = c.appleId; linked.add(d0.id); if (JSON.stringify(d0) !== before) res.linked++; continue; }
-        if (first || N.contactsDone !== true) { S.people.push(isNewPerson(c)); res.added++; }
-        else fresh.push(c);
+        S.people.push(isNewPerson(c)); res.added++; // neue iPhone-Kontakte landen ungeprüft im Aufräum-Stapel (Einstellungen › Kontakte), nicht auf „Heute“
       }
       N.contactsDone = true; N.freshContacts = fresh; res.fresh = fresh.length;
       // Neu in Mirella angelegte Kontakte auch im iPhone-Telefonbuch anlegen (nur ab dem Tag, an dem das Zurückschreiben eingeschaltet wurde)
@@ -162,14 +161,8 @@
   const pSig = () => hsh(S.people.map(p => p.id + CF.map(k => p[k] || "").join("|")));
   let contactsBusy = false, peopleSig = "", pT = null;
   function peopleChanged() { if (!N.setup || !twoWayOn() || contactsBusy) return; const s2 = pSig(); if (s2 === peopleSig) return; peopleSig = s2; clearTimeout(pT); pT = setTimeout(async () => { await contactsSync(false); render(true); }, 2500); }
-  ACT.newcadd = el => { const c = (N.freshContacts || []).find(x => x.appleId === el.dataset.id); if (!c) return; S.people.push(isNewPerson(c)); N.freshContacts = N.freshContacts.filter(x => x !== c); nSave(); save(); render(true); toast((c.first || c.last) + " übernommen"); };
-  ACT.newcign = el => { const c0 = (N.freshContacts || []).find(x => x.appleId === el.dataset.id); S.settings.appleIgnored.push(c0 ? ckey(c0) : el.dataset.id); N.freshContacts = (N.freshContacts || []).filter(x => x.appleId !== el.dataset.id); nSave(); save(); render(true); };
-  function freshBlock() {
-    const f = N.freshContacts || []; if (!f.length) return "";
-    return `<div class="sec"><span class="label">Neu in deinen iPhone-Kontakten</span><span class="label">${f.length}</span></div>` + f.slice(0, 5).map(c => `<div class="card"><span class="av">${esc(((c.first || "")[0] || "") + ((c.last || "")[0] || ""))}</span><span style="min-width:0"><div class="t">${esc([c.first, c.last].join(" ").trim())}</div><div class="s">${esc(c.tel || c.email || "")}</div></span><button class="mini" data-act="newcadd" data-id="${esc(c.appleId)}">Übernehmen</button><button class="mini" data-act="newcign" data-id="${esc(c.appleId)}" aria-label="Ignorieren">✕</button></div>`).join("");
-  }
   const origHeute = R.heute;
-  R.heute = function () { const h = origHeute.call(this), add = freshBlock(); if (!add) return h; const i = h.indexOf('<div class="sec">'); return i < 0 ? h + add : h.slice(0, i) + add + h.slice(i); };
+  heuteSkip = p => !!p.appleId && !p.rev && !p.arch && !p.death && untouched(p); // ungeprüfte übernommene Kontakte erscheinen nicht auf „Heute“ (Wunsch Felix: dort nur die fälligen Anrufe)
 
   /* ---------- iPhone-Kalender ---------- */
   async function calOk() { try { const r = await P.CapacitorCalendar.checkPermission({ scope: "readCalendar" }); return r.result === "granted"; } catch (_) { return false; } }
@@ -392,7 +385,8 @@
     const now = Date.now(), list = [];
     for (const w of S.alarms || []) {
       if (!w.wake || !w.alarms) continue;
-      alarmTimes(w).forEach((d, i) => { if (+d > now + 30e3) list.push({ at: +d, title: (i ? "Jetzt aber raus! " : "Aufstehen. ") + "Losfahren " + w.leave + " nach " + w.to }); });
+      const all = alarmTimes(w), nm = weckerName(w);
+      all.forEach((d, i) => { if (+d > now + 30e3) list.push({ at: +d, title: nm + ": los um " + w.leave + (all.length > 1 ? " (Wecker " + (i + 1) + " von " + all.length + ")" : "") }); });
     }
     return list.sort((a, b) => a.at - b.at).slice(0, 30);
   }
@@ -438,66 +432,161 @@
   function junkWhy(p) {
     if ((N.junkAI || {})[p.id]) return N.junkAI[p.id];
     const name = (fullName(p) || "").toLowerCase(), raw = (p.tel || "").replace(/[\s\-\/().]/g, ""), dig = raw.replace(/\D/g, "").replace(/^(0049|49)/, "0");
-    const m = JUNKW.exec(name); if (m) return "Name klingt nach Dienst: „" + m[2] + "“";
     if (/[*#]/.test(raw)) return "Kurzwahl mit * oder #";
     if (dig && dig.length <= 6) return "Kurzwahl-Nummer";
     if (/^0(800|180|900|137|138|700|190|32)/.test(dig) || /^(118|116|115|110|112)/.test(dig)) return "Service- oder Sondernummer";
     if (/^[\d\s+\-]*$/.test(name.replace("ohne namen", "")) ) return "Kein Name, nur Zahlen";
+    const m = JUNKW.exec(name); if (m) return "Name klingt nach Dienst: „" + m[2] + "“";
     if (!p.tel && !p.email && !p.bday && !p.addr) return "Ohne Nummer, E-Mail und Geburtstag";
     return "";
   }
   const junkList = () => { const linked = bLinkedIds(); return pending().filter(p => !linked.has(p.id) && junkWhy(p)); };
-  const CLF = [["muell", "Vermutlich unnötig"], ["alle", "Alle"], ["kal", "Geburtstag im Kalender"], ["geb", "Mit Geburtstag"], ["ohnegeb", "Ohne Geburtstag"], ["ohnenr", "Ohne Nummer"], ["einname", "Nur ein Name"]];
+  /* Stapel: dienst = kein Mensch, firma = Firma/Dienstleister, mensch, unklar. Die Mirella-KI (N.cl) geht vor, sonst gelten die Regeln. */
+  const FIRMW = /(^|[^a-zäöüß])(gmbh|ag|kg|ohg|ug|e\.? ?v\.?|gbr|firma|praxis|dr\.?|arzt|ärztin|zahnarzt|kanzlei|werkstatt|autohaus|friseur|salon|restaurant|gasthaus|gasthof|hotel|pension|pizzeria|bäckerei|metzgerei|büro|buero|bank|sparkasse|volksbank|versicherung|allianz|stadt|gemeinde|rathaus|schule|kindergarten|kita|verein|club|studio|fitness|physio\w*|klinik\w*|krankenhaus|hausverwaltung|immobilien|vermieter|handwerk\w*|elektro\w*|sanitär\w*|heizung\w*|schreiner\w*|maler\w*|gärtner\w*|reinigung|steuerberat\w*|anwalt|notar)([^a-zäöüß]|$)/i;
+  function clsOf(p, linked) {
+    if (linked.has(p.id)) return "mensch";
+    const k = (N.cl || {})[p.id], jw = junkWhy(p);
+    if (k) return k.a === "mensch" && jw && !/^Name klingt/.test(jw) ? "dienst" : k.a; // die KI sieht keine Nummern: Kurzwahlen und Servicenummern bleiben „kein Mensch“
+    if (junkWhy(p)) return "dienst";
+    if (FIRMW.test((fullName(p) || "").toLowerCase())) return "firma";
+    return p.first && p.last ? "mensch" : "unklar";
+  }
+  const clsWhy = p => { const k = (N.cl || {})[p.id]; return k && k.g ? "Mirella-KI: " + k.g : junkWhy(p); };
+  /* Was gehört zusammen? Gleiche Nummer, gleiche E-Mail, gleicher Name ohne Zusatz („Benny Puka“ und „Benny Puka Geschäft“), dazu Vorschläge der Mirella-KI. */
+  const SUFW = new Set(["geschaft", "geschaftlich", "arbeit", "buro", "firma", "dienst", "dienstlich", "privat", "handy", "mobil", "mobile", "festnetz", "zuhause", "home", "work", "neu", "alt", "alte", "neue", "nummer", "tel", "telefon", "iphone", "whatsapp", "praxis", "job", "office", "zweit", "zweithandy", "diensthandy", "geschaftshandy", "autotelefon", "auto", "fax", "eltern", "daheim", "mailbox"]);
+  const baseName = p => normName(fullName(p)).split(" ").filter(w => w && !SUFW.has(w)).join(" ");
+  const sufLabel = p => { const w = normName(fullName(p)).split(" ").filter(x => SUFW.has(x)); const orig = (fullName(p) || "").split(/\s+/).filter(x => SUFW.has(normName(x))); return orig.join(" ") || w.join(" "); };
+  const grpKey = ids => ids.slice().sort().join("+");
+  function mergeGroups() {
+    const live = S.people.filter(p => !p.arch && !p.death), pendIds = new Set(pending().map(p => p.id)), par = new Map(live.map(p => [p.id, p.id])), why = new Map();
+    const find = x => { while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
+    const uni = (a, b, w) => { const ra = find(a), rb = find(b); if (ra !== rb) par.set(ra, rb); why.set(a + b, w); why.set(b + a, w); };
+    const idx = (keyFn, w) => { const m = new Map(); for (const p of live) for (const k of [].concat(keyFn(p)).filter(Boolean)) { if (m.has(k)) uni(m.get(k), p.id, w); else m.set(k, p.id); } };
+    idx(p => [telKey(p.tel), ...(p.tels || []).map(x => telKey(x.n))], "gleiche Nummer");
+    idx(p => (p.email || "").toLowerCase(), "gleiche E-Mail");
+    idx(p => { const b = baseName(p); return b.length > 4 && b.includes(" ") ? b : ""; }, "gleicher Name");
+    for (const g of N.grp || []) { const ids = g.filter(id => par.has(id)); for (let i = 1; i < ids.length; i++) uni(ids[0], ids[i], "Mirella-KI"); }
+    const by = new Map(); for (const p of live) { const r = find(p.id); (by.get(r) || by.set(r, []).get(r)).push(p); }
+    const no = new Set(N.grpNo || []), out = [];
+    for (const g of by.values()) {
+      if (g.length < 2 || g.length > 6 || !g.some(p => pendIds.has(p.id)) || no.has(grpKey(g.map(p => p.id)))) continue;
+      // Ziel: ein schon behaltener Kontakt, sonst der mit dem kürzesten (saubersten) Namen
+      g.sort((a, b) => (pendIds.has(a.id) - pendIds.has(b.id)) || (SUFW.size && (sufLabel(a) ? 1 : 0) - (sufLabel(b) ? 1 : 0)) || fullName(a).length - fullName(b).length);
+      const tok = p => new Set(baseName(p).split(" ").filter(Boolean)), sub = (a, b) => a.size > 0 && [...a].every(x => b.has(x));
+      const t0 = tok(g[0]), sure = g.slice(1).every(p => { const tp = tok(p); return sub(t0, tp) || sub(tp, t0); });
+      out.push({ key: grpKey(g.map(p => p.id)), t: g[0], rest: g.slice(1), sure, why: [...new Set(g.slice(1).map(p => why.get(g[0].id + p.id) || why.get(p.id + g[0].id) || "gehört dazu"))].join(", ") });
+    }
+    return out.sort((a, b) => fullName(a.t).localeCompare(fullName(b.t), "de"));
+  }
+  function doMerge(g) {
+    for (const src of g.rest) {
+      mergeInto(g.t, src, sufLabel(src));
+      if (src.appleId) S.settings.appleIgnored.push(ckey(src));
+      if (N.aid && N.aid[src.id] && !N.aid[g.t.id]) N.aid[g.t.id] = N.aid[src.id];
+    }
+    const ids = new Set(g.rest.map(p => p.id)); S.people = S.people.filter(p => !ids.has(p.id)); g.t.rev = today();
+  }
+  const CLF = [["muell", "Kein Mensch"], ["firma", "Firmen"], ["mensch", "Menschen"], ["unklar", "Unklar"], ["alle", "Alle"], ["kal", "Geburtstag im Kalender"], ["geb", "Mit Geburtstag"], ["ohnegeb", "Ohne Geburtstag"], ["ohnenr", "Ohne Nummer"], ["einname", "Nur ein Name"]];
   function clList(f) {
     const linked = bLinkedIds(), ql = clQ.trim().toLowerCase();
-    return pending().filter(p => (f === "alle" || (f === "muell" && !linked.has(p.id) && junkWhy(p)) || (f === "kal" && linked.has(p.id)) || (f === "geb" && p.bday) || (f === "ohnegeb" && !p.bday) || (f === "ohnenr" && !p.tel) || (f === "einname" && (!p.first || !p.last)))
+    return pending().filter(p => (f === "alle" || (f === "muell" && clsOf(p, linked) === "dienst") || ((f === "firma" || f === "mensch" || f === "unklar") && clsOf(p, linked) === f) || (f === "kal" && linked.has(p.id)) || (f === "geb" && p.bday) || (f === "ohnegeb" && !p.bday) || (f === "ohnenr" && !p.tel) || (f === "einname" && (!p.first || !p.last)))
       && (!ql || (fullName(p) + " " + (p.tel || "") + " " + (p.email || "")).toLowerCase().includes(ql)))
       .sort((a, b) => fullName(a).localeCompare(fullName(b), "de"));
   }
+  let clMode = "start";
+  /* Startseite des Aufräumens: wenige Stapel mit großen Knöpfen statt langer Listen */
+  function clStart() {
+    const all = pending(), linked = bLinkedIds(), n = { dienst: 0, firma: 0, mensch: 0, unklar: 0 };
+    all.forEach(p => n[clsOf(p, linked)]++);
+    const groups = mergeGroups(), ki = typeof kiOn === "function" && kiOn(), nSure = groups.filter(g => g.sure).length;
+    const head = `<div class="top"><button class="tleft tsetbtn" data-act="clback" aria-label="Zurück"><p class="big">‹ Aufräumen</p></button></div>`;
+    if (!all.length && !groups.length) return head + empty("Alles aufgeräumt. Jeder übernommene Kontakt ist entweder behalten oder aussortiert.") + `<button class="btn" data-act="clback" style="width:100%;margin-top:10px">Zurück</button>`;
+    const stack = (title, cnt, text, btns) => cnt ? `<div class="pitem"><b>${title}: ${cnt}</b><div style="margin:4px 0 8px">${text}</div><div class="row2" style="flex-wrap:wrap">${btns}</div></div>` : "";
+    return `${head}
+    <p class="hint" style="margin-top:0"><b>${all.length}</b> übernommene Kontakte sind noch offen. Mirella hat sie in Stapel sortiert. Arbeite sie von oben nach unten ab. Alles hier betrifft nur Mirella, dein iPhone-Telefonbuch bleibt, wie es ist.</p>
+    ${ki ? `<button class="btn${N.clAt ? "" : " pri"}" data-act="clki" style="width:100%;margin-bottom:10px">${N.clAt ? "Mirella-KI noch einmal vorsortieren lassen" : "Mirella-KI gründlich vorsortieren lassen (bestes Modell)"}</button>` : `<p class="hint">Mit Claude-Schlüssel (Einstellungen › Mirella-KI) sortiert die Mirella-KI noch viel genauer vor.</p>`}
+    ${stack("1. Gehören zusammen", groups.length, "Derselbe Mensch steht mehrfach drin, zum Beispiel privat und Geschäft. Zusammengeführt bleibt ein Kontakt mit allen Nummern.", `${nSure ? `<button class="btn pri" data-act="clgall">${nSure} eindeutige zusammenführen</button>` : ""}<button class="btn" data-act="clmode" data-m="zus">Einzeln ansehen</button>`)}
+    ${stack("2. Kein Mensch", n.dienst, "Mailbox, Hotlines, Servicenummern, Taxi, leere Einträge.", `<button class="btn pri" data-act="clstack" data-k="muell" data-sel="1">Ansehen und aussortieren</button>`)}
+    ${stack("3. Firmen und Dienstleister", n.firma, "Ärzte, Werkstatt, Handwerker, Restaurants. Behalte, was du noch brauchst.", `<button class="btn" data-act="clstack" data-k="firma">Ansehen</button><button class="btn" data-act="clkeepall" data-k="firma">Alle behalten</button>`)}
+    ${stack("4. Menschen", n.mensch, "Sehen nach echten Personen aus.", `<button class="btn pri" data-act="clkeepall" data-k="mensch">Alle ${n.mensch} behalten</button><button class="btn" data-act="clstack" data-k="mensch">Ansehen</button>`)}
+    ${stack("5. Unklar", n.unklar, "Nur ein Name oder nicht einzuordnen. Kurz durchschauen.", `<button class="btn" data-act="clstack" data-k="unklar">Ansehen</button>`)}
+    ${bOpen().length ? `<button class="btn" data-act="querv" style="width:100%;margin:6px 0">${bOpen().length} Geburtstage aus dem Kalender zuordnen</button>` : ""}
+    <button class="btn" data-act="clstack" data-k="alle" style="width:100%;margin-top:6px">Alle ${all.length} als Liste</button>`;
+  }
+  function clGroups() {
+    const groups = mergeGroups();
+    const head = `<div class="top"><button class="tleft tsetbtn" data-act="clmode" data-m="start" aria-label="Zurück"><p class="big">‹ Gehören zusammen</p></button></div>`;
+    if (!groups.length) return head + empty("Keine Vorschläge mehr.") + `<button class="btn" data-act="clmode" data-m="start" style="width:100%;margin-top:10px">Zurück</button>`;
+    const line = p => `<div style="margin:2px 0"><b>${esc(fullName(p))}</b><small style="display:block;color:var(--ink-3)">${esc([p.tel, ...(p.tels || []).map(x => x.n), p.email].filter(Boolean).join(" · ") || "keine Nummer")}</small></div>`;
+    return `${head}<p class="hint" style="margin-top:0">${groups.length} Vorschläge. Beim Zusammenführen bleibt der oberste Kontakt, die Nummern der anderen kommen als weitere Nummer dazu. Nichts geht verloren.</p>
+    ${groups.some(g => g.sure) ? `<button class="btn pri" data-act="clgall" style="width:100%;margin-bottom:10px">${groups.filter(g => g.sure).length} eindeutige zusammenführen (gleicher Name)</button>` : ""}
+    ${groups.slice(0, 80).map(g => `<div class="pitem">${line(g.t)}${g.rest.map(line).join("")}<small style="color:var(--ink-3)">Grund: ${esc(g.why)}${g.sure ? "" : ". Bitte prüfen, ob es wirklich dieselbe Person ist."}</small><div class="row2" style="margin-top:8px"><button class="btn pri" data-act="clgyes" data-k="${g.key}">Zusammenführen</button><button class="btn" data-act="clgno" data-k="${g.key}">Getrennt lassen</button></div></div>`).join("")}`;
+  }
+  ACT.clmode = el => { clMode = el.dataset.m; clSel = new Set(); render(); };
+  ACT.clstack = el => { clMode = "liste"; clF = el.dataset.k; clQ = ""; clMax = 120; clSel = new Set(el.dataset.sel ? clList(clF).map(p => p.id) : []); render(); if (el.dataset.sel) toast("Alle sind ausgewählt. Was bleiben soll, antippen. Dann oben „Aussortieren“."); };
+  ACT.clkeepall = el => { const l = clList(el.dataset.k); if (!l.length || !ask(`${l.length} Kontakte behalten?`)) return; l.forEach(p => { p.rev = today(); }); save(); render(true); toast(l.length + " Kontakte behalten"); };
+  ACT.clgyes = el => { const g = mergeGroups().find(x => x.key === el.dataset.k); if (!g) return; doMerge(g); nSave(); save(); render(true); toast("Zusammengeführt: " + fullName(g.t)); };
+  ACT.clgno = el => { (N.grpNo = N.grpNo || []).push(el.dataset.k); nSave(); render(true); };
+  ACT.clgall = () => { const gs = mergeGroups().filter(g => g.sure); if (!gs.length || !ask(`${gs.length} eindeutige Gruppen zusammenführen? Es bleibt je ein Kontakt mit allen Nummern. Auf deinem iPhone ändert sich nichts.`)) return; let n = 0; for (let i = 0; i < 400; i++) { const g = mergeGroups().find(x => x.sure); if (!g) break; doMerge(g); n++; } nSave(); save(); clMode = "start"; render(true); toast(n + " Gruppen zusammengeführt"); };
   R.aufraeumen = function () {
+    if (clMode === "start") return clStart();
+    if (clMode === "zus") return clGroups();
     const all = pending(), list = clList(clF), linked = bLinkedIds();
-    const selN = list.filter(p => clSel.has(p.id)).length, nKal = all.filter(p => linked.has(p.id)).length, nJunk = clF === "muell" ? 0 : junkList().length;
+    const selN = list.filter(p => clSel.has(p.id)).length, nKal = all.filter(p => linked.has(p.id)).length;
     const bar = `<div class="clbar"><button class="btn pri" data-act="clkeep" ${selN ? "" : "disabled"}>Behalten${selN ? " (" + selN + ")" : ""}</button><button class="btn" data-act="cldrop" ${selN ? "" : "disabled"}>Aussortieren${selN ? " (" + selN + ")" : ""}</button></div>`;
-    const head = `<div class="top" style="flex-wrap:wrap"><button class="tleft tsetbtn" data-act="clback" aria-label="Zurück"><p class="big">‹ Aufräumen</p></button>${all.length ? bar : ""}</div>`;
+    const head = `<div class="top" style="flex-wrap:wrap"><button class="tleft tsetbtn" data-act="clmode" data-m="start" aria-label="Zurück"><p class="big">‹ Stapel</p></button>${all.length ? bar : ""}</div>`;
     if (!all.length) return head + empty("Alles aufgeräumt. Jeder übernommene Kontakt ist entweder behalten oder aussortiert.") + `<button class="btn" data-act="clback" style="width:100%;margin-top:10px">Zu den Kontakten</button>`;
     return `${head}
     <p class="hint" style="margin-top:0"><b>${all.length}</b> übernommene Kontakte hast du noch nicht angeschaut. Tipp Kontakte an und wähle oben <b>Behalten</b> oder <b>Aussortieren</b>. Aussortierte verschwinden nur aus Mirella, auf dem iPhone bleiben sie.</p>
     ${nKal ? `<div class="pitem"><b>Vorschlag:</b> ${nKal} dieser Kontakte stehen in deinem Geburtstags-Kalender. Die sind dir wahrscheinlich wichtig.<div class="row2" style="margin-top:8px"><button class="btn pri" data-act="clkeepkal">Diese ${nKal} behalten</button></div></div>` : ""}
-    ${nJunk ? `<div class="pitem"><b>Vorsortiert:</b> ${nJunk} Kontakte sind vermutlich keine Menschen (Mailbox, Hotline, Taxi, Servicenummern, leere Einträge). Schau kurz drüber und sortiere sie aus.<div class="row2" style="margin-top:8px"><button class="btn pri" data-act="cljunk">Diese ${nJunk} ansehen</button></div></div>` : ""}
-    ${typeof kiOn === "function" && kiOn() ? `<button class="btn" data-act="clki" style="width:100%;margin-bottom:8px">${N.junkAIAt ? "Mirella-KI noch einmal drüberschauen lassen" : "Mirella-KI genauer vorsortieren lassen"}</button>` : ""}
     ${bOpen().length ? `<button class="btn" data-act="querv" style="width:100%;margin-bottom:8px">${bOpen().length} Geburtstage ohne Kontakt zuordnen</button>` : ""}
     <input class="search" id="clq" type="search" placeholder="Suchen: Name oder Nummer" aria-label="Suchen" value="${esc(clQ)}">
     <div class="chips">${CLF.map(([k, l]) => `<button class="chip2" data-act="clf" data-k="${k}" aria-pressed="${clF === k}">${l} ${clList(k).length}</button>`).join("")}</div>
     <div class="sec"><span class="label">${list.length} in dieser Auswahl</span><button class="mini" data-act="clall">${selN === list.length ? "Auswahl aufheben" : "Alle auswählen"}</button></div>
-    ${list.slice(0, clMax).map(p => `<div class="listrow clrow" role="button" tabindex="0" data-act="cltog" data-id="${p.id}" aria-pressed="${clSel.has(p.id)}" style="cursor:pointer"><span class="clbox" aria-hidden="true">${clSel.has(p.id) ? "✓" : ""}</span><span class="grow">${esc(fullName(p) || "(ohne Namen)")}<small>${esc([p.tel, p.email, p.bday ? "Geburtstag " + fmtMd(p.bday.slice(5)) + (linked.has(p.id) ? " (im Kalender)" : "") : ""].filter(Boolean).join(" · ") || "keine Nummer, keine E-Mail")}</small>${clF === "muell" ? `<small style="color:var(--late)">${esc(junkWhy(p))}</small>` : ""}</span></div>`).join("")}
+    ${list.slice(0, clMax).map(p => `<div class="listrow clrow" role="button" tabindex="0" data-act="cltog" data-id="${p.id}" aria-pressed="${clSel.has(p.id)}" style="cursor:pointer"><span class="clbox" aria-hidden="true">${clSel.has(p.id) ? "✓" : ""}</span><span class="grow">${esc(fullName(p) || "(ohne Namen)")}<small>${esc([p.tel, p.email, p.bday ? "Geburtstag " + fmtMd(p.bday.slice(5)) + (linked.has(p.id) ? " (im Kalender)" : "") : ""].filter(Boolean).join(" · ") || "keine Nummer, keine E-Mail")}</small>${clsWhy(p) && (clF === "muell" || clF === "firma" || clF === "unklar") ? `<small style="color:var(--late)">${esc(clsWhy(p))}</small>` : ""}</span></div>`).join("")}
     ${list.length > clMax ? `<button class="btn" data-act="clmore" style="width:100%;margin-top:8px">Weitere ${Math.min(200, list.length - clMax)} zeigen</button>` : ""}`;
   };
   const clSelected = () => clList(clF).filter(p => clSel.has(p.id));
   let clFrom = "";
-  ACT.aufraeumen = el => { clFrom = setSec || ""; clSel = new Set(); clMax = 120; clQ = ""; clF = junkList().length ? "muell" : "alle"; if (clF === "muell") clSel = new Set(junkList().map(p => p.id)); view = "aufraeumen"; render(); };
+  ACT.aufraeumen = el => { clFrom = setSec || ""; clSel = new Set(); clMax = 120; clQ = ""; clMode = "start"; view = "aufraeumen"; render(); };
   ACT.clback = () => { if (clFrom) { view = "einstellungen"; setSec = clFrom; } else view = "menschen"; render(); };
   ACT.clf = el => { clF = el.dataset.k; clMax = 120; render(); };
   ACT.cltog = el => { const id = el.dataset.id; clSel.has(id) ? clSel.delete(id) : clSel.add(id); render(true); };
   ACT.clall = () => { const l = clList(clF), allOn = l.every(p => clSel.has(p.id)); l.forEach(p => allOn ? clSel.delete(p.id) : clSel.add(p.id)); render(true); };
   ACT.clmore = () => { clMax += 200; render(true); };
-  ACT.cljunk = () => { clF = "muell"; clMax = 120; clQ = ""; clSel = new Set(junkList().map(p => p.id)); render(); toast("Alle vorgeschlagenen sind ausgewählt. Was bleiben soll, einfach antippen."); };
-  /* Mirella-KI schaut über die Namen: was ist kein Mensch? Es gehen nur Name und Art der Nummer an Claude. */
+  /* Mirella-KI sortiert gründlich vor (bestes Modell, Wunsch Felix): Stapel je Kontakt und was zusammengehört.
+     An Claude gehen nur die Namen und ob Nummer, E-Mail, Geburtstag vorhanden sind. Nummern werden nur auf dem Gerät verglichen. */
   ACT.clki = async el => {
-    const rest = pending().filter(p => !junkWhy(p)); if (!rest.length) { toast("Nichts mehr zu prüfen"); return; }
-    if (!ask(`Mirella-KI schaut über ${rest.length} Kontakte. Dafür gehen die Namen (ohne Nummern) an Claude. In Ordnung?`)) return;
-    el.disabled = true; N.junkAI = N.junkAI || {}; let found = 0;
-    const schema = { type: "object", additionalProperties: false, required: ["treffer"], properties: { treffer: { type: "array", items: { type: "object", additionalProperties: false, required: ["nr", "grund"], properties: { nr: { type: "integer" }, grund: { type: "string" } } } } } };
-    const system = "Du hilfst, ein privates Telefonbuch aufzuräumen. Du bekommst eine nummerierte Liste von Kontaktnamen aus einem deutschen iPhone, dahinter in Klammern die Art des Eintrags. Finde die Einträge, die sehr wahrscheinlich KEINE Privatperson und kein persönlicher Ansprechpartner sind: Servicenummern, Hotlines, Mailbox, Mobilfunk-Dienste, Auskunft, Pannenhilfe, Taxi-Zentralen, Notdienst-Finder, Lieferdienste, Info- und Nachrichtendienste, Werbe- und Gewinnspielnummern, Test- oder Platzhalter-Einträge. Im Zweifel NICHT nennen: Menschen, Spitznamen, Familienbezeichnungen (Mama, Opa), Ärzte, Handwerker, Kollegen, Vereine und Firmen mit erkennbarem Ansprechpartner bleiben drin. Gib für jeden Treffer die Nummer aus der Liste und einen Grund in höchstens fünf deutschen Wörtern an.";
+    const rest = pending().slice().sort((a, b) => normName(fullName(a)).localeCompare(normName(fullName(b)))); if (!rest.length) { toast("Nichts mehr zu prüfen"); return; }
+    if (!ask(`Mirella-KI sortiert ${rest.length} Kontakte mit dem besten Modell vor. Dafür gehen die Namen (ohne Nummern) an Claude. Das kostet etwa ${Math.max(5, Math.round(rest.length * 0.06))} Cent von deinem Claude-Guthaben. In Ordnung?`)) return;
+    el.disabled = true; N.cl = N.cl || {}; N.grp = N.grp || []; let nCl = 0, nGr = 0;
+    const schema = { type: "object", additionalProperties: false, required: ["eintraege", "gruppen"], properties: {
+      eintraege: { type: "array", items: { type: "object", additionalProperties: false, required: ["nr", "art", "grund"], properties: { nr: { type: "integer" }, art: { type: "string", enum: ["dienst", "firma", "unklar"] }, grund: { type: "string" } } } },
+      gruppen: { type: "array", items: { type: "array", items: { type: "integer" } } } } };
+    const system = `Du hilfst ${S.settings.name || "dem Nutzer"}, sein privates iPhone-Telefonbuch aufzuräumen. Du bekommst eine alphabetisch sortierte, nummerierte Liste von Kontaktnamen aus Deutschland, dahinter in Klammern, was am Eintrag vorhanden ist.
+
+Aufgabe 1, einordnen. Nenne in "eintraege" nur die Einträge, die KEINE Privatperson sind. Alles, was du nicht nennst, gilt als Mensch und wird behalten. Es gibt drei Arten:
+- "dienst": kein Mensch und für eine persönliche Kontaktpflege wertlos. Mailbox, Hotlines, Servicenummern, Mobilfunk-Dienste, Auskunft, Pannenhilfe, Taxi-Zentralen, Notdienst-Finder, Lieferdienste, Info- und Nachrichtendienste per SMS, Gewinnspiele, Test- und Platzhalter-Einträge, reine Zahlen- oder Zeichenfolgen.
+- "firma": Firma, Behörde, Praxis, Handwerker, Restaurant, Verein oder Dienstleister, den man vielleicht noch braucht. Auch "Dr. Müller Zahnarzt" oder "Autohaus Schmid".
+- "unklar": nicht zu erkennen, ob Mensch oder nicht, zum Beispiel einzelne Abkürzungen oder kryptische Namen.
+Sei bei Menschen großzügig: Vor- und Nachnamen, Spitznamen, Familienbezeichnungen (Mama, Opa Heinz), "Tim Fußball", "Anna Nachbarin" oder "Flo Arbeit" sind Menschen und werden NICHT genannt. "grund" in höchstens fünf deutschen Wörtern.
+
+Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr wahrscheinlich dieselbe Person oder dieselbe Firma sind: derselbe Name mit Zusatz ("Benny Puka" und "Benny Puka Geschäft"), vertauschte Reihenfolge ("Weber Tim" und "Tim Weber"), Schreibvarianten und Tippfehler ("Steffi Maier" und "Stefanie Maier", "Müller Jürgen" und "Juergen Mueller"), Spitzname plus voller Name nur, wenn der Nachname gleich ist. Verschiedene Menschen mit gleichem Nachnamen (Geschwister, Ehepaare) gehören NICHT zusammen. Im Zweifel keine Gruppe.`;
     try {
-      for (let i = 0; i < rest.length; i += 250) {
-        el.textContent = `Mirella prüft … ${Math.min(i + 250, rest.length)} von ${rest.length}`;
-        const part = rest.slice(i, i + 250);
-        const user = part.map((p, k) => `${k + 1}. ${fullName(p)} (${[p.tel ? "mit Nummer" : "ohne Nummer", p.email ? "mit E-Mail" : "", p.bday ? "mit Geburtstag" : ""].filter(Boolean).join(", ")})`).join("\n");
-        const out = JSON.parse(await kiCall({ system, user, hard: false, schema, maxTokens: 8000 }));
-        for (const t of out.treffer || []) { const p = part[t.nr - 1]; if (p) { N.junkAI[p.id] = "Mirella-KI: " + String(t.grund || "kein Mensch").slice(0, 60); found++; } }
+      const step = 160;
+      for (let i = 0; i < rest.length; i += step) {
+        el.textContent = `Mirella-KI sortiert … ${Math.min(i + step, rest.length)} von ${rest.length}`;
+        const part = rest.slice(Math.max(0, i - 8), i + step); // kleine Überlappung, damit Zusammengehöriges an der Grenze nicht zerrissen wird
+        const user = part.map((p, k) => `${k + 1}. ${fullName(p)} (${[p.tel ? "Nummer" : "keine Nummer", p.email ? "E-Mail" : "", p.bday ? "Geburtstag" : "", p.addr ? "Adresse" : ""].filter(Boolean).join(", ")})`).join("\n");
+        const out = JSON.parse(await kiCall({ system, user, tier: "opus", stream: true, schema, maxTokens: 12000 }));
+        const named = new Set();
+        for (const t of out.eintraege || []) { const p = part[t.nr - 1]; if (p) { N.cl[p.id] = { a: t.art, g: String(t.grund || "").slice(0, 60) }; named.add(p.id); nCl++; } }
+        for (const p of part) if (!named.has(p.id)) N.cl[p.id] = { a: "mensch", g: "" };
+        for (const g of out.gruppen || []) { const ids = [...new Set(g.map(nr => part[nr - 1]).filter(Boolean).map(p => p.id))]; if (ids.length > 1 && ids.length <= 5) { N.grp.push(ids); nGr++; } }
+        nSave();
       }
-      N.junkAIAt = Date.now(); nSave(); render(true);
-      toast(found ? found + " weitere Kontakte vorsortiert" : "Mirella-KI hat nichts Weiteres gefunden");
+      N.clAt = Date.now(); nSave(); render(true);
+      toast(`Fertig: ${nCl} keine Privatpersonen, ${nGr} Gruppen gefunden`);
     } catch (e) { nSave(); render(true); toast((e && e.message || "Das hat nicht geklappt") + "."); }
   };
   ACT.clkeep = () => { const l = clSelected(); if (!l.length) return; l.forEach(p => { p.rev = today(); clSel.delete(p.id); }); save(); render(true); toast(l.length === 1 ? "1 Kontakt behalten" : l.length + " Kontakte behalten"); };
@@ -559,7 +648,7 @@
 
   /* ---------- Einstellungen › iPhone ---------- */
   SETNAMES.iphone = "iPhone";
-  SETS.iphone = () => `<p class="hint" style="margin-top:0">Kontakte und Geburtstage gleicht Mirella stündlich mit deinem iPhone ab. Neue Kontakte erscheinen auf „Heute“ zum Übernehmen. Wie oft Mirella nervt, stellst du unter Nerv-Modus ein.</p>
+  SETS.iphone = () => `<p class="hint" style="margin-top:0">Kontakte und Geburtstage gleicht Mirella stündlich mit deinem iPhone ab. Neue iPhone-Kontakte landen unter Einstellungen › Kontakte › Kontakte aufräumen. Wie oft Mirella nervt, stellst du unter Nerv-Modus ein.</p>
     <div class="row2" style="margin-top:8px"><button class="btn" data-act="nkontakte">Jetzt abgleichen</button><button class="btn" data-act="nfreigaben">Freigaben prüfen</button></div>
     <button class="btn" data-act="aufraeumen" style="width:100%;margin-top:8px">Kontakte aufräumen (${pending().length} offen)</button>
     <button class="btn" data-act="querv" style="width:100%;margin-top:8px">Geburtstags-Kalender zuordnen (${bOpen().length} offen)</button>

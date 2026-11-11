@@ -100,7 +100,7 @@ enum MirellaAlarms {
         for (date, title) in items {
             let stop = AlarmButton(text: "Stopp", textColor: .white, systemImageName: "stop.circle")
             let alert = AlarmPresentation.Alert(title: LocalizedStringResource(String.LocalizationValue(title)), stopButton: stop, secondaryButton: nil, secondaryButtonBehavior: nil)
-            let attrs = AlarmAttributes<MirellaAlarmMeta>(presentation: AlarmPresentation(alert: alert, countdown: nil, paused: nil), metadata: nil, tintColor: .black)
+            let attrs = AlarmAttributes<MirellaAlarmMeta>(presentation: AlarmPresentation(alert: alert, countdown: nil, paused: nil), metadata: nil, tintColor: .orange)
             let cfg = AlarmManager.AlarmConfiguration<MirellaAlarmMeta>.alarm(schedule: .fixed(date), attributes: attrs, stopIntent: nil, secondaryIntent: nil, sound: .default)
             _ = try await m.schedule(id: UUID(), configuration: cfg)
             n += 1

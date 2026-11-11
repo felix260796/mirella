@@ -12,18 +12,21 @@ const KI_MODELS = { haiku: ["claude-haiku-5-5", 0.10, 0.50], sonnet: ["claude-so
 const KI_MODES = [["sparsam", "Sparsam"], ["auto", "Automatisch"], ["beste", "Beste"]];
 const kiPick = hard => KI.mode === "sparsam" ? "haiku" : KI.mode === "beste" ? "opus" : hard ? "sonnet" : "haiku";
 
-async function kiCall({ system, user, hard, schema, maxTokens }) {
+async function kiCall({ system, user, hard, schema, maxTokens, tier: force, stream, effort }) {
   if (!kiOn()) throw new Error("Kein Claude-Schlüssel eingetragen");
-  const tier = kiPick(hard), [model, pin, pout] = KI_MODELS[tier];
+  const tier = force || kiPick(hard), [model, pin, pout] = KI_MODELS[tier];
   const headers = { "Content-Type": "application/json", "x-api-key": KI.key, "anthropic-version": "2026-10-21", "anthropic-dangerous-direct-browser-access": "true" };
-  const body = { model, max_tokens: maxTokens || 4000, system, messages: [{ role: "user", content: user }], output_config: { effort: "low" } };
+  const body = { model, max_tokens: maxTokens || 4000, system, messages: [{ role: "user", content: user }], output_config: { effort: effort || "low" } };
+  if (stream) body.stream = true;
   if (schema) body.output_config.format = { type: "json_schema", schema };
   // Lehnt ein Sicherheitsfilter ab, übernimmt bei Sonnet/Opus automatisch ein Ausweichmodell (Haiku kennt das nicht)
   if (tier !== "haiku") { headers["anthropic-beta"] = "server-side-fallback-2026-07-01"; body.fallbacks = "default"; }
   let r;
   try { r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify(body) }); }
   catch (_) { throw new Error("Keine Verbindung zu Claude"); }
-  let j = null; try { j = await r.json(); } catch (_) { }
+  let j = null;
+  if (r.ok && stream && r.body && r.body.getReader) j = await kiReadStream(r);
+  else try { j = await r.json(); } catch (_) { }
   if (!r.ok) {
     const m = j && j.error && j.error.message || "";
     if (r.status === 401) throw new Error("Der Claude-Schlüssel ist ungültig");
@@ -39,6 +42,26 @@ async function kiCall({ system, user, hard, schema, maxTokens }) {
   const text = (j.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
   if (!text) throw new Error(j.stop_reason === "max_tokens" ? "Die Antwort wurde zu lang" : "Claude hat nichts geantwortet");
   return text;
+}
+
+/* Lange Antworten kommen als Datenstrom, damit die Verbindung auf dem iPhone nicht nach einer Minute abbricht */
+async function kiReadStream(r) {
+  const rd = r.body.getReader(), dec = new TextDecoder(); let buf = "", text = "", stop = "", usage = { input_tokens: 0, output_tokens: 0 };
+  for (;;) {
+    const { value, done } = await rd.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith("data:")) continue;
+      let ev; try { ev = JSON.parse(line.slice(5)); } catch (_) { continue; }
+      if (ev.type === "message_start" && ev.message && ev.message.usage) usage.input_tokens = ev.message.usage.input_tokens || 0;
+      else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") text += ev.delta.text;
+      else if (ev.type === "message_delta") { if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason; if (ev.usage) usage.output_tokens = ev.usage.output_tokens || usage.output_tokens; }
+      else if (ev.type === "error") throw new Error("Claude: " + (ev.error && ev.error.message || "Fehler im Datenstrom"));
+    }
+  }
+  return { content: [{ type: "text", text }], stop_reason: stop, usage };
 }
 
 /* ---------- Gesprochenes verstehen ---------- */

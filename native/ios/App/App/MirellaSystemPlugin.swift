@@ -292,13 +292,31 @@ private extension CGImagePropertyOrientation {
     }
 }
 
-/// Zwischenablage für den Text, den Siri oder ein Kurzbefehl an Mirella übergibt.
+/// Zwischenablage für alles, was Siri oder ein Kurzbefehl an Mirella übergibt. Mehrere Sätze sammeln sich,
+/// bis Mirella das nächste Mal geöffnet wird; dann kommen alle zusammen zum Bestätigen.
 enum MirellaIntentBox {
     static let note = Notification.Name("MirellaIntentText")
-    private static let key = "mirella.intent.text"
-    static func put(_ t: String) { UserDefaults.standard.set(t, forKey: key); NotificationCenter.default.post(name: note, object: nil) }
-    static func peek() -> String { UserDefaults.standard.string(forKey: key) ?? "" }
-    static func take() -> String { let t = peek(); UserDefaults.standard.removeObject(forKey: key); return t }
+    private static let key = "mirella.intent.list"
+    private static let oldKey = "mirella.intent.text"
+    static func put(_ t: String) {
+        var a = UserDefaults.standard.stringArray(forKey: key) ?? []
+        a.append(t)
+        UserDefaults.standard.set(a, forKey: key)
+        NotificationCenter.default.post(name: note, object: nil)
+    }
+    static func peek() -> String {
+        var a = UserDefaults.standard.stringArray(forKey: key) ?? []
+        if let o = UserDefaults.standard.string(forKey: oldKey) { a.insert(o, at: 0) }
+        return a.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: ".!?")) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ". ")
+    }
+    static func take() -> String {
+        let t = peek()
+        UserDefaults.standard.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: oldKey)
+        return t
+    }
 }
 
 /// „Hey Siri, sag Mirella …“: öffnet Mirella und füllt das Gesagte vor (Aufgabe, Einkauf, Anruf …).
@@ -318,14 +336,38 @@ struct SagMirellaIntent: AppIntent {
     }
 }
 
+/// „Hey Siri, notier für Mirella“: Siri fragt nach, notiert es und Mirella bleibt zu.
+/// Beim nächsten Öffnen zeigt Mirella alles Notierte zum Bestätigen.
+@available(iOS 16.0, *)
+struct NotierMirellaIntent: AppIntent {
+    static let title: LocalizedStringResource = "Für Mirella notieren"
+    static let description = IntentDescription("Siri notiert es, ohne Mirella zu öffnen. Beim nächsten Öffnen zeigt Mirella alles zum Bestätigen.")
+    static let openAppWhenRun: Bool = false
+
+    @Parameter(title: "Was soll Mirella sich merken?", requestValueDialog: "Was soll ich für Mirella notieren?")
+    var text: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        MirellaIntentBox.put(text)
+        return .result(dialog: "Notiert. Mirella zeigt es dir beim nächsten Öffnen.")
+    }
+}
+
 @available(iOS 16.0, *)
 struct MirellaShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: SagMirellaIntent(),
-            phrases: ["Sag \(.applicationName)", "Sag \(.applicationName) etwas", "Neue Aufgabe in \(.applicationName)", "Merk dir etwas in \(.applicationName)"],
+            phrases: ["Sag \(.applicationName)", "Sag \(.applicationName) etwas", "Neue Aufgabe in \(.applicationName)"],
             shortTitle: "Sag Mirella",
             systemImageName: "mic.fill"
+        )
+        AppShortcut(
+            intent: NotierMirellaIntent(),
+            phrases: ["Notier für \(.applicationName)", "Notiere für \(.applicationName)", "Schreib in \(.applicationName)", "Merk dir etwas in \(.applicationName)", "Für \(.applicationName) notieren"],
+            shortTitle: "Für Mirella notieren",
+            systemImageName: "text.badge.plus"
         )
     }
 }

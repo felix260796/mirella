@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <!-- Schutzregel: Skripte nur aus der App selbst, Verbindungen nur zu den Diensten, die Mirella wirklich nutzt -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' capacitor:; script-src 'self' capacitor: 'wasm-unsafe-eval'; style-src 'self' capacitor: 'unsafe-inline'; img-src 'self' capacitor: data: blob: https://felix260796.github.io; font-src 'self' capacitor: data:; media-src 'self' capacitor: blob: data:; connect-src 'self' capacitor: blob: data: https://xcanrhlwcopamhnmmlja.supabase.co https://api.anthropic.com https://routes.googleapis.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://photon.komoot.io https://router.project-osrm.org https://routing.openstreetmap.de https://felix260796.github.io; frame-src 'self' capacitor: blob: data: https://felix260796.github.io; worker-src 'self' capacitor: blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' capacitor:; script-src 'self' capacitor: 'wasm-unsafe-eval'; style-src 'self' capacitor: 'unsafe-inline'; img-src 'self' capacitor: data: blob: https://felix260796.github.io; font-src 'self' capacitor: data:; media-src 'self' capacitor: blob: data:; connect-src 'self' capacitor: blob: data: https://xcanrhlwcopamhnmmlja.supabase.co https://api.anthropic.com https://routes.googleapis.com https://apis.deutschebahn.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://photon.komoot.io https://router.project-osrm.org https://routing.openstreetmap.de https://felix260796.github.io; frame-src 'self' capacitor: blob: data: https://felix260796.github.io; worker-src 'self' capacitor: blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -14,8 +14,8 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./app-icon-180.png">
 <link rel="icon" type="image/svg+xml" href="./logo-final.svg">
 <title>Mirella</title>
-<link rel="stylesheet" href="./style.css?v=34">
-<link rel="stylesheet" href="./farbe.css?v=34">
+<link rel="stylesheet" href="./style.css?v=35">
+<link rel="stylesheet" href="./farbe.css?v=35">
 </head>
 <body>
 <div class="phone" id="phone">
@@ -44,18 +44,19 @@
 <input type="file" id="f-shopimg" accept="image/*" hidden>
 <input type="file" id="f-avatar" accept="image/*" hidden>
 <input type="file" id="f-vcf" accept=".vcf,text/vcard,text/x-vcard" hidden>
-<script src="./logik.js?v=34"></script>
-<script src="./app.js?v=34"></script>
-<script src="./bereiche.js?v=34"></script>
-<script src="./scan.js?v=34"></script>
-<script src="./wecker.js?v=34"></script>
-<script src="./suche.js?v=34"></script>
-<script src="./ki.js?v=34"></script>
-<script src="./auswertung.js?v=34"></script>
-<script src="./export.js?v=34"></script>
-<script src="./wetter.js?v=34"></script>
-<script src="./viewer.js?v=34"></script>
-<script src="./sync.js?v=34"></script>
-<script src="./native.js?v=34"></script>
+<script src="./logik.js?v=35"></script>
+<script src="./app.js?v=35"></script>
+<script src="./bereiche.js?v=35"></script>
+<script src="./scan.js?v=35"></script>
+<script src="./wecker.js?v=35"></script>
+<script src="./suche.js?v=35"></script>
+<script src="./ki.js?v=35"></script>
+<script src="./auswertung.js?v=35"></script>
+<script src="./export.js?v=35"></script>
+<script src="./wetter.js?v=35"></script>
+<script src="./bahn.js?v=35"></script>
+<script src="./viewer.js?v=35"></script>
+<script src="./sync.js?v=35"></script>
+<script src="./native.js?v=35"></script>
 </body>
 </html>

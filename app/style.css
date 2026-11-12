@@ -687,3 +687,33 @@ details.how>.hint{margin-top:8px}
 /* Links aus der Notiz an der Aufgabe (z. B. Bestellen) */
 .tlinks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .tlinks .tlink{text-decoration:none;font-size:13px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink);background:var(--surface-2)}
+
+/* Wecker: zwei Knöpfe untereinander */
+.wnew{display:grid;gap:8px;margin-bottom:12px}
+.wnewbtn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border-radius:14px;border:0;background:var(--ink,#111);color:#fff;font:inherit;cursor:pointer}
+.wnewbtn b{display:block;font-size:16px}
+.wnewbtn small{display:block;font-size:13px;opacity:.8;margin-top:2px}
+.wnewbtn .wic{flex:none;width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center}
+/* Kalender-Auswahl: Häkchen und Kreuz */
+.calmark{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;margin-left:8px}
+.calmark.on{background:#1f8a4c;color:#fff}
+.calmark.off{background:transparent;color:#b3261e;border:2px solid #e3b9b5}
+/* Kontakte: kleiner Filter-Knopf */
+.pfilt{display:flex;gap:6px;align-items:center;margin:0 0 8px}
+.pfiltbtn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink)}
+.pfiltbtn[aria-expanded="true"]{background:var(--ink,#111);color:#fff;border-color:transparent}
+.pfiltx{font:inherit;font-size:13px;width:30px;height:30px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink-2)}
+
+/* Bahn: Abfahrten */
+.bst{padding:12px 14px;margin-bottom:10px}
+.bzug{display:grid;grid-template-columns:62px 58px 1fr auto;gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)}
+.bzug:first-child{border-top:0}
+.bzug .bzt b{display:block;font-size:16px}
+.bzug .bzt small{display:block;font-size:12px;font-weight:600}
+.bzug small.late{color:#b3261e}.bzug small.warn{color:#a15c00}.bzug small.ok{color:#1f8a4c}
+.bzug .bzl{font-weight:700;font-size:14px}
+.bzug .bzz{font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bzug .bzg{font-size:13px;color:var(--ink-2);white-space:nowrap}
+.bzug .bzg.neu{color:#b3261e;font-weight:700}
+.bzug.aus .bzz,.bzug.aus .bzl{text-decoration:line-through;opacity:.6}
+.bsth{font-weight:700;font-size:16px;margin:0 0 6px}.bsth small{font-weight:500;color:var(--ink-2);font-size:13px}

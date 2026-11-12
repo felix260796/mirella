@@ -104,7 +104,7 @@ if (typeof window !== "undefined") {
     const aufgaben = [["Aufgabe", "Status", "erledigt am", "Datum", "Uhrzeit", "Wiederholen", "Priorität", "Bereich", "Nerv-Modus", "angelegt", "automatisch von Mirella", "Notiz und Links"]]
       .concat(S.todos.filter(t => t.list === "todo").map(t => [t.t, t.done ? "erledigt" : "offen", de(t.doneAt), de(t.date), t.time || "", t.rep && t.rep !== "nie" ? t.rep : "", prio(t), (areaById(t.area) || {}).n || "", t.nerv ? "an" : "", de(t.created), t.auto ? "ja" : "", t.note || ""]));
     const einkauf = [["Artikel", "Menge", "Warengruppe", "Status", "gekauft am", "angelegt"]]
-      .concat(S.todos.filter(t => t.list === "einkauf").map(t => [t.t, L.qtyLabel(t), L.shopGroup(t.t).n, t.arch ? "gekauft (Verlauf)" : t.done ? "im Wagen" : "offen", de(t.doneAt), de(t.created)]));
+      .concat(S.todos.filter(t => t.list === "einkauf").map(t => [t.t, L.qtyLabel(t), L.shopGroup(t.t, S.settings.shopGrp).n, t.arch ? "gekauft (Verlauf)" : t.done ? "im Wagen" : "offen", de(t.doneAt), de(t.created)]));
     const bereiche = [["Bereich", "Art", "Name", "Details", "Notiz", "Dokumente"]]
       .concat(S.items.map(it => { const K = KINDS[it.kind] || {}; return [(areaById(K.area) || {}).n || "", K.n || it.kind, kindTitle(it.kind, it), itemFields(it), it.note || "", S.docs.filter(d => d.ref === it.id).length || ""]; }));
     const ausgaben = [["Datum", "Betrag €", "Wo / wofür", "Kategorie", "Beleg-Datei"]].concat(S.expenses.slice().sort((a, b) => a.d < b.d ? 1 : -1).map(e => [de(e.d), +e.amount || 0, e.shop || "", e.cat || "", e._file || ""]));

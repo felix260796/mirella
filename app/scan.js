@@ -268,7 +268,7 @@ async function shopPhotoRead(file) {
   if (!$("#sz-list")) return;
   if (!shopScan.length) { $("#sz-state").textContent = "Ich konnte keine Artikel erkennen. Am besten gerade und hell fotografieren, eine Sache pro Zeile."; return; }
   $("#sz-state").textContent = `Ich habe ${shopScan.length} Artikel erkannt. Haken weg bei allem, was falsch ist:`;
-  $("#sz-list").innerHTML = shopScan.map((x, i) => `<label class="chk"><input type="checkbox" data-sz="${i}" checked><span>${x.qty ? `<b class="qty">${esc(L.qtyLabel(x))}</b> ` : ""}${esc(x.t)} <small style="color:var(--ink-3)">${esc(L.shopGroup(x.t).n)}</small></span></label>`).join("") + `<button class="btn pri" data-act="shopscanadd" style="width:100%;margin-top:10px">Auf die Einkaufsliste</button>`;
+  $("#sz-list").innerHTML = shopScan.map((x, i) => `<label class="chk"><input type="checkbox" data-sz="${i}" checked><span>${x.qty ? `<b class="qty">${esc(L.qtyLabel(x))}</b> ` : ""}${esc(x.t)} <small style="color:var(--ink-3)">${esc(L.shopGroup(x.t, S.settings.shopGrp).n)}</small></span></label>`).join("") + `<button class="btn pri" data-act="shopscanadd" style="width:100%;margin-top:10px">Auf die Einkaufsliste</button>`;
 }
 Object.assign(ACT, {
   shopphoto: () => { const f = $("#f-shopimg"); f.value = ""; f.click(); },

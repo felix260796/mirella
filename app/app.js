@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.33";
+const VERSION = "0.33.1";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -118,11 +118,25 @@ function migrate() {
 /* Einmalig (Wunsch Felix 12.11.): Supplements als ganz normale tägliche To-dos mit Nerv-Modus.
    Läuft erst, wenn die Daten da sind, legt nichts doppelt an und kommt nicht wieder, wenn Felix sie löscht. */
 function suppTodosAnlegen() {
-  if (S.settings.suppTodos || S.people.length < 5) return false;
-  /* Mo–Fr isst Felix bis 12 Uhr nichts: Kreatin beim Rausgehen, der Rest zum Mittagessen. Am Wochenende alles zum Frühstück. */
-  const T = [["Kreatin nehmen, bevor du losgehst", "07:00", "Mo–Fr"], ["Multivitamin und Omega-3 zum Mittagessen", "12:00", "Mo–Fr"], ["Kreatin, Multivitamin und Omega-3 zum Frühstück", "09:00", "Sa+So"], ["Magnesium-Bisglycinat nehmen", "20:00", "täglich"]];
-  for (const [t, time, rep] of T) if (!S.todos.some(x => x.t.toLowerCase() === t.toLowerCase())) S.todos.push({ id: uid(), t, pid: "", list: "todo", done: false, created: today(), date: rep === "täglich" ? today() : repDay(today(), rep, true), time, trig: "zeit", rep, area: "gesund", nerv: true, prio: "", ort: "" });
-  S.settings.suppTodos = 1; save(); return true;
+  if ((+S.settings.suppTodos || 0) >= 3 || S.people.length < 5) return false;
+  /* [Text, Uhrzeit, Wiederholung, frühere Texte, Notiz mit Bestell-Links] – frühere Texte werden umbenannt statt doppelt angelegt.
+     Eine Notiz, die Felix schon selbst geändert hat, bleibt. */
+  /* Amazon zuerst (Felix bestellt am liebsten dort), darunter der Shop des Herstellers als Ausweich-Link */
+  const KP = "Kreatin-Pulver (Sunday Natural Creavitalis, 4–5 g) bei Amazon: https://www.amazon.de/s?k=Sunday+Natural+Kreatin+Creavitalis\nKreatin-Kapseln (für Reisen, 4 Kapseln = 4,34 g) bei Amazon: https://www.amazon.de/s?k=Sunday+Natural+Creatin+Monohydrat+Kapseln\nKreatin-Pulver bei Sunday: https://www.sunday.de/creatin-monohydrat-pulver-creavitalis.html\nKreatin-Kapseln bei Sunday: https://www.sunday.de/creatin-monohydrat-kapseln.html";
+  const MV = "Multivitamin (Sunday Natural All in One, One a Day) bei Amazon: https://www.amazon.de/s?k=Sunday+Natural+All+in+One+One+a+Day\nMultivitamin bei Sunday: https://www.sunday.de/multivitamin-essentials-one-a-day.html";
+  const OM = "Omega-3 (Norsan Kapseln) bei Amazon: https://www.amazon.de/s?k=Norsan+Omega-3+Kapseln\nOmega-3 bei Shop Apotheke: https://www.shop-apotheke.com/arzneimittel/13512730/norsan-omega-3-kapseln.htm";
+  const MG = "Magnesium (natural elements Magnesiumbisglycinat, 180 Kapseln) bei Amazon: https://www.amazon.de/dp/B07NS14648\nMagnesium bei Shop Apotheke: https://www.shop-apotheke.com/arzneimittel/upmCAL7UP/natural-elements-magnesiumbisglycinat.htm";
+  const T = [["Kreatin (3–5 g) vor dem Losgehen", "07:00", "Mo–Fr", ["Kreatin nehmen, bevor du losgehst"], KP],
+    ["Multivitamin (1) + Omega-3 (4)", "12:00", "Mo–Fr", ["Multivitamin und Omega-3 zum Mittagessen"], MV + "\n" + OM],
+    ["Kreatin (3–5 g) + Multivitamin (1) + Omega-3 (4)", "09:00", "Sa+So", ["Kreatin, Multivitamin und Omega-3 zum Frühstück"], KP + "\n" + MV + "\n" + OM],
+    ["Magnesium (2)", "20:00", "täglich", ["Magnesium-Bisglycinat nehmen"], MG]];
+  const low = x => String(x || "").toLowerCase();
+  for (const [t, time, rep, old, note] of T) {
+    const have = S.todos.find(x => [t, ...old].some(o => low(o) === low(x.t)));
+    if (have) { have.t = t; if (!have.note) have.note = note; continue; }
+    S.todos.push({ id: uid(), t, pid: "", list: "todo", done: false, created: today(), date: rep === "täglich" ? today() : repDay(today(), rep, true), time, trig: "zeit", rep, area: "gesund", nerv: true, prio: "", ort: "", note });
+  }
+  S.settings.suppTodos = 3; save(); return true;
 }
 function save() {
   for (const p of S.people) { if (p.tel && p.tel[0] !== "+") p.tel = telNice(p.tel); if (p.tels) for (const x of p.tels) if (x.n && x.n[0] !== "+") x.n = telNice(x.n); }
@@ -279,6 +293,19 @@ function stepRep(date, rep) {
   if (rep === "Mo–Fr" || rep === "Sa+So") return repDay(date, rep);
   return { "täglich": addDays(date, 1), "wöchentlich": addDays(date, 7), "alle 2 Wochen": addDays(date, 14), "monatlich": addMonths(date, 1), "vierteljährlich": addMonths(date, 3), "jährlich": addMonths(date, 12) }[rep] || null;
 }
+/* Links aus der Notiz einer Aufgabe: „Bezeichnung: https://…“ wird zu einem antippbaren Knopf */
+function noteLinks(note) {
+  const out = [];
+  for (const line of String(note || "").split(/\n/)) {
+    const m = line.match(/https?:\/\/[^\s<>"]+/); if (!m) continue;
+    let lab = line.slice(0, m.index).replace(/[:\-–\s]+$/, "").trim();
+    if (!lab) { try { lab = new URL(m[0]).hostname.replace(/^www\./, ""); } catch (_) { lab = "Link"; } }
+    out.push({ u: m[0], l: lab });
+  }
+  return out;
+}
+const linkShort = l => { const m = l.match(/^(.*?)\s*\(.*\)\s*(bei .*)$/); return m ? m[1] + " " + m[2] : l; };
+const linkBtns = t => { const all = noteLinks(t.note).map(x => Object.assign(x, { l: linkShort(x.l) })), amz = all.filter(x => /amazon\./.test(x.u)); return (amz.length ? amz : all).slice(0, 4); };
 function todoMeta(t) {
   const parts = [];
   if (t.trig === "verlassen") parts.push("bevor du losgehst");
@@ -343,7 +370,7 @@ function personCard(p, withCall) {
 function todoRow(t) {
   const pr = !t.done && prioOf(t), shop = t.list === "einkauf", q = shop ? L.qtyLabel(t) : "";
   const right = shop ? (t.done ? "" : `<span class="qbtns"><button class="mini" data-act="qty" data-id="${t.id}" data-n="-1" aria-label="weniger">−</button><button class="mini" data-act="qty" data-id="${t.id}" data-n="1" aria-label="mehr">+</button></span>`) : todoPersonBtn(t);
-  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}${t.ort && !t.done ? `<div class="meta">📍 ${esc(t.ort)}${t.los ? " · los um " + esc(t.los) + " (" + t.fahrt + " Min.)" : t.tripErr && t.time ? " · Fahrzeit fehlt: " + esc(t.tripErr) : ""}</div>` : ""}</div>${t.ort && !t.done ? routeBtn(t.ort) : ""}${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
+  return `<div class="todo ${t.done ? "done" : ""}${pr ? " prio" : ""}" data-swipe="deltodo" data-id="${t.id}"${pr ? ` style="--pc:${pr[2]}"` : ""}><button class="box" role="checkbox" aria-checked="${!!t.done}" aria-label="${esc(t.t)} abhaken" data-act="toggle" data-id="${t.id}"></button><div role="button" tabindex="0" data-act="edittodo" data-id="${t.id}"><div class="tt">${q ? `<b class="qty">${esc(q)}</b> ` : ""}${esc(t.t)}${pr ? ` <span class="ppill">${pr[1]}</span>` : ""}</div>${todoMeta(t) ? `<div class="meta">${esc(todoMeta(t))}</div>` : ""}${!t.done && noteLinks(t.note).length ? `<div class="tlinks">${linkBtns(t).map(x => `<a class="mini tlink" data-act="tlink" href="${esc(x.u)}" rel="noopener">🛒 ${esc(x.l.length > 34 ? x.l.slice(0, 33) + "…" : x.l)}</a>`).join("")}</div>` : ""}${t.ort && !t.done ? `<div class="meta">📍 ${esc(t.ort)}${t.los ? " · los um " + esc(t.los) + " (" + t.fahrt + " Min.)" : t.tripErr && t.time ? " · Fahrzeit fehlt: " + esc(t.tripErr) : ""}</div>` : ""}</div>${t.ort && !t.done ? routeBtn(t.ort) : ""}${right}<button class="del" data-act="deltodo" data-id="${t.id}" aria-label="${esc(t.t)} löschen">✕</button></div>`;
 }
 /* Routen-Symbol: öffnet Apple Karten mit der Route vom jetzigen Standort zur Adresse */
 const ROUTE_IC = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12z"/><path d="M8.5 13.5v-2a1 1 0 0 1 1-1H15"/><path d="m13 8.5 2 2-2 2"/></svg>';
@@ -974,6 +1001,7 @@ function todoForm(t, preset = {}) {
   <div class="fgrid"><div class="fld"><label for="a-rep">Wiederholen</label><select id="a-rep">${REPS.map(r => `<option${r === (v.rep || "nie") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
   <div class="fld"><label for="a-area">Bereich</label><select id="a-area"><option value="">kein Bereich</option>${AREAS.map(a => `<option value="${a.id}"${a.id === v.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div></div>
   <label class="tgl big"><input type="checkbox" id="a-nerv"${v.nerv ? " checked" : ""}><span><b>Nerv-Modus</b><small>meldet sich, bis es erledigt ist. Zum Ausschalten Haken wegnehmen.</small></span></label>
+  <div class="fld"><label for="a-note">Notiz und Links (z. B. Produkt und wo du es bestellst)</label><textarea id="a-note" rows="3" placeholder="z. B. Pulver: https://…">${esc(v.note || "")}</textarea></div>
   ${t ? todoDocs(t) : ""}
   ${t && t.date ? `<button class="btn" data-act="ics" data-id="${t.id}" style="width:100%;margin-top:8px">⏰ Zusätzlich als Wecker in den iPhone-Kalender</button>` : ""}
   <div class="row2">${t ? `<button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savetodo" data-id="${t ? t.id : ""}">Speichern</button></div></div>`,
@@ -986,7 +1014,7 @@ function todoDocs(t) {
 function saveTodo(id) {
   const w = $("#a-what").value.trim(); if (!w) { toast("Bitte eintragen, was zu tun ist"); return; }
   const trig = $("#a-trig").value;
-  const data = { t: w, trig, date: trig === "verlassen" ? "" : $("#a-date").value, time: trig === "verlassen" ? "" : $("#a-time").value, rep: $("#a-rep").value, area: $("#a-area").value, nerv: $("#a-nerv").checked, prio: $("#a-prio").value ? +$("#a-prio").value : "", ort: $("#a-ort") ? ($("#a-ort").dataset.label || $("#a-ort").value.trim()) : "" };
+  const data = { t: w, trig, date: trig === "verlassen" ? "" : $("#a-date").value, time: trig === "verlassen" ? "" : $("#a-time").value, rep: $("#a-rep").value, area: $("#a-area").value, nerv: $("#a-nerv").checked, prio: $("#a-prio").value ? +$("#a-prio").value : "", ort: $("#a-ort") ? ($("#a-ort").dataset.label || $("#a-ort").value.trim()) : "", note: $("#a-note") ? $("#a-note").value.trim() : "" };
   if (data.rep !== "nie" && !data.date && trig !== "verlassen") data.date = today();
   if (id) Object.assign(S.todos.find(x => x.id === id), data);
   else S.todos.push(Object.assign({ id: uid(), list: "todo", done: false, created: today() }, data));
@@ -1865,6 +1893,7 @@ const ACT = {
   import: () => { const f = $("#f-import"); f.value = ""; f.click(); },
   wipe: async () => { if (!ask("Wirklich ALLE Daten auf diesem Gerät löschen? Das geht nicht rückgängig.") || !ask("Ganz sicher? Kontakte, Aufgaben, Dokumente und Fotos sind dann weg.")) return; S = blank(); save(); await photoClear(); view = "heute"; render(); toast("Alles gelöscht"); }
 };
+ACT.tlink = () => { };
 /* Knöpfe am Schlüssel-Feld */
 ACT.keypaste = async el => {
   const inp = document.getElementById(el.dataset.for); if (!inp) return;
@@ -1892,6 +1921,7 @@ document.addEventListener("click", e => {
   if (a && Date.now() - swipeAt < 450 && !a.classList.contains("swdel")) { e.preventDefault(); return; } // gerade gewischt: kein Antippen auslösen
   if (a && ACT[a.dataset.act]) {
     if (a.tagName === "INPUT" && a.type === "checkbox") return; // über "change"
+    if (a.dataset.act === "tlink") { e.stopPropagation(); return; } // Link normal öffnen, Aufgabe nicht bearbeiten
     if (a.dataset.act === "dial") { e.stopPropagation(); pendingCall = a.dataset.id; closeSheet(); return; } // tel:-Link normal öffnen
     e.preventDefault(); ACT[a.dataset.act](a, e);
   }

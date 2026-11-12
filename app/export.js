@@ -101,8 +101,8 @@ if (typeof window !== "undefined") {
           (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1).map(c => de(c.d) + (c.ok ? " erreicht" : " nicht erreicht")).join("\n"), (p.ask || []).filter(a => !a.done).map(a => a.t).join("\n"), p.gift ? "ja" : "", p.arch ? "archiviert" : ""];
       }));
     const prio = t => (PRIOS.find(p => p[0] === +t.prio) || [0, ""])[1];
-    const aufgaben = [["Aufgabe", "Status", "erledigt am", "Datum", "Uhrzeit", "Wiederholen", "Priorität", "Bereich", "Nerv-Modus", "angelegt", "automatisch von Mirella"]]
-      .concat(S.todos.filter(t => t.list === "todo").map(t => [t.t, t.done ? "erledigt" : "offen", de(t.doneAt), de(t.date), t.time || "", t.rep && t.rep !== "nie" ? t.rep : "", prio(t), (areaById(t.area) || {}).n || "", t.nerv ? "an" : "", de(t.created), t.auto ? "ja" : ""]));
+    const aufgaben = [["Aufgabe", "Status", "erledigt am", "Datum", "Uhrzeit", "Wiederholen", "Priorität", "Bereich", "Nerv-Modus", "angelegt", "automatisch von Mirella", "Notiz und Links"]]
+      .concat(S.todos.filter(t => t.list === "todo").map(t => [t.t, t.done ? "erledigt" : "offen", de(t.doneAt), de(t.date), t.time || "", t.rep && t.rep !== "nie" ? t.rep : "", prio(t), (areaById(t.area) || {}).n || "", t.nerv ? "an" : "", de(t.created), t.auto ? "ja" : "", t.note || ""]));
     const einkauf = [["Artikel", "Menge", "Warengruppe", "Status", "gekauft am", "angelegt"]]
       .concat(S.todos.filter(t => t.list === "einkauf").map(t => [t.t, L.qtyLabel(t), L.shopGroup(t.t).n, t.arch ? "gekauft (Verlauf)" : t.done ? "im Wagen" : "offen", de(t.doneAt), de(t.created)]));
     const bereiche = [["Bereich", "Art", "Name", "Details", "Notiz", "Dokumente"]]

@@ -683,3 +683,7 @@ details.how>.hint{margin-top:8px}
 .keyfld .keybtns{display:flex;gap:8px;margin-top:4px}
 .keyfld .keybtns .btn{flex:1;min-height:44px}
 .keyfld .keynote{font-size:13px;color:var(--ink-2)}
+
+/* Links aus der Notiz an der Aufgabe (z. B. Bestellen) */
+.tlinks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tlinks .tlink{text-decoration:none;font-size:13px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink);background:var(--surface-2)}

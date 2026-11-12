@@ -293,7 +293,7 @@ function Run-Backup {
 
     # Aufgaben und Einkauf
     $auf = New-Object System.Collections.ArrayList
-    [void]$auf.Add(@('Aufgabe', 'Status', 'erledigt am', 'Datum', 'Uhrzeit', 'Wiederholen', 'Priorität', 'Bereich', 'Nerv-Modus', 'angelegt', 'automatisch von Mirella'))
+    [void]$auf.Add(@('Aufgabe', 'Status', 'erledigt am', 'Datum', 'Uhrzeit', 'Wiederholen', 'Priorität', 'Bereich', 'Nerv-Modus', 'angelegt', 'automatisch von Mirella', 'Notiz und Links'))
     $ein = New-Object System.Collections.ArrayList
     [void]$ein.Add(@('Artikel', 'Menge', 'Status', 'gekauft am', 'angelegt'))
     foreach ($t in $todos) {
@@ -302,7 +302,7 @@ function Run-Backup {
         [void]$ein.Add(@((S (G $t 't')), $q, $(if (G $t 'arch') { 'gekauft (Verlauf)' } elseif (G $t 'done') { 'im Wagen' } else { 'offen' }), (De (G $t 'doneAt')), (De (G $t 'created'))))
       } elseif ((G $t 'list') -eq 'todo' -or -not (G $t 'list')) {
         $rep = S (G $t 'rep'); if ($rep -eq 'nie') { $rep = '' }
-        [void]$auf.Add(@((S (G $t 't')), $(if (G $t 'done') { 'erledigt' } else { 'offen' }), (De (G $t 'doneAt')), (De (G $t 'date')), (S (G $t 'time')), $rep, (S $PRIOS[(S (G $t 'prio'))]), $(if (G $t 'area') { AreaName (G $t 'area') } else { '' }), $(if (G $t 'nerv') { 'an' } else { '' }), (De (G $t 'created')), $(if (G $t 'auto') { 'ja' } else { '' })))
+        [void]$auf.Add(@((S (G $t 't')), $(if (G $t 'done') { 'erledigt' } else { 'offen' }), (De (G $t 'doneAt')), (De (G $t 'date')), (S (G $t 'time')), $rep, (S $PRIOS[(S (G $t 'prio'))]), $(if (G $t 'area') { AreaName (G $t 'area') } else { '' }), $(if (G $t 'nerv') { 'an' } else { '' }), (De (G $t 'created')), $(if (G $t 'auto') { 'ja' } else { '' }), (S (G $t 'note'))))
       }
     }
 

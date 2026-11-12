@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.31";
+const VERSION = "0.32";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -297,6 +297,7 @@ function addShop(t, qty, unit) {
 function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const w1 = new Date(d.getFullYear(), 0, 4, 12); return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
 
 /* ---------- Zustand ---------- */
+let akteOpen = {}, akteOpenFor = null;
 let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false, showShopHist = 0;
 { const t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); selDate = today(); }
 
@@ -404,7 +405,7 @@ const R = {
   },
   menschen() {
     const ql = q.trim().toLowerCase();
-    let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "") + " " + (p.woher || "")).toLowerCase().includes(ql)));
+    let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "") + " " + (p.woher || "")).toLowerCase().includes(ql) || fuzzyHas(fullName(p) + " " + (p.nick || ""), ql)));
     const grps = S.groups.filter(g => S.people.some(p => p.group === g));
     const rank = p => { const d = nextDue(p); return d || "9999"; }, az = (S.settings.peopleSort || "az") === "az";
     const key = p => (p.last || p.first || "").trim(), letter = p => { const c = key(p).normalize("NFD").replace(/[̀-ͯ]/g, "").charAt(0).toUpperCase(); return /[A-Z]/.test(c) ? c : "#"; };
@@ -424,7 +425,13 @@ const R = {
     const p = S.people.find(x => x.id === cur); if (!p) { view = "menschen"; return R.menschen(); }
     if (allCallsFor !== p.id) showAllCalls = false;
     const st = callState(p), due = nextDue(p), nb = nextBirthday(p);
-    const list = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="emptyline">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
+    if (akteOpenFor !== p.id) { akteOpenFor = p.id; akteOpen = {}; }
+    const list = (h, k, emptyT, ph) => {
+      const l = p[k] || [], act = k === "ask" ? l.filter(x => !x.done) : l, last = k === "notes" ? act[0] : act[act.length - 1];
+      if (!akteOpen[k]) return `<button class="aline" data-act="akteopen" data-k="${k}"><span class="at"><b>${h}</b><span class="an">${act.length || ""}</span></span><span class="as">${last ? esc(last.t) : emptyT}</span><span class="chev">▸</span></button>`;
+      return listFull(h, k, emptyT, ph);
+    };
+    const listFull = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4><button class="mini" data-act="akteopen" data-k="${k}">Zuklappen</button></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="emptyline">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
     const calls = (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1);
     return `${subtop("Kontakte", "go\" data-v=\"menschen")}
     <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>${p.woher ? `<p>Kennen uns: ${esc(p.woher)}</p>` : ""}
@@ -434,9 +441,9 @@ const R = {
     ${p.death ? "" : p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
     ${bdayBlock(p, nb)}
     ${kinBlock(p)}
-    ${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
+    <div class="alines">${list("Offene Nachfragen", "ask", "Nichts offen", "z. B. fragen, wie die Reha läuft")}
     ${list("Notizen", "notes", "Noch keine Notizen", "Neue Notiz")}
-    ${list("Geschenkideen", "gifts", "Noch keine Ideen", "z. B. Kochkurs")}
+    ${list("Geschenkideen", "gifts", "Noch keine Ideen", "z. B. Kochkurs")}</div>
     <div class="block"><div class="bh"><h4>Zuletzt angerufen</h4><span class="label">${calls.length ? calls.length + (calls.length === 1 ? " Anruf" : " Anrufe") : ""}</span></div>${calls.length ? (showAllCalls ? calls : calls.slice(0, 3)).map(c => `<div class="listrow"><span class="grow">${esc(fmtDate(c.d))}${c.t ? " · " + esc(c.t) : ""}<small>${c.ok ? "erreicht" : "nicht erreicht"} · ${esc(agoText(c.d))}</small></span><button class="rowdel" data-act="delcall" data-id="${c.id}" aria-label="löschen">✕</button></div>`).join("") + (calls.length > 3 ? `<button class="mini" data-act="allcalls" data-id="${p.id}" style="margin-top:8px">${showAllCalls ? "Nur die letzten 3" : "Alle anzeigen (" + calls.length + ")"}</button>` : "") : '<div class="emptyline">Noch kein Anruf eingetragen</div>'}</div>
     ${contactBlock(p)}`;
   },
@@ -774,7 +781,7 @@ function intlTel(t) { let n = (t || "").replace(/[^\d+]/g, ""); if (n.startsWith
 function contactBlock(p) {
   const rows = [];
   if (p.tel) rows.push(["Telefon", esc(p.tel), `<a class="mini" href="tel:${esc(p.tel.replace(/[^\d+]/g, ""))}">Anrufen</a>`]);
-  if (p.email) rows.push(["E-Mail", esc(p.email), `<a class="mini" href="mailto:${esc(p.email)}">Schreiben</a>`]);
+  for (const m of [p.email, ...(p.emails || [])].filter(Boolean)) rows.push(["E-Mail", esc(m), `<a class="mini" href="mailto:${esc(m)}">Schreiben</a>`]);
   if (p.addr) rows.push(["Adresse", esc(p.addr), routeBtn(p.addr, "Route")]);
   if (p.nick) rows.push(["Spitzname", esc(p.nick), ""]);
   if (!rows.length) return "";
@@ -1026,6 +1033,24 @@ function shopExtras(open) {
   ${S.shopTpl.length ? `<div class="chips">${S.shopTpl.map(t => `<span class="tplchip"><button class="chip2" data-act="usetpl" data-id="${t.id}">🧺 ${esc(t.n)} (${t.items.length})</button><button class="tplx" data-act="deltpl" data-id="${t.id}" aria-label="Vorlage ${esc(t.n)} löschen">✕</button></span>`).join("")}</div>` : '<p class="hint" style="margin-top:0">Lege z. B. „Wocheneinkauf“ oder „Grillen“ an: einmal die Liste füllen, dann als Vorlage speichern. Ein Tipp holt später alles wieder drauf.</p>'}
   ${open.length ? `<button class="btn" data-act="savetpl" style="width:100%;margin-top:6px">Aktuelle Liste als Vorlage speichern</button>` : ""}`;
 }
+/* Bausteine für das Kontakt-Formular */
+const telArt = (id, val, cls) => `<select ${id ? `id="${id}"` : ""} class="${cls || ""}" aria-label="Art der Nummer"><option value="">Art</option>${TELL.map(x => `<option${val === x ? " selected" : ""}>${x}</option>`).join("")}</select>`;
+const telRow = (n, l) => `<div class="xrow"><input class="telx-n" type="tel" inputmode="tel" value="${esc(n || "")}" placeholder="weitere Nummer" autocomplete="off" aria-label="Weitere Nummer">${telArt("", l || "", "telx-l")}<button type="button" class="xdel" data-act="rowdel" aria-label="Diese Nummer entfernen">✕</button></div>`;
+const mailRow = m => `<div class="xrow mail"><input class="mailx" type="email" inputmode="email" autocapitalize="off" value="${esc(m || "")}" placeholder="weitere E-Mail" autocomplete="off" aria-label="Weitere E-Mail"><button type="button" class="xdel" data-act="rowdel" aria-label="Diese E-Mail entfernen">✕</button></div>`;
+const entryHint = (l, one, many) => (l || []).length ? `<small class="fhint">Schon da: ${l.length === 1 ? "1 " + one : l.length + " " + many}. Die stehen in der Akte.</small>` : "";
+/* Ein kompaktes Feld: Antippen öffnet die Auswahl, „Eigene …“ macht daraus ein Textfeld. Der Wert steht immer im Eingabefeld mit der Kennung id. */
+function pickField(id, opts, val, none) {
+  const list = [...new Set(opts.concat(val ? [val] : []))];
+  return `<select id="${id}-s" data-pick="${id}"><option value="">${esc(none)}</option>${list.map(o => `<option value="${esc(o)}"${o === val ? " selected" : ""}>${esc(o)}</option>`).join("")}<option value="__own">Eigene …</option></select><input id="${id}" value="${esc(val)}" placeholder="Eigene Angabe" autocomplete="off" hidden style="margin-top:6px">`;
+}
+/* nach dem Wiederherstellen von Eingaben: Auswahl und Textfeld wieder passend zeigen */
+function pickSync() { for (const sl of $$("select[data-pick]")) { const i = document.getElementById(sl.dataset.pick); if (!i) continue; if (sl.value === "__own" && !i.value) { i.hidden = false; continue; } if ([...sl.options].some(o => o.value === i.value)) { sl.value = i.value; i.hidden = true; } else { sl.value = "__own"; i.hidden = false; } } }
+document.addEventListener("change", e => {
+  const t = e.target; if (!t || !t.dataset || !t.dataset.pick) return;
+  const i = document.getElementById(t.dataset.pick); if (!i) return;
+  if (t.value === "__own") { i.hidden = false; i.value = ""; i.focus(); } else { i.hidden = true; i.value = t.value; }
+  i.dispatchEvent(new Event("input", { bubbles: true }));
+});
 /* Woher kenne ich jemanden: feste Auswahl, damit sich danach suchen und filtern lässt. Eigene Angaben kommen dazu. */
 const WOHER = ["Schule", "Studium", "Ausbildung", "Arbeit", "Geschäftlich", "Verein", "Sport", "Nachbarschaft", "Familie", "Freundeskreis", "Urlaub", "Über die Kinder"];
 const woherAll = () => [...new Set(WOHER.concat(S.people.map(x => (x.woher || "").trim()).filter(Boolean)))];
@@ -1034,36 +1059,33 @@ function personForm(p) {
   const v = p || { first: "", last: "", tel: "", email: "", cyc: "monatlich", group: "Freunde", bday: "", gift: false, addr: "", nick: "" };
   const tl = L.splitTel(v.tel);
   openSheet(`<div data-draft="person:${p ? p.id : "new"}"><p class="stitle">${p ? "Kontakt bearbeiten" : "Neuer Kontakt"}</p>
-  <div class="fld"><label for="c-first">Vorname</label><input id="c-first" value="${esc(v.first)}" autocomplete="off" autocapitalize="words"></div>
-  <div class="fld"><label for="c-last">Nachname</label><input id="c-last" value="${esc(v.last)}" autocomplete="off" autocapitalize="words"></div>
-  <div class="fld"><label for="c-tel">Telefon</label><div class="telrow"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678"></div><div class="fwarn" id="w-tel" hidden></div></div>
-  ${(() => { const t2 = (v.tels || [])[0] || null, open = !!t2, more = Math.max(0, (v.tels || []).length - 1); return `<button type="button" class="mini" id="c-tel2btn" data-act="tel2show" style="margin:-4px 0 10px"${open ? " hidden" : ""}>+ weitere Nummer</button>
-  <div id="c-tel2box"${open ? "" : " hidden"}>
-  <div class="fld"><label for="c-tell">Die Nummer oben ist</label><select id="c-tell"><option value="">(keine Angabe)</option>${TELL.map(x => `<option${v.telL === x ? " selected" : ""}>${x}</option>`).join("")}</select></div>
-  <div class="fgrid"><div class="fld"><label for="c-tel2">Weitere Nummer</label><input id="c-tel2" type="tel" inputmode="tel" value="${esc((t2 || {}).n || "")}" placeholder="0711 1234567" autocomplete="off"></div><div class="fld"><label for="c-tel2l">Das ist</label><select id="c-tel2l">${TELL.map(x => `<option${((t2 || {}).l || "Geschäft") === x ? " selected" : ""}>${x}</option>`).join("")}</select></div></div>
-  ${more ? `<p class="swipehint" style="text-align:left;margin:-4px 0 10px">Dazu ${more === 1 ? "1 weitere Nummer" : more + " weitere Nummern"}: ${esc((v.tels || []).slice(1).map(x => x.n + (x.l ? " (" + x.l + ")" : "")).join(", "))}</p>` : ""}</div>`; })()}
-  <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"><div class="fwarn" id="w-mail" hidden></div></div>
-  <div class="fld"><label>Gruppe</label><div class="chips" id="c-grps">${grpChips(v.group)}</div><input type="hidden" id="c-grp" value="${esc(v.group || "")}"></div>
-  <div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}${c === "nie" ? " (nur Geburtstag merken)" : ""}</option>`).join("")}</select></div>
-  <div class="fld"><label for="c-lunch">Treffen vereinbaren (erinnert dich, euch wieder zu verabreden)</label><select id="c-lunch"><option value="">nie</option>${Object.keys(LUNCH).map(c => `<option value="${c}"${c === v.lunch ? " selected" : ""}>${c}</option>`).join("")}</select></div>
+  <div class="fgrid"><div class="fld"><label for="c-first">Vorname</label><input id="c-first" value="${esc(v.first)}" autocomplete="off" autocapitalize="words"></div><div class="fld"><label for="c-last">Nachname</label><input id="c-last" value="${esc(v.last)}" autocomplete="off" autocapitalize="words"></div></div>
+  <div class="fld"><label for="c-tel">Telefon</label><div class="telrow tel3"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678">${telArt("c-tell", v.telL || "")}</div><div class="fwarn" id="w-tel" hidden></div>
+  <div id="c-tels">${(v.tels || []).map(x => telRow(x.n, x.l)).join("")}</div><button type="button" class="mini plusline" data-act="teladd">+ weitere Nummer</button></div>
+  <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"><div class="fwarn" id="w-mail" hidden></div>
+  <div id="c-mails">${(v.emails || []).map(mailRow).join("")}</div><button type="button" class="mini plusline" data-act="mailadd">+ weitere E-Mail</button></div>
+  <div class="fgrid"><div class="fld"><label for="c-grp-s">Gruppe</label>${pickField("c-grp", S.groups, v.group || "", "keine")}</div><div class="fld"><label for="c-woher-s">Woher kenne ich ihn/sie?</label>${pickField("c-woher", woherAll(), v.woher || "", "keine Angabe")}</div></div>
+  <div class="fgrid"><div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}</option>`).join("")}</select></div><div class="fld"><label for="c-lunch">Treffen vereinbaren</label><select id="c-lunch"><option value="">nie</option>${Object.keys(LUNCH).map(c => `<option value="${c}"${c === v.lunch ? " selected" : ""}>${c}</option>`).join("")}</select></div></div>
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.bday))}" autocomplete="off"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
-  <div class="fld"><label for="c-woher">Woher kenne ich ihn/sie?</label><input id="c-woher" value="${esc(v.woher || "")}" placeholder="antippen oder selbst schreiben" autocomplete="off">${woherChips("c-woher", v.woher || "")}</div>
-  ${p && p.parent || !p || !(p.tel) ? `<div class="fld"><label for="c-parent">Kind von (nur bei Kindern)</label><input id="c-parent" list="c-parent-l" value="${esc(p && p.parent ? fullName(S.people.find(x => x.id === p.parent) || {}) : "")}" placeholder="Name des Elternteils, sonst leer" autocomplete="off"><datalist id="c-parent-l">${S.people.filter(x => !x.arch && !x.parent && (!p || x.id !== p.id)).map(x => `<option value="${esc(fullName(x))}">`).join("")}</datalist></div>` : ""}
-  <label class="tgl"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
-  <div class="fld" style="margin-top:8px;position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
-  <div class="fld"><label for="c-death">Verstorben am (nur falls zutreffend)</label><input id="c-death" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.death || ""))}" autocomplete="off"></div>
+  <label class="tgl" style="margin:-2px 0 10px"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Zum Geburtstag ein Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
+  <div class="fld" style="position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
+  <div class="fld"><label for="c-note">Notiz</label><input id="c-note" placeholder="Was du dir merken willst" autocomplete="off">${p ? entryHint(p.notes, "Notiz", "Notizen") : ""}</div>
+  <div class="fld"><label for="c-gidea">Geschenkidee</label><input id="c-gidea" placeholder="z. B. Kochkurs" autocomplete="off">${p ? entryHint(p.gifts, "Idee", "Ideen") : ""}</div>
+  <div class="fld"><label for="c-ask">Offene Nachfrage</label><input id="c-ask" placeholder="z. B. fragen, wie die Reha läuft" autocomplete="off">${p ? entryHint((p.ask || []).filter(x => !x.done), "Nachfrage", "Nachfragen") : ""}</div>
+  ${(() => { const par = p && p.parent ? fullName(S.people.find(x => x.id === p.parent) || {}) : "", dth = L.bdayToInput(v.death || ""); return `<div class="plusrow"><button type="button" class="mini" data-act="plusshow" data-t="c-parentbox"${par ? " hidden" : ""}>+ Kind von …</button><button type="button" class="mini" data-act="plusshow" data-t="c-deathbox"${dth ? " hidden" : ""}>+ Verstorben</button></div>
+  <div class="fld" id="c-parentbox"${par ? "" : " hidden"}><label for="c-parent">Kind von</label><input id="c-parent" list="c-parent-l" value="${esc(par)}" placeholder="Name des Elternteils" autocomplete="off"><datalist id="c-parent-l">${S.people.filter(x => !x.arch && !x.parent && (!p || x.id !== p.id)).map(x => `<option value="${esc(fullName(x))}">`).join("")}</datalist></div>
+  <div class="fld" id="c-deathbox"${dth ? "" : " hidden"}><label for="c-death">Verstorben am</label><input id="c-death" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(dth)}" autocomplete="off"></div>`; })()}
   <div id="dup-warn"></div>
   ${p ? "" : `<div class="fld"><label for="c-last-call">Zuletzt angerufen (wenn bekannt)</label><input id="c-last-call" type="date"></div>`}
   ${p ? `<button class="btn" data-act="${p.arch ? "unarchperson" : "archperson"}" data-id="${p.id}" style="width:100%;margin-bottom:8px">${p.arch ? "Aus dem Archiv zurückholen" : "Archivieren (nicht mehr erinnern, Verlauf bleibt)"}</button>` : ""}<div class="row2">${p ? `<button class="btn danger" data-act="delperson" data-id="${p.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="saveperson" data-id="${p ? p.id : ""}">Speichern</button></div>
   <p class="swipehint">Deine Eingaben werden laufend gemerkt. Schließt sich das Fenster, ist beim nächsten Öffnen alles wieder da.</p></div>`,
     () => {
       addrSuggest($("#c-addr"), $("#addr-sug"));
-      { const bx = $("#sheet [data-draft]"); if (bx) bx.addEventListener("draftapplied", () => { if ($("#c-tel2") && $("#c-tel2").value) { $("#c-tel2box").hidden = false; $("#c-tel2btn").hidden = true; } }); }
       const chk = () => { const wm = L.checkEmail($("#c-mail").value), wt = L.checkTel($("#c-cc").value, $("#c-tel").value); $("#w-mail").hidden = !wm; $("#w-mail").textContent = wm ? "⚠ " + wm : ""; $("#w-tel").hidden = !wt; $("#w-tel").textContent = wt ? "⚠ " + wt : ""; };
       ["#c-mail", "#c-tel"].forEach(q => $(q).addEventListener("blur", chk)); $("#c-cc").addEventListener("change", chk); if ($("#c-mail").value || $("#c-tel").value) chk();
       $("#c-death").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
       $("#c-bday").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
-      $("#sheetbody [data-draft]").addEventListener("draftapplied", () => { $("#c-grps").innerHTML = grpChips($("#c-grp").value); });
+      $("#sheetbody [data-draft]").addEventListener("draftapplied", () => { pickSync(); for (const k of ["c-parent", "c-death"]) if ($("#" + k) && $("#" + k).value) { $("#" + k + "box").hidden = false; } });
     });
 }
 function grpChips(sel) { return S.groups.map(g => `<button type="button" class="chip2" data-act="pickgrp" data-g="${esc(g)}" aria-pressed="${g === sel}">${esc(g)}</button>`).join("") + `<button type="button" class="chip2" data-act="newgrp">+ Eigene</button>`; }
@@ -1098,6 +1120,32 @@ function fmtAddr(a) {
   return a.country && a.country !== "Deutschland" ? out + ", " + a.country : out;
 }
 const normName = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss").replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+/* Ähnliche Schreibweise: ein Buchstabe anders, vertauscht, zu viel oder zu wenig („Doga“ und „Doha“, „Mayer“ und „Maier“ erst ab vier Buchstaben) */
+function lev(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]; let best = i;
+    for (let j = 1; j <= b.length; j++) { let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prevPrev[j - 2] + 1); cur[j] = v; if (v < best) best = v; }
+    if (best > max) return max + 1;
+    var prevPrev = prev; prev = cur;
+  }
+  return prev[b.length];
+}
+/* 2 = gleich, 1 = ähnlich, 0 = verschieden */
+function wordSim(a, b) {
+  if (a === b || a === b + "s" || b === a + "s") return 2;
+  const m = Math.min(a.length, b.length); if (m < 4) return 0;
+  if (a.startsWith(b) || b.startsWith(a)) return 1;
+  const mx = m >= 6 ? 2 : 1; return lev(a, b, mx) <= mx ? 1 : 0;
+}
+/* Sucht q in einem Text: zuerst wörtlich, sonst Wort für Wort mit ähnlicher Schreibweise */
+function fuzzyHas(text, q) {
+  const t = normName(text), ql = normName(q); if (!ql) return false;
+  if (t.includes(ql)) return true;
+  const tw = t.split(" ");
+  return ql.split(" ").every(w => tw.some(x => x.includes(w) || wordSim(w, x)));
+}
 const telKey = t => { const d = (t || "").replace(/\D/g, "").replace(/^(0049|49)/, "0"); return d.length >= 7 ? d.slice(-9) : ""; };
 function findDups(d, exceptId) {
   const n1 = normName(d.first + " " + d.last), n2 = normName(d.last + " " + d.first), tk = telKey(d.tel), em = (d.email || "").trim().toLowerCase();
@@ -1114,7 +1162,7 @@ function mergeInto(t, src, label) {
     if (!x || !telKey(x.n) || telKey(x.n) === telKey(t.tel) || (t.tels || []).some(y => telKey(y.n) === telKey(x.n))) continue;
     (t.tels = t.tels || []).push({ n: x.n, l: x.l || "" });
   }
-  if (src.email && t.email && src.email.toLowerCase() !== t.email.toLowerCase() && !(t.notes || []).some(n => n.t.includes(src.email))) (t.notes = t.notes || []).unshift({ id: uid(), t: "Weitere E-Mail: " + src.email, d: today() });
+  for (const m of [src.email, ...(src.emails || [])]) { if (!m) continue; const ml = m.toLowerCase(); if (ml === (t.email || "").toLowerCase() || (t.emails || []).some(x => x.toLowerCase() === ml)) continue; (t.emails = t.emails || []).push(m); }
   // Hat der andere Eintrag einen anderen Geburtstag oder Todestag, geht der nicht verloren: er kommt als Angehöriger in die Familie
   if ((src.bday && t.bday && src.bday.slice(5) !== t.bday.slice(5)) || (src.death && src.death !== t.death && normName(src.first || "") !== normName(t.first || ""))) {
     const nm = fullName(src); if (!(t.kin || []).some(k => normName(k.name) === normName(nm))) (t.kin = t.kin || []).push({ id: uid(), name: nm, rel: "Sonstige", bday: src.bday && src.bday !== t.bday ? src.bday : "", death: src.death || "" });
@@ -1127,7 +1175,7 @@ function mergeInto(t, src, label) {
 }
 function readPersonForm() {
   const bd = L.parseBday($("#c-bday").value), dd = L.parseBday($("#c-death").value);
-  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, lunch: $("#c-lunch") ? $("#c-lunch").value : "", group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tel2: $("#c-tel2") ? { n: $("#c-tel2").value.trim(), l: $("#c-tel2l").value } : null, woher: $("#c-woher") ? $("#c-woher").value.trim() : "", parentName: $("#c-parent") ? $("#c-parent").value.trim() : null };
+  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, lunch: $("#c-lunch") ? $("#c-lunch").value : "", group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tels: $("#c-tels") ? $$("#c-tels .xrow").map(r => ({ n: r.querySelector(".telx-n").value.trim(), l: r.querySelector(".telx-l").value })).filter(x => x.n) : null, emails: $("#c-mails") ? [...new Set($$("#c-mails .mailx").map(i => i.value.trim()).filter(Boolean))] : null, newNote: $("#c-note") ? $("#c-note").value.trim() : "", newGift: $("#c-gidea") ? $("#c-gidea").value.trim() : "", newAsk: $("#c-ask") ? $("#c-ask").value.trim() : "", woher: $("#c-woher") ? $("#c-woher").value.trim() : "", parentName: $("#c-parent") ? $("#c-parent").value.trim() : null };
 }
 function savePerson(id) {
   const data = readPersonForm(), first = data.first, last = data.last;
@@ -1145,10 +1193,11 @@ function savePerson(id) {
     $("#dup-warn").scrollIntoView({ block: "center" }); return;
   }
   savePerson.force = false;
-  { // zweite Nummer: steht an erster Stelle der weiteren Nummern, die übrigen bleiben
-    const old = id ? S.people.find(x => x.id === id) : null, rest = ((old && old.tels) || []).slice(1), t2 = data.tel2; delete data.tel2;
-    if (t2) data.tels = (t2.n ? [{ n: t2.n, l: t2.l }] : []).concat(rest);
+  { // Nummern und E-Mails: jede Zeile im Formular zählt. Ist die erste Nummer leer, rückt die nächste nach.
+    if (data.tels === null) delete data.tels; else { if (!data.tel && data.tels.length) { const f = data.tels.shift(); data.tel = f.n; data.telL = f.l; } data.tels = data.tels.filter((x, k, a) => telKey(x.n) !== telKey(data.tel) && a.findIndex(y => telKey(y.n) === telKey(x.n)) === k); }
+    if (data.emails === null) delete data.emails; else { if (!data.email && data.emails.length) data.email = data.emails.shift(); data.emails = data.emails.filter(m => m.toLowerCase() !== (data.email || "").toLowerCase()); }
   }
+  const extra = { n: data.newNote, g: data.newGift, a: data.newAsk }; delete data.newNote; delete data.newGift; delete data.newAsk;
   { // Kind von: Verweis auf das Elternteil (das Kind steht dann nur in Mirella, nicht im Telefonbuch)
     const pn = data.parentName; delete data.parentName;
     if (pn !== null) {
@@ -1157,10 +1206,12 @@ function savePerson(id) {
     }
   }
   savePerson.last = data;
-  if (id) Object.assign(S.people.find(x => x.id === id), data);
+  const addExtra = t => { if (extra.n) (t.notes = t.notes || []).unshift({ id: uid(), t: extra.n, d: today() }); if (extra.g) (t.gifts = t.gifts || []).push({ id: uid(), t: extra.g, d: today() }); if (extra.a) (t.ask = t.ask || []).push({ id: uid(), t: extra.a, d: today() }); };
+  if (id) { const t = S.people.find(x => x.id === id); Object.assign(t, data); addExtra(t); }
   else {
     const p = Object.assign({ id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [] }, data);
     const lc = $("#c-last-call") && $("#c-last-call").value; if (lc) p.calls.push({ id: uid(), d: lc, ok: true });
+    addExtra(p);
     S.people.push(p); cur = p.id; view = "akte";
   }
   draftClear(); save(); closeSheet(); render(); toast("Gespeichert: " + [first, last].join(" ").trim());
@@ -1637,6 +1688,7 @@ const ACT = {
   snooze: el => snoozeForm(S.people.find(x => x.id === el.dataset.id)),
   dosnooze: el => { const p = S.people.find(x => x.id === el.dataset.id); p.snooze = el.dataset.d; save(); closeSheet(); render(true); toast(`${fullName(p)}: ${relDate(p.snooze)} wieder dran`); },
   delcall: el => { if (!ask("Diesen Anruf aus dem Verlauf löschen?")) return; const p = S.people.find(x => x.id === cur); p.calls = p.calls.filter(c => c.id !== el.dataset.id); save(); render(true); },
+  akteopen: el => { akteOpen[el.dataset.k] = !akteOpen[el.dataset.k]; render(true); },
   allcalls: el => { showAllCalls = !showAllCalls; allCallsFor = el.dataset.id; render(true); },
   grpf: el => { grpFilter = el.dataset.g; render(true); },
   setday: el => { const k = el.dataset.k, d = +el.dataset.d, cur = (k === "callDays" ? callDays() : msgDays()).slice(); const i = cur.indexOf(d); if (i >= 0) { if (cur.length === 1) { toast("Mindestens ein Tag muss bleiben"); return; } cur.splice(i, 1); } else cur.push(d); S.settings[k] = cur.sort(); save(); render(true); },
@@ -1709,7 +1761,10 @@ const ACT = {
   delnote: el => { const n = S.notes.find(x => x.id === el.dataset.id); if (!n || !ask(`Notiz „${n.t}“ löschen?`)) return; S.notes = S.notes.filter(x => x !== n); save(); render(true); },
   vagain: () => recStart(),
   kidnew: el => kidForm(el.dataset.id),
-  tel2show: () => { const b = $("#c-tel2box"), x = $("#c-tel2btn"); if (b) b.hidden = false; if (x) x.hidden = true; const i = $("#c-tel2"); if (i) i.focus(); },
+  teladd: () => { const b = $("#c-tels"); if (!b) return; b.insertAdjacentHTML("beforeend", telRow("", "")); const i = b.lastElementChild.querySelector("input"); if (i) i.focus(); },
+  mailadd: () => { const b = $("#c-mails"); if (!b) return; b.insertAdjacentHTML("beforeend", mailRow("")); const i = b.lastElementChild.querySelector("input"); if (i) i.focus(); },
+  rowdel: el => { const r = el.closest(".xrow"); if (!r) return; const i = r.querySelector("input"); if (i && i.value.trim() && !ask("„" + i.value.trim() + "“ entfernen?")) return; r.remove(); sheetDirty = true; },
+  plusshow: el => { const b = document.getElementById(el.dataset.t); if (b) { b.hidden = false; const i = b.querySelector("input,textarea,select"); if (i) i.focus(); } el.hidden = true; },
   woherset: el => { const i = document.getElementById(el.dataset.t); if (!i) return; i.value = i.value.trim() === el.dataset.w ? "" : el.dataset.w; i.dispatchEvent(new Event("input", { bubbles: true })); el.parentNode.querySelectorAll(".chip2").forEach(c => c.setAttribute("aria-pressed", String(c.dataset.w === i.value))); },
   kidsave: el => {
     const par = S.people.find(x => x.id === el.dataset.id), first = $("#kd-first").value.trim(), bd = L.parseBday($("#kd-bday").value); if (!par || !first) { toast("Bitte den Vornamen eintragen"); return; }

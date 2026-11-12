@@ -24,6 +24,7 @@
       const r = await P.LocalNotifications.requestPermissions(); if (r.display !== "granted") return false;
       await P.PushNotifications.requestPermissions(); await P.PushNotifications.register(); return true;
     });
+    if (P.MirellaAlarm) await step("Wecker", async () => { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; nSave(); return r.state === "authorized"; });
   }
 
   /* ---------- Start-Assistent: alles auf einer Seite, danach nie wieder ---------- */
@@ -38,7 +39,7 @@
     <div class="fld"><label for="w-ki">Claude-Schlüssel${typeof kiOn === "function" && kiOn() ? " (schon eingetragen)" : " (freiwillig)"}</label><input id="w-ki" type="password" autocomplete="off" placeholder="sk-ant-… einfügen"></div>
     <div class="fld"><label for="w-gm">Google-Maps-Schlüssel${S.settings.gmapsKey ? " (schon eingetragen)" : " (freiwillig)"}</label><input id="w-gm" type="password" autocomplete="off" placeholder="AIza… einfügen"></div>
     <p class="hint">Beide Schlüssel kannst du auch später unter Einstellungen nachtragen. Der Claude-Schlüssel bleibt nur auf diesem Gerät.</p>
-    <p class="hint">Danach fragt dein iPhone nacheinander nach Standort, Mikrofon, Kamera, Kontakten, Kalender und Mitteilungen. Bitte jeweils <b>Erlauben</b> tippen.</p>
+    <p class="hint">Danach fragt dein iPhone nacheinander nach Standort, Mikrofon, Kamera, Kontakten, Kalender, Mitteilungen und Wecker. Bitte jeweils <b>Erlauben</b> tippen.</p>
     <div id="w-log" class="hint" style="display:none"></div>
     <button class="btn pri" data-act="wizgo" style="width:100%">Los geht's</button>`);
   }
@@ -685,18 +686,28 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     const tels = [x.tel, ...(x.tels || []).map(t => t.n)].map(telKey).filter(Boolean), mails = [x.email, ...(x.emails || [])].filter(Boolean).map(m => m.toLowerCase());
     return { kind, x, id: kind === "p" ? "p:" + x.id : "a:" + x.appleId, key: (kind === "p" ? N.aid[x.id] || x.appleId : x.appleId) ? "a:" + (kind === "p" ? N.aid[x.id] || x.appleId : x.appleId) : "p:" + x.id, key2: "c:" + ckey(x), toks: nameToks([x.first, x.last, kind === "p" ? x.nick : ""].filter(Boolean).join(" ")), tels, mails, md: (x.bday || "").slice(5), name: fullName(x) };
   }
+  /* Wie viele Wörter von a finden ein eigenes, gleiches oder ähnliches Wort in b? ex = davon genau gleich */
+  function tokMatch(a, b) {
+    const used = new Set(); let ex = 0, sim = 0;
+    for (const t of a) { let hit = -1, best = 0; b.forEach((x, k) => { if (used.has(k)) return; const v = wordSim(t, x); if (v > best) { best = v; hit = k; } }); if (hit >= 0) { used.add(hit); sim++; if (best === 2) ex++; } }
+    return { ex, sim };
+  }
+  /* Antwort beginnt mit „~“: schwacher Treffer, der nur zählt, wenn er eindeutig ist (siehe kCands) */
   function matchWhy(a, b) {
     if (a.kind === "b" || b.kind === "b") {
-      const bb = a.kind === "b" ? a : b, o = a.kind === "b" ? b : a; if (o.kind === "b" || !bb.toks.length) return "";
-      const hit = bb.toks.filter(t => o.toks.some(x => tokHit(t, x))).length;
-      if (hit === bb.toks.length && (hit >= 2 || (bb.md && bb.md === o.md))) return "Im Geburtstags-Kalender steht derselbe Name";
-      if (hit >= 1 && bb.md && bb.md === o.md) return "Gleicher Geburtstag und ähnlicher Name";
+      const bb = a.kind === "b" ? a : b, o = a.kind === "b" ? b : a; const bt = bb.toks.filter(w => w.length > 1); if (o.kind === "b" || !bt.length) return "";
+      const m = tokMatch(bt, o.toks), sameDay = !!bb.md && bb.md === o.md;
+      if (m.ex === bt.length && (m.ex >= 2 || sameDay)) return "Im Geburtstags-Kalender steht derselbe Name";
+      if (m.sim === bt.length && bt.length >= 2) return "Im Geburtstags-Kalender steht fast derselbe Name, nur die Schreibweise weicht ab";
+      if (m.sim >= 1 && sameDay) return "Gleicher Geburtstag und ähnlicher Name";
+      if (bt.length === 1 && o.toks.length && m.sim === 1) return "~Im Geburtstags-Kalender steht nur „" + bb.name + "“";
       return "";
     }
     if (a.tels.some(t => b.tels.includes(t))) return "Gleiche Nummer";
     if (a.mails.some(m => b.mails.includes(m))) return "Gleiche E-Mail";
     if (a.toks.length && a.toks.slice().sort().join(" ") === b.toks.slice().sort().join(" ")) return "Gleicher Name";
     if (a.toks.length >= 2 && b.toks.length >= 2 && (subset(a.toks, b.toks) || subset(b.toks, a.toks))) return "Name fast gleich";
+    if (a.toks.length >= 2 && b.toks.length >= 2) { const sh = a.toks.length <= b.toks.length ? a : b, lo = sh === a ? b : a, m = tokMatch(sh.toks, lo.toks); if (m.sim === sh.toks.length && m.ex >= 1) return "Name fast gleich, nur die Schreibweise weicht ab"; }
     return "";
   }
   /* „Gehört nicht zusammen“ merkt sich Mirella doppelt: über die Kennung im Telefonbuch (bleibt gleich, wenn aus der Karte ein Kontakt wird) und über Name plus Nummer (gilt auch auf dem iPad) */
@@ -705,9 +716,16 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   const nsAdd = (a, b) => { const l = (S.settings.notSame = S.settings.notSame || []); for (const k of [nsKey(a, b), nsKey2(a, b)]) if (!l.includes(k)) l.push(k); };
   function kCands(card) {
     const me = ent(card, card.b ? "b" : "c"), ns = new Set(S.settings.notSame || []), out = [];
-    for (const p of S.people) { if (p.arch) continue; const e = ent(p, "p"), w = matchWhy(me, e); if (w && !nsHas(ns, me, e)) out.push({ e, w }); }
-    for (const c of kQueue()) { if (kKey(c) === kKey(card)) continue; const e = ent(c, c.b ? "b" : "c"), w = matchWhy(me, e); if (w && !nsHas(ns, me, e)) out.push({ e, w }); }
-    return out;
+    const others = S.people.filter(p => !p.arch).map(p => ent(p, "p")).concat(kQueue().filter(c => kKey(c) !== kKey(card)).map(c => ent(c, c.b ? "b" : "c")));
+    for (const e of others) { const w = matchWhy(me, e); if (w && !nsHas(ns, me, e)) out.push({ e, w }); }
+    // schwache Treffer (nur Vorname, nur Nachname gleich) zählen nur, wenn es genau einen davon gibt und sonst nichts Besseres
+    const strong = out.filter(x => !x.w.startsWith("~")), weak = out.filter(x => x.w.startsWith("~"));
+    if (strong.length || weak.length !== 1) return strong;
+    const w = weak[0], bEnt = me.kind === "b" ? me : w.e, oEnt = me.kind === "b" ? w.e : me;
+    // gilt der schwache Treffer aus Sicht des Kalender-Eintrags auch nur für diesen einen Kontakt?
+    const all = others.concat([me]).filter(e => e.kind !== "b" && e.id !== oEnt.id);
+    if (all.some(e => matchWhy(bEnt, e))) return strong;
+    return [{ e: w.e, w: w.w.slice(1) }];
   }
   const kCard = () => { const q = kQueue(); return q.find(c => kKey(c) === kCur) || q[0] || null; };
   function kEnt(id) {
@@ -785,7 +803,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     let p;
     if (c.b) { const nm = bName(c).split(" "); p = isNewPerson({ first: nm.shift() || c.title, last: nm.join(" "), tel: "", email: "", bday: (c.year || 1604) + "-" + c.md, addr: "", local: true }); bLinks()[c.key] = p.id; }
     else {
-      p = isNewPerson({ appleId: c.appleId, first: c.first, last: c.last, tel: c.tel, telL: c.telL || "", tels: c.tels || [], email: c.email, bday: c.bday, addr: c.addr });
+      p = isNewPerson({ appleId: c.appleId, first: c.first, last: c.last, tel: c.tel, telL: c.telL || "", tels: c.tels || [], email: c.email, emails: [...new Set((c.emails || []).filter(m => m && m.toLowerCase() !== (c.email || "").toLowerCase()))], bday: c.bday, addr: c.addr });
       if ((c.notes || []).length) p.notes = c.notes;
       N.aid[p.id] = c.appleId;
       for (const [k, v] of Object.entries(bPend())) if (v === c.appleId) { bLinks()[k] = p.id; delete bPend()[k]; }
@@ -877,6 +895,8 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     if (dd === null) return "Todestag bitte als TT.MM.JJJJ";
     const first = $("#kp-first").value.trim(), last = $("#kp-last").value.trim(); if (!first && !last) return "Bitte einen Namen eintragen";
     Object.assign(p, { first, last, bday: bd || "", death: dd || "", cyc: dd || !p.tel ? "nie" : $("#kp-cyc").value, lunch: dd ? "" : $("#kp-lunch").value, group: $("#kp-grp").value, gift: !dd && $("#kp-gift").checked, woher: $("#kp-woher").value.trim() });
+    if (p.group && !S.groups.includes(p.group)) S.groups.push(p.group);
+    const aq = $("#kp-ask").value.trim(); if (aq) (p.ask = p.ask || []).push({ id: uid(), t: aq, d: today() });
     const gi = $("#kp-gidea").value.trim(), no = $("#kp-note").value.trim();
     if (gi) (p.gifts = p.gifts || []).push({ id: uid(), t: gi, d: today() });
     if (no) (p.notes = p.notes || []).unshift({ id: uid(), t: no, d: today() });
@@ -888,13 +908,15 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     return `<div class="block"><h4>${esc(fullName(p))} ist drin</h4><p class="hint" style="margin:4px 0 0">Jetzt kurz pflegen, dann ist der Kontakt fertig und kommt nicht wieder als Karte.${p.local ? " Ohne Nummer, deshalb steht er nur in Mirella." : ""}</p>${nums.length ? `<p class="hint" style="margin:6px 0 0">${nums.length === 1 ? "Nummer" : "Nummern"}: <b>${esc(nums.join(" · "))}</b></p>` : ""}</div>
     <div class="fgrid"><div class="fld"><label for="kp-first">Vorname</label><input id="kp-first" value="${esc(p.first || "")}" autocomplete="off"></div><div class="fld"><label for="kp-last">Nachname</label><input id="kp-last" value="${esc(p.last || "")}" autocomplete="off"></div></div>
     <div class="fgrid"><div class="fld"><label for="kp-cyc">Anrufen</label>${p.tel ? sel("kp-cyc", CYCLES.map(c => [c, cycLabel(c)]), noCycle(p.cyc) ? "nie" : p.cyc) : '<select id="kp-cyc" disabled><option value="nie">ohne Nummer nicht</option></select>'}</div><div class="fld"><label for="kp-lunch">Treffen vereinbaren</label>${sel("kp-lunch", [["", "nie"], ...Object.keys(LUNCH).map(c => [c, c])], p.lunch || "")}</div></div>
-    <div class="fgrid"><div class="fld"><label for="kp-bday">Geburtstag</label><input id="kp-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(p.bday || ""))}" autocomplete="off"></div><div class="fld"><label for="kp-death">Verstorben am</label><input id="kp-death" inputmode="numeric" maxlength="10" placeholder="nur falls zutreffend" value="${esc(L.bdayToInput(p.death || ""))}" autocomplete="off"></div></div>
-    <div class="fld"><label for="kp-grp">Gruppe</label>${sel("kp-grp", [["", "keine"], ...S.groups.map(g => [g, g])], p.group || "")}</div>
-    <div class="fld"><label for="kp-woher">Woher kenne ich ihn/sie?</label><input id="kp-woher" value="${esc(p.woher || "")}" placeholder="antippen oder selbst schreiben" autocomplete="off">${woherChips("kp-woher", p.woher || "")}</div>
-    <label class="tgl big"><input type="checkbox" id="kp-gift"${p.gift ? " checked" : ""}><span><b>An ein Geschenk erinnern</b><small>${S.settings.giftLead} Tage vor dem Geburtstag</small></span></label>
-    ${par ? `<div class="block"><div class="listrow"><span class="grow">Kind von ${esc(fullName(par))}<small>steht nur in Mirella, ohne Anruf-Erinnerung</small></span><button class="rowdel" data-act="kparentoff" aria-label="Verweis entfernen">✕</button></div></div>` : `<button class="btn" data-act="kparent" style="width:100%;margin:8px 0">Das ist ein Kind von …</button>`}
+    <div class="fgrid"><div class="fld"><label for="kp-grp-s">Gruppe</label>${pickField("kp-grp", S.groups, p.group || "", "keine")}</div><div class="fld"><label for="kp-woher-s">Woher kenne ich ihn/sie?</label>${pickField("kp-woher", woherAll(), p.woher || "", "keine Angabe")}</div></div>
+    <div class="fld"><label for="kp-bday">Geburtstag</label><input id="kp-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(p.bday || ""))}" autocomplete="off"></div>
+    <label class="tgl" style="margin:-2px 0 10px"><input type="checkbox" id="kp-gift"${p.gift ? " checked" : ""}> Zum Geburtstag ein Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
+    <div class="fld"><label for="kp-note">Notiz</label><input id="kp-note" placeholder="Was du dir merken willst" autocomplete="off"></div>
     <div class="fld"><label for="kp-gidea">Geschenkidee</label><input id="kp-gidea" placeholder="z. B. Kochkurs" autocomplete="off"></div>
-    <div class="fld"><label for="kp-note">Notiz</label><textarea id="kp-note" rows="2" placeholder="Was du dir merken willst"></textarea></div>
+    <div class="fld"><label for="kp-ask">Offene Nachfrage</label><input id="kp-ask" placeholder="z. B. fragen, wie die Reha läuft" autocomplete="off"></div>
+    <div class="plusrow">${par ? "" : '<button type="button" class="mini" data-act="kparent">+ Kind von …</button>'}<button type="button" class="mini" data-act="plusshow" data-t="kp-deathbox"${p.death ? " hidden" : ""}>+ Verstorben</button></div>
+    ${par ? `<div class="block"><div class="listrow"><span class="grow">Kind von ${esc(fullName(par))}<small>steht nur in Mirella, ohne Anruf-Erinnerung</small></span><button class="rowdel" data-act="kparentoff" aria-label="Verweis entfernen">✕</button></div></div>` : ""}
+    <div class="fld" id="kp-deathbox"${p.death ? "" : " hidden"}><label for="kp-death">Verstorben am</label><input id="kp-death" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(p.death || ""))}" autocomplete="off"></div>
     <button class="btn pri" data-act="kdone" style="width:100%;margin-top:6px">Fertig, nächste Karte</button>
     <p class="hint">Per Sprache geht hier: „Monatlich anrufen“, „Treffen vierteljährlich“, „Kind von Max“, „Fertig“.</p>`;
   }
@@ -922,7 +944,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     const ql = normName(kQ), qd = kQ.replace(/\D/g, ""), me = kKey(c);
     if (ql.length < 2 && qd.length < 3) return `<p class="hint" style="margin:6px 0 0">Tippe mindestens zwei Buchstaben oder drei Ziffern. Gesucht wird in Mirella, im Telefonbuch und im Geburtstags-Kalender.</p>`;
     const all = S.people.filter(p => !p.arch).map(p => ent(p, "p")).concat(kQueue().filter(x => kKey(x) !== me && !(c.b && x.b)).map(x => ent(x, x.b ? "b" : "c")));
-    const hits = all.filter(e => (ql.length >= 2 && (normName(e.name).includes(ql) || ql.split(" ").every(w => normName(e.name + " " + (e.x.org || "")).includes(w)))) || (qd.length >= 3 && [e.x.tel, ...((e.x.tels || []).map(t => t.n))].some(n => (n || "").replace(/\D/g, "").includes(qd)))).slice(0, 30);
+    const hits = all.filter(e => (ql.length >= 2 && (normName(e.name).includes(ql) || fuzzyHas(e.name + " " + (e.x.org || "") + " " + (e.kind === "b" ? e.x.title : ""), ql))) || (qd.length >= 3 && [e.x.tel, ...((e.x.tels || []).map(t => t.n))].some(n => (n || "").replace(/\D/g, "").includes(qd)))).slice(0, 30);
     return hits.map(e => `<button class="drow" data-act="kmerge" data-k="${esc(e.id)}"><span class="dt"><b>${esc(e.name)}</b><small>${esc(entSub(e))}</small></span><span class="mini">Verbinden</span></button>`).join("") || `<p class="hint" style="margin:6px 0 0">Niemand gefunden.</p>`;
   }
   R.kdurch = function () {
@@ -1005,6 +1027,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     kFresh = false;
     const r = kOrigRender.apply(this, arguments);
     if (keep && view === "kdurch" && kStep === "pflege" && pid === kPid) for (const k of keep) { const e = document.getElementById(k.id); if (!e || e.disabled) continue; if (e.type === "checkbox") e.checked = k.v; else e.value = k.v; if (k.f) { e.focus(); try { e.setSelectionRange(k.s, k.s); } catch (_) { } } }
+    if (keep && view === "kdurch" && kStep === "pflege" && pid === kPid) { pickSync(); const d = $("#kp-death"); if (d && d.value) $("#kp-deathbox").hidden = false; }
     return r;
   };
   HOOKS.menschenTop.push(() => !N.kNeu && S.people.length ? `<div class="card" role="button" tabindex="0" data-act="kneu"><span class="av">↻</span><span style="min-width:0"><div class="t">Kontakte neu aufsetzen</div><div class="s" style="white-space:normal">Telefonbuch sichern, Mirella leeren, dann jeden Eintrag einzeln als Karte durchgehen</div></span><span class="chev">›</span></div>` : "");

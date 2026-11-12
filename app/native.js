@@ -886,13 +886,15 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     const hide = new Set(N.calHide || []), on = !!(S.settings.calFilter.termin ?? 1), skip = new Set([...(N.bcals || []), N.mcal].filter(Boolean));
     const cals = (N.cals || []).filter(c => !skip.has(c.id)), cnt = id => (N.events || []).filter(e => e.cid === id).length;
     openSheet(`<p class="stitle">iPhone-Termine</p>
-    <button class="drow" data-act="terminall"><span class="dt"><b>iPhone-Termine im Kalender zeigen</b><small>${on ? "an" : "aus"}</small></span><span class="chev">${on ? "●" : "○"}</span></button>
-    ${on ? `<div class="label" style="margin:12px 0 6px">Welche Kalender?</div>${cals.map(c => `<button class="drow" data-act="termincal" data-id="${esc(c.id)}"><span class="dt"><b>${esc(c.title || "(ohne Namen)")}</b><small>${cnt(c.id) === 1 ? "1 Termin" : cnt(c.id) + " Termine"}</small></span><span class="chev">${hide.has(c.id) ? "○" : "●"}</span></button>`).join("") || '<p class="hint">Ich sehe keinen Kalender. Bitte unter Einstellungen › iPhone die Freigaben prüfen.</p>'}` : ""}
+    <button class="drow" data-act="terminall"><span class="dt"><b>iPhone-Termine im Kalender zeigen</b><small>${on ? "an" : "aus"}</small></span>${calMark(on)}</button>
+    ${on ? `<div class="label" style="margin:12px 0 6px">Welche Kalender?</div>${cals.map(c => `<button class="drow" data-act="termincal" data-id="${esc(c.id)}"><span class="dt"><b>${esc(c.title || "(ohne Namen)")}</b><small>${cnt(c.id) === 1 ? "1 Termin" : cnt(c.id) + " Termine"}</small></span>${calMark(!hide.has(c.id))}</button>`).join("") || '<p class="hint">Ich sehe keinen Kalender. Bitte unter Einstellungen › iPhone die Freigaben prüfen.</p>'}` : ""}
     <button class="btn pri" data-act="cancel" style="width:100%;margin-top:10px">Fertig</button>`);
   }
   const origCalf = ACT.calf;
   ACT.calf = el => { if (el.dataset.k === "termin") { terminSheet(); if (!(N.events || []).some(e => e.cid)) calendarEvents().then(() => { if ($("#sheet.open [data-act=terminall]")) terminSheet(); }); return; } origCalf(el); };
   ACT.terminall = () => { S.settings.calFilter.termin = (S.settings.calFilter.termin ?? 1) ? 0 : 1; save(); render(true); terminSheet(); };
+  /* Häkchen (aktiv) oder Kreuz (aus), deutlich zu unterscheiden */
+  function calMark(on) { return `<span class="calmark ${on ? "on" : "off"}" aria-label="${on ? "aktiv" : "aus"}">${on ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>'}</span>`; }
   ACT.termincal = el => { const h = new Set(N.calHide || []); h.has(el.dataset.id) ? h.delete(el.dataset.id) : h.add(el.dataset.id); N.calHide = [...h]; nSave(); render(true); terminSheet(); };
   ACT.kbcal = async el => { const on = new Set(N.bcals || []); on.has(el.dataset.id) ? on.delete(el.dataset.id) : on.add(el.dataset.id); N.bcalPick = [...on]; nSave(); await calendarBirthdays(); kCalSheet(); kFresh = true; render(true); };
   ACT.klater = () => { const c = kCard(); if (!c) return; (N.later = N.later || {})[kKey(c)] = Date.now(); kCur = null; kQ = ""; kAfter(); toast("Kommt am Ende nochmal"); };
@@ -1158,6 +1160,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   const NEED = [
     { k: "ki", missing: () => typeof kiOn === "function" && !kiOn(), bad: () => typeof KI !== "undefined" && keyIsBad("ki", KI.key), html: b => keyField("nf-ki", "Claude-Schlüssel (für die Mirella-KI)", { ph: "sk-ant-… einfügen", warn: b ? "Der eingetragene Schlüssel funktioniert nicht mehr. Bitte neu eintragen." : "" }), save: () => { const v = ($("#nf-ki").value || "").trim(); if (v) { KI.key = v; kiSave(); keyBad("ki", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.ki; } } },
     { k: "gmaps", missing: () => !S.settings.gmapsKey, bad: () => keyIsBad("gmaps", S.settings.gmapsKey), html: b => keyField("nf-gm", "Google-Maps-Schlüssel (für den Wecker nach Verkehr)", { ph: "AIza… einfügen", warn: b ? "Der eingetragene Schlüssel funktioniert nicht. Google sagt: ungültig. Bitte neu eintragen." : "" }), save: () => { const v = ($("#nf-gm").value || "").trim(); if (v) { S.settings.gmapsKey = v; keyBad("gmaps", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.gmaps; } } },
+    { k: "db", missing: () => !(S.settings.dbClientId && S.settings.dbApiKey), bad: () => keyIsBad("db", S.settings.dbApiKey), html: b => `${keyField("nf-dbid", "Bahn: Client ID (DB API Marketplace)", { ph: "Client ID einfügen", warn: b ? "Die Bahn lehnt den Zugang ab. Bitte Client ID und API Key neu eintragen." : "" })}${keyField("nf-dbkey", "Bahn: API Key", { ph: "API Key einfügen" })}`, save: () => { const a = ($("#nf-dbid").value || "").trim(), k = ($("#nf-dbkey").value || "").trim(); if (a) S.settings.dbClientId = a; if (k) { S.settings.dbApiKey = k; keyBad("db", k, false); } } },
     { k: "wecker", missing: () => !!P.MirellaAlarm && !N.alarmState, html: () => `<p class="hint">Dein iPhone fragt gleich einmal, ob Mirella echte Wecker stellen darf. Bitte <b>Erlauben</b> tippen.</p>`, save: async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; } catch (_) { } } }
   ];
   /* Fehlendes nur einmal fragen. Ein Schlüssel, den der Dienst abgelehnt hat, kommt beim nächsten Öffnen wieder,
@@ -1194,7 +1197,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     } catch (_) { }
     nSave();
     if (loud === true) { const g = S.settings.gmapsKey; if (g) toast(keyIsBad("gmaps", g) ? "Google lehnt diesen Schlüssel ab. Bitte prüfen." : N.keyOk.gmaps === keySum(g) ? "Google-Schlüssel funktioniert" : "Gespeichert. Prüfen klappt gerade nicht (kein Netz?)"); render(true); return; }
-    if (bad) nachfrage();
+    if (bad) { if (document.querySelector("#sheet.open [data-act=nfsave]")) closeSheet(); setTimeout(nachfrage, 400); }
   }
   window.mirellaKeyCheck = keyCheck;
   /* ---------- Was das iPhone selbst kann (MirellaSystemPlugin) ---------- */

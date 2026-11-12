@@ -62,6 +62,12 @@ test("Einkauf: Warengruppen und übliche Einheiten", () => {
   assert.equal(L.shopGroup("Bananen").n, "Obst & Gemüse");
   assert.equal(L.shopGroup("Reis").n, "Vorrat & Konserven");
   assert.equal(L.shopGroup("Eier").n, "Milch, Käse & Eier");
+  // Zusammengesetzte Wörter: das letzte Wort zählt (Wunsch Felix 12.11.)
+  assert.equal(L.shopGroup("Tomaten-Gewürzsalz").n, "Vorrat & Konserven");
+  assert.equal(L.shopGroup("Apfelsaft").n, "Getränke");
+  assert.equal(L.shopGroup("Zahnpasta").n, "Drogerie & Hygiene");
+  // Selbst zugeordnet gilt immer
+  assert.equal(L.shopGroup("Tomaten-Gewürzsalz", { "tomaten-gewürzsalz": "Sonstiges" }).n, "Sonstiges");
   assert.equal(L.shopGroup("Tomatenmark").n, "Vorrat & Konserven");
   assert.deepEqual(L.defUnit("Eier"), { qty: 1, unit: "Pck." });
   assert.deepEqual(L.defUnit("Butter"), { qty: 1, unit: "Stk." });

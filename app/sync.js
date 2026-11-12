@@ -6,7 +6,7 @@
 const SB_URL = "https://xcanrhlwcopamhnmmlja.supabase.co";
 const SB_KEY = "sb_publishable_uxI3wI_MIx3CZOk-zoahpw_MBoVeQZc";
 const AUTH_KEY = "mirella.auth", META_KEY = "mirella.sync";
-const LOCAL_ONLY = ["geoAsked", "gmapsKey"]; // gilt nur für dieses Gerät. Der Google-Schlüssel bleibt auf dem Gerät: nicht im Abgleich, nicht in Sicherungen.
+const LOCAL_ONLY = ["geoAsked", "gmapsKey", "dbClientId", "dbApiKey"]; // gilt nur für dieses Gerät. Der Google-Schlüssel bleibt auf dem Gerät: nicht im Abgleich, nicht in Sicherungen.
 
 const SY = {
   auth: null, meta: { ver: 0, dirty: false, last: 0, lastBackup: 0, pendingUp: [], pendingDel: [] },

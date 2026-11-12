@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.33.1";
+const VERSION = "0.34";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -341,7 +341,7 @@ function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() +
 
 /* ---------- Zustand ---------- */
 let akteOpen = {}, akteOpenFor = null;
-let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false, showShopHist = 0;
+let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", grpOpen = false, showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false, showShopHist = 0;
 { const t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); selDate = today(); }
 
 /* ---------- Bausteine ---------- */
@@ -457,7 +457,7 @@ const R = {
     if (az) { let cur0 = ""; for (const p of list) { const l = letter(p); if (l !== cur0) { cur0 = l; have.add(l); body += `<div class="sec" id="az-${l === "#" ? "x" : l}"><span class="label">${l}</span></div>`; } body += personCard(p, false); } }
     else body = list.map(p => personCard(p, false)).join("");
     return `${topbar("Kontakte")}${HOOKS.menschenTop.map(f => f()).join("")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Nummer, Gruppe, Beruf oder woher" aria-label="Suchen" value="${esc(q)}">
-    ${grps.length ? `<div class="chips"><button class="chip2" data-act="grpf" data-g="" aria-pressed="${!grpFilter}">Alle</button>${grps.map(g => `<button class="chip2" data-act="grpf" data-g="${esc(g)}" aria-pressed="${grpFilter === g}">${esc(g)}</button>`).join("")}</div>` : ""}
+    ${grps.length ? `<div class="pfilt"><button class="pfiltbtn" data-act="grpopen" aria-expanded="${grpOpen}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg> Filter${grpFilter ? `: ${esc(grpFilter)}` : ""}</button>${grpFilter ? `<button class="pfiltx" data-act="grpf" data-g="" aria-label="Filter aufheben">✕</button>` : ""}</div>${grpOpen ? `<div class="chips"><button class="chip2" data-act="grpf" data-g="" aria-pressed="${!grpFilter}">Alle</button>${grps.map(g => `<button class="chip2" data-act="grpf" data-g="${esc(g)}" aria-pressed="${grpFilter === g}">${esc(g)}</button>`).join("")}</div>` : ""}` : ""}
     <div class="seg" style="margin-bottom:8px"><button data-act="psort" data-m="az" aria-pressed="${az}">A bis Z</button><button data-act="psort" data-m="dran" aria-pressed="${!az}">Wer ist dran</button></div>
     ${az ? "" : `<div class="sec"><span class="label">Wer zuerst dran ist</span><span class="label">${list.length}</span></div>`}
     <div class="${az && list.length > 12 ? "haskaz" : ""}">${list.length ? body : empty(S.people.length ? "Niemand gefunden." : "Noch keine Kontakte. Tipp auf +, oder importiere sie in den Einstellungen (vCard).")}</div>
@@ -1031,7 +1031,7 @@ document.addEventListener("visibilitychange", () => { if (shopMode && document.v
 /* Einkaufsmodus: nur die Liste, große Zeilen, ganze Zeile antippen = in den Wagen, Bildschirm bleibt an */
 function shopModeView(cur) {
   const order = L.SHOPGROUPS.map(g => g[0]).concat("Sonstiges"), by = {};
-  cur.forEach(t => { const g = L.shopGroup(t.t); (by[g.n] = by[g.n] || { ic: g.ic, l: [] }).l.push(t); });
+  cur.forEach(t => { const g = L.shopGroup(t.t, S.settings.shopGrp); (by[g.n] = by[g.n] || { ic: g.ic, l: [] }).l.push(t); });
   const got = cur.filter(t => t.done).length, all = cur.length, pct = all ? Math.round(100 * got / all) : 0;
   const groups = order.filter(n => by[n]).map(n => { const g = by[n], l = g.l.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
     return `<div class="smgrp"><div class="smgh">${g.ic} ${esc(n)}</div>${l.map(t => `<button class="smrow${t.done ? " done" : ""}" data-act="toggle" data-id="${t.id}" aria-pressed="${!!t.done}"><span class="smbox">${t.done ? "✓" : ""}</span><span class="smt">${L.qtyLabel(t) ? `<b>${esc(L.qtyLabel(t))}</b> ` : ""}${esc(t.t)}</span></button>`).join("")}</div>`; }).join("");
@@ -1044,7 +1044,7 @@ function shopView(all) {
   const cur = all.filter(t => !t.arch), open = cur.filter(t => !t.done), got = cur.filter(t => t.done);
   if (shopMode) return shopModeView(cur);
   const order = L.SHOPGROUPS.map(g => g[0]).concat("Sonstiges"), by = {};
-  cur.forEach(t => { const g = L.shopGroup(t.t); (by[g.n] = by[g.n] || { ic: g.ic, l: [] }).l.push(t); });
+  cur.forEach(t => { const g = L.shopGroup(t.t, S.settings.shopGrp); (by[g.n] = by[g.n] || { ic: g.ic, l: [] }).l.push(t); });
   const groups = order.filter(n => by[n]).map(n => { const g = by[n], l = g.l.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0)), o = l.filter(t => !t.done).length;
     return `<div class="shopgrp${o ? "" : " alldone"}"><div class="sgh"><span>${g.ic} ${esc(n)}</span><span class="sgn">${o ? o + " offen" : "✓ alles"}</span></div>${l.map(todoRow).join("")}</div>`; }).join("");
   return `${cur.length ? `<button class="btn pri shopgo" data-act="shopmode" data-on="1">🛒 Einkaufen gehen<small>Einkaufsmodus: große Liste zum Abhaken</small></button>` : ""}<form class="shoprow" data-form="shop" style="margin-bottom:8px"><input class="search" id="shopin" style="margin:0" placeholder="z. B. 2 Liter Milch, Butter" aria-label="Artikel" enterkeyhint="done"><button class="btn pri" style="flex:none" aria-label="Hinzufügen">+</button><button class="btn" type="button" data-act="shopphoto" style="flex:none" aria-label="Einkaufszettel fotografieren">📷</button></form>
@@ -1082,6 +1082,7 @@ function shopItemForm(t) {
   openSheet(`<div data-draft="shop:${t.id}"><p class="stitle">Artikel</p>
   <div class="fld"><label for="s-what">Was?</label><input id="s-what" value="${esc(t.t)}"></div>
   <div class="fgrid"><div class="fld"><label for="s-qty">Menge</label><input id="s-qty" inputmode="decimal" value="${esc(t.qty ? String(t.qty).replace(".", ",") : "")}" placeholder="z. B. 2"></div><div class="fld"><label for="s-unit">Einheit</label><select id="s-unit">${["", "Stk.", "g", "kg", "l", "ml", "Pck.", "Fl.", "Dose", "Glas", "Becher", "Bund", "Kasten", "Netz", "Rolle", "Tafel", "Tüte"].map(u => `<option value="${u}"${u === (t.unit || "") ? " selected" : ""}>${u || "–"}</option>`).join("")}</select></div></div>
+  <div class="fld"><label for="s-grp">Warengruppe</label><select id="s-grp">${L.SHOPGROUPNAMES.map(n => `<option${n === L.shopGroup(t.t, S.settings.shopGrp).n ? " selected" : ""}>${n}</option>`).join("")}</select><small class="hint" style="display:block;margin-top:4px">Mirella merkt sich das für dieses Wort.</small></div>
   <div class="row2"><button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="saveshop" data-id="${t.id}">Speichern</button></div></div>`);
 }
 function shopExtras(open) {
@@ -1710,14 +1711,14 @@ async function exportData() {
   const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 /* Für Sicherungen: Kopie der Daten ohne Schlüssel (Google Maps). Schlüssel gehören nur auf das Gerät. */
-function noKeys(d) { const c = JSON.parse(JSON.stringify(d)); if (c.settings) delete c.settings.gmapsKey; return c; }
+function noKeys(d) { const c = JSON.parse(JSON.stringify(d)); if (c.settings) { delete c.settings.gmapsKey; delete c.settings.dbClientId; delete c.settings.dbApiKey; } return c; }
 async function importData(file) {
   try {
     const j = JSON.parse(await file.text()); if (!j || !j.data || !Array.isArray(j.data.people)) throw new Error();
     if (!confirm(`Sicherung vom ${new Date(j.exported).toLocaleString("de-DE")} laden? Die Daten auf diesem Gerät werden ersetzt.`)) return;
     await photoClear(); for (const [k, u] of Object.entries(j.photos || {})) await photoPut(k, await dataURLToBlob(u));
-    const gk = S.settings.gmapsKey || (j.data.settings || {}).gmapsKey || "";
-    S = Object.assign(blank(), j.data); S.settings = Object.assign(blank().settings, j.data.settings || {}, { gmapsKey: gk });
+    const gk = S.settings.gmapsKey || (j.data.settings || {}).gmapsKey || "", dk = { dbClientId: S.settings.dbClientId || "", dbApiKey: S.settings.dbApiKey || "" };
+    S = Object.assign(blank(), j.data); S.settings = Object.assign(blank().settings, j.data.settings || {}, { gmapsKey: gk }, dk);
     save(); view = "heute"; render(); toast("Sicherung geladen");
   } catch (_) { toast("Das ist keine gültige Mirella-Sicherung"); }
 }
@@ -1773,7 +1774,8 @@ const ACT = {
   delcall: el => { if (!ask("Diesen Anruf aus dem Verlauf löschen?")) return; const p = S.people.find(x => x.id === cur); p.calls = p.calls.filter(c => c.id !== el.dataset.id); save(); render(true); },
   akteopen: el => { akteOpen[el.dataset.k] = !akteOpen[el.dataset.k]; render(true); },
   allcalls: el => { showAllCalls = !showAllCalls; allCallsFor = el.dataset.id; render(true); },
-  grpf: el => { grpFilter = el.dataset.g; render(true); },
+  grpf: el => { grpFilter = el.dataset.g; grpOpen = false; render(true); },
+  grpopen: () => { grpOpen = !grpOpen; render(true); },
   setday: el => { const k = el.dataset.k, d = +el.dataset.d, cur = (k === "callDays" ? callDays() : msgDays()).slice(); const i = cur.indexOf(d); if (i >= 0) { if (cur.length === 1) { toast("Mindestens ein Tag muss bleiben"); return; } cur.splice(i, 1); } else cur.push(d); S.settings[k] = cur.sort(); save(); render(true); },
   setage: el => { const a = +el.dataset.a, cur = (S.settings.roundAges || []).slice(); const i = cur.indexOf(a); if (i >= 0) cur.splice(i, 1); else cur.push(a); S.settings.roundAges = cur.sort((x, y) => x - y); save(); render(true); },
   shophist: () => { showShopHist = showShopHist ? 0 : 1; render(true); },
@@ -1791,7 +1793,7 @@ const ACT = {
   delgroup: el => { const g = el.dataset.g, n = S.people.filter(p => p.group === g).length; if (!ask(`Gruppe „${g}“ entfernen?${n ? ` ${n} Kontakt${n > 1 ? "e verlieren" : " verliert"} die Gruppe.` : ""}`)) return; S.groups = S.groups.filter(x => x !== g); S.people.forEach(p => { if (p.group === g) p.group = ""; }); save(); render(true); },
   pickprio: el => { $("#a-prio").value = el.dataset.p; $$("#a-prio-pick button").forEach(b => b.setAttribute("aria-pressed", b === el)); draftSave(); },
   qty: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; const n = (+t.qty || (t.unit ? 0 : 1)) + (+el.dataset.n) * (["g", "ml"].includes(t.unit) ? 100 : 1); t.qty = n > 0 ? n : null; if (!t.qty && ["g", "ml", "kg", "l"].includes(t.unit)) t.unit = ""; save(); render(true); },
-  saveshop: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; const w = $("#s-what").value.trim(); if (!w) { toast("Bitte eintragen, was"); return; } t.t = w; t.qty = parseAmount($("#s-qty").value) || null; t.unit = $("#s-unit").value; if (t.unit) { S.shopUnits = S.shopUnits || {}; S.shopUnits[w.toLowerCase()] = { qty: 1, unit: t.unit }; } draftClear(); save(); closeSheet(); render(true); },
+  saveshop: el => { const t = S.todos.find(x => x.id === el.dataset.id); if (!t) return; const w = $("#s-what").value.trim(); if (!w) { toast("Bitte eintragen, was"); return; } t.t = w; t.qty = parseAmount($("#s-qty").value) || null; t.unit = $("#s-unit").value; const gs = $("#s-grp") && $("#s-grp").value; if (gs) { const k = w.toLowerCase(); S.settings.shopGrp = S.settings.shopGrp || {}; delete S.settings.shopGrp[k]; if (L.shopGroup(w).n !== gs) S.settings.shopGrp[k] = gs; } if (t.unit) { S.shopUnits = S.shopUnits || {}; S.shopUnits[w.toLowerCase()] = { qty: 1, unit: t.unit }; } draftClear(); save(); closeSheet(); render(true); },
   shopadd: el => { addShop(el.dataset.t); save(); render(true); toast("Drauf: " + el.dataset.t); },
   savetpl: () => { const items = S.todos.filter(x => x.list === "einkauf" && !x.done).map(x => ({ t: x.t, qty: x.qty || null, unit: x.unit || "" })); if (!items.length) return; const n = (prompt("Name der Vorlage, z. B. Wocheneinkauf") || "").trim(); if (!n) return; const ex = S.shopTpl.find(t => t.n.toLowerCase() === n.toLowerCase()); if (ex) { if (!ask(`Vorlage „${ex.n}“ gibt es schon. Ersetzen?`)) return; ex.items = items; } else S.shopTpl.push({ id: uid(), n, items }); save(); render(true); toast("Vorlage gespeichert: " + n); },
   usetpl: el => { const t = S.shopTpl.find(x => x.id === el.dataset.id); if (!t) return; let n = 0; t.items.forEach(i => { if (addShop(i.t, i.qty, i.unit)) n++; }); save(); render(true); toast(n ? `${n} Artikel aus „${t.n}“ drauf` : "Steht schon alles drauf"); },
@@ -1935,6 +1937,7 @@ document.addEventListener("change", e => {
     const k = el.dataset.set;
     const v = el.type === "checkbox" ? (el.checked ? 1 : 0) : el.tagName === "SELECT" && !el.dataset.str ? +el.value : el.dataset.num ? (parseAmount(el.value) || 0) : el.value.trim();
     putSet(k, v); save(); toast("Gespeichert");
+    if (k === "dbClientId" || k === "dbApiKey") { if (typeof BAHN !== "undefined") BAHN.cache = {}; setTimeout(() => render(true), 300); }
     if (k === "gmapsKey") { if (v && typeof window.mirellaKeyCheck === "function") setTimeout(() => window.mirellaKeyCheck(true), 300); else if (!v) setTimeout(() => render(true), 300); }
     return;
   }

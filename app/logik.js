@@ -226,11 +226,20 @@ const L = (() => {
     ["Drogerie & Hygiene", "🧴", /zahnpasta|zahnbürste|shampoo|duschgel|seife|deo|creme|rasier|toilettenpapier|klopapier|taschentuch|watte|pflaster|tampon|binde|windel|sonnencreme|lotion|haar/],
     ["Haushalt & Putzen", "🧽", /spülmittel|spül|tabs|waschmittel|weichspüler|reiniger|putz|schwamm|müllbeutel|mülltüte|küchenrolle|alufolie|frischhaltefolie|backpapier|batterie|glühbirne|kerze|serviette|zewa/]
   ];
-  function shopGroup(t) {
-    const s = " " + String(t || "").toLowerCase() + " ";
-    for (const [n, ic, re] of SHOPGROUPS) if (re.test(s.trim())) return { n, ic };
-    return { n: "Sonstiges", ic: "🛒" };
+  /* Warengruppe: Was Felix selbst zugeordnet hat, gilt immer (learned). Sonst zählt bei zusammengesetzten Wörtern
+     das letzte Wort: „Tomaten-Gewürzsalz“ ist Salz (Vorrat), nicht Tomate; „Apfelsaft“ ist ein Getränk. */
+  function shopGroup(t, learned) {
+    const k = String(t || "").trim().toLowerCase();
+    if (learned && learned[k]) { const g = SHOPGROUPS.find(x => x[0] === learned[k]); if (g) return { n: g[0], ic: g[1] }; if (learned[k] === "Sonstiges") return { n: "Sonstiges", ic: "🛒" }; }
+    let best = null, bestEnd = -1, bestLen = 0;
+    for (const [n, ic, re] of SHOPGROUPS) {
+      const g = new RegExp(re.source, "g"); let m, end = -1, len = 0;
+      while ((m = g.exec(k))) { const e = m.index + m[0].length; if (e > end || (e === end && m[0].length > len)) { end = e; len = m[0].length; } if (!m[0].length) g.lastIndex++; }
+      if (end > bestEnd || (end === bestEnd && len > bestLen)) { bestEnd = end; bestLen = len; best = { n, ic }; }
+    }
+    return best || { n: "Sonstiges", ic: "🛒" };
   }
+  const SHOPGROUPNAMES = SHOPGROUPS.map(g => g[0]).concat("Sonstiges");
   const DEFUNIT = [[/^eier$/, 1, "Pck."], [/^butter$/, 1, "Stk."], [/milch$/, 1, "l"], [/^(mehl|zucker|nudeln|spaghetti|reis|kaffee|toast|käse|aufschnitt|salami|schinken|haferflocken|müsli)$/, 1, "Pck."], [/^(joghurt|sahne|quark|schmand|frischkäse|skyr)$/, 1, "Becher"], [/^(brot|gurke|paprika|zucchini|avocado|mozzarella|baguette|salat|eisbergsalat|zitrone)$/, 1, "Stk."], [/^(bananen|tomaten|äpfel|kartoffeln|zwiebeln|möhren|karotten)$/, 1, "kg"], [/^(wasser|sprudel)$/, 1, "Kasten"], [/^(bier)$/, 1, "Kasten"], [/^(wein|saft|cola|öl|olivenöl)$/, 1, "Fl."], [/^(schokolade)$/, 1, "Tafel"], [/^(chips|gummibärchen)$/, 1, "Tüte"], [/^(küchenrolle|alufolie|frischhaltefolie|backpapier)$/, 1, "Rolle"], [/^(toilettenpapier|klopapier|taschentücher|spülmaschinentabs|müllbeutel)$/, 1, "Pck."], [/^(brötchen|semmeln)$/, 6, "Stk."]];
   function defUnit(t, learned) {
     const k = String(t || "").trim().toLowerCase();
@@ -355,6 +364,6 @@ const L = (() => {
     return list.map(h => ({ h, s: words.reduce((a, w) => a + (h.k.some(k => k.startsWith(w.slice(0, 5)) || w.startsWith(k.slice(0, 5))) ? 2 : 0) + (h.q.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.h);
   }
 
-  return { rainSpans, pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines, wxDayNight };
+  return { SHOPGROUPNAMES, rainSpans, pad, iso, D, addDays, addMonths, diffDays, fmtBdayInput, parseBday, bdayToInput, COUNTRIES, splitTel, joinTel, parseQty, qtyLabel, PERIODS, monthly, contractStatus, nextAfter, perDay, supplyLeft, wakePlan, trafficFactor, classifyDoc, moneyIn, dueIn, homography, mapPt, helpMatch, SHOPGROUPS, shopGroup, defUnit, checkEmail, checkTel, roundBday, callPlan, parseShopLines, wxDayNight };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = L;

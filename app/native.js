@@ -1166,7 +1166,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   function nachfrage() {
     const open = needOpen(); if (!open.length || document.querySelector("#sheet.open")) return false;
     const bad = open.filter(x => x.bad && x.bad()), onlyBad = bad.length === open.length;
-    openSheet(`<p class="stitle">${onlyBad ? "Schlüssel funktioniert nicht" : "Neu in Mirella"}</p><p class="hint" style="margin-top:0">${onlyBad ? "Der Dienst lehnt den eingetragenen Schlüssel ab. Bitte den richtigen Schlüssel neu einfügen. Danach prüft Mirella ihn gleich." : "Das fehlt noch. Einmal eintragen, danach fragt Mirella nicht mehr. Du kannst Felder auch leer lassen und später unter Einstellungen nachtragen."}</p>${open.map(x => x.html(bad.includes(x))).join("")}<div class="row2">${bad.length ? '<button class="btn" data-act="nflater">Später</button>' : ""}<button class="btn pri" data-act="nfsave">Speichern</button></div>`);
+    openSheet(`<p class="stitle">${onlyBad ? "Schlüssel funktioniert nicht" : "Neu in Mirella"}</p><p class="hint" style="margin-top:0">${onlyBad ? "Bitte den richtigen Schlüssel neu einfügen." : "Das fehlt noch. Einmal eintragen, danach fragt Mirella nicht mehr. Du kannst Felder auch leer lassen und später unter Einstellungen nachtragen."}</p>${open.map(x => x.html(bad.includes(x))).join("")}<div class="row2">${bad.length ? '<button class="btn" data-act="nflater">Später</button>' : ""}<button class="btn pri" data-act="nfsave">Speichern</button></div>`);
     return true;
   }
   ACT.nfsave = async el => {

@@ -97,11 +97,7 @@ SETS.bahn = () => {
   ${keyField("set-dbid", "Client ID", { set: "dbClientId", value: s.dbClientId || "", ph: "Client ID einfügen" })}
   ${keyField("set-dbkey", "API Key", { set: "dbApiKey", value: s.dbApiKey || "", ph: "API Key einfügen", warn: keyIsBad("db", s.dbApiKey) ? "Die Bahn lehnt diesen Zugang ab. Bitte Client ID und API Key prüfen." : "" })}
   <p class="hint">Beides findest du im DB API Marketplace unter Anwendungen › Mirella. Die Anwendung muss „Timetables“ abonniert haben. Die Werte bleiben nur auf diesem Gerät.</p>
-  ${setH("Deine Bahnhöfe")}
-  ${st.map((x, i) => `<div class="set"><span>${esc(x.name)}<small>${x.dir ? "nur Züge über " + esc(x.dir) : "alle Abfahrten"}</small></span><span style="display:flex;gap:6px"><button class="mini" data-act="bahndir" data-i="${i}">Richtung</button><button class="mini" data-act="bahndel" data-i="${i}">Entfernen</button></span></div>`).join("") || '<p class="hint" style="margin-top:0">Noch keiner. Zum Beispiel deinen Bahnhof zu Hause und den bei der Arbeit.</p>'}
-  <form class="shoprow" data-form="bahnq" style="margin:8px 0 0"><input class="search" id="bahn-q" style="margin:0" placeholder="Bahnhof suchen, z. B. Stuttgart Hbf" aria-label="Bahnhof suchen" autocomplete="off"><button class="btn pri" style="flex:none">Suchen</button></form>
-  <div id="bahn-res"></div>
-  <label class="set"><span>Auf Heute zeigen<small>die nächsten Abfahrten am ersten Bahnhof</small></span><input type="checkbox" class="sw" data-set="bahnHeute"${s.bahnHeute ? " checked" : ""}></label>`;
+  <p class="hint">Damit zeigt der Wecker nach Ankunftszeit (Weg „Bahn und Bus“) für deine Züge Verspätung, Gleis und Ausfälle. Die Verbindung selbst sucht Mirella über Google Maps.</p>`;
 };
 Object.assign(ACT, {
   bahndrawer: () => { closeAll(); bahnFrom = "drawer"; view = "bahn"; render(); },
@@ -128,8 +124,7 @@ document.addEventListener("submit", async e => {
 }, true);
 
 /* Einträge im Menü und in den Einstellungen */
-const bahnOrigDrawer = typeof wxRow === "function" ? wxRow : null;
-if (bahnOrigDrawer) wxRow = function () { return bahnOrigDrawer() + `<button class="drow" data-act="bahndrawer"><span class="aic" style="--ac:#C2342B">${BAHN_IC}</span><span class="dt"><b>Bahn</b><small>${bahnOn() ? ((S.settings.bahnSt || []).map(x => x.name).join(", ") || "Bahnhof hinzufügen") : "Abfahrten, Verspätung, Gleis"}</small></span><span class="chev">›</span></button>`; };
+/* Kein eigener Menüpunkt mehr (Wunsch Felix): die Bahn-Daten fließen in den Wecker nach Ankunftszeit. */
 const BAHN_IC = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 10h14"/><circle cx="9" cy="13.5" r=".8"/><circle cx="15" cy="13.5" r=".8"/><path d="m8 21 2-4M16 21l-2-4"/></svg>';
 const bahnOrigEinst = R.einstellungen;
 R.einstellungen = function () {
@@ -138,9 +133,24 @@ R.einstellungen = function () {
   const mark = '<div class="sethead2">Mirella</div>', i = h.indexOf(mark); return i < 0 ? h + row : h.slice(0, i) + row + h.slice(i);
 };
 
-/* Heute: nächste Abfahrten am ersten Bahnhof (wenn eingeschaltet) */
-if (typeof HOOKS !== "undefined" && HOOKS.heute) HOOKS.heute.push(() => {
-  const st = (S.settings.bahnSt || [])[0]; if (!S.settings.bahnHeute || !st || !bahnOn()) return "";
-  setTimeout(async () => { const box = document.getElementById("bh-" + st.eva); if (!box) return; try { const l = await bahnBoard(st); l.dir = st.dir; box.innerHTML = bahnRows(l.slice(0, 3)); } catch (e) { box.innerHTML = `<p class="fwarn">${esc(e.message || "")}</p>`; } }, 0);
-  return `<div class="card bst" role="button" data-act="bahnheute"><div class="bsth">Bahn ab ${esc(st.name)}${st.dir ? ` <small>Richtung ${esc(st.dir)}</small>` : ""}<span class="chev" style="float:right">›</span></div><div id="bh-${esc(st.eva)}">${BAHN.cache[st.eva] ? bahnRows(BAHN.cache[st.eva].list.slice(0, 3)) : '<p class="hint">Lädt …</p>'}</div></div>`;
-});
+/* Wecker mit Bahn: für die Züge der Verbindung Verspätung, Gleis und Ausfall nachsehen (nur für die nächsten rund 90 Minuten bekannt) */
+const bahnNorm = z => String(z || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+async function bahnLive(parts) {
+  if (!bahnOn() || !parts) return;
+  const stops = {};
+  for (const x of parts) {
+    if (!x.linie || !x.ab || !x.von) continue;
+    const dep = new Date(); const [h, m] = x.ab.split(":").map(Number); dep.setHours(h, m, 0, 0);
+    if (+dep < Date.now() - 5 * 60e3 || +dep > Date.now() + 95 * 60e3) continue;
+    try {
+      const key = x.von.toLowerCase();
+      if (!stops[key]) stops[key] = (await bahnSearch(x.von.replace(/\s*\(.*\)\s*/g, " ").trim()))[0] || null;
+      const st = stops[key]; if (!st) continue;
+      const list = await bahnBoard({ eva: st.eva }, true);
+      const want = bahnNorm(x.linie);
+      const hit = list.find(z => hm2(z.pt) === x.ab && (bahnNorm(z.zug) === want || bahnNorm(z.zug).endsWith(want) || want.endsWith(bahnNorm(z.zug)))) || list.find(z => hm2(z.pt) === x.ab);
+      if (!hit) continue;
+      x.delay = hit.delay; x.gl = hit.gln || hit.gl; x.glNeu = !!hit.gln; x.aus = hit.aus; x.liveAt = Date.now();
+    } catch (e) { if (/lehnt/.test(e.message || "")) return; }
+  }
+}

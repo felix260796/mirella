@@ -333,7 +333,11 @@ R.bereich = function () {
   if (A.id === "geld") h += financeHTML();
   if (A.id === "doku") h += docsHTML();
   if (A.id === "gesund") h += suppToday(true);
-  h += `<div class="sec"><span class="label">Steht an</span><span class="label">${todos.length || ""}</span></div>${todos.length ? todos.slice(0, 8).map(todoRow).join("") + (todos.length > 8 ? `<p class="swipehint">und ${todos.length - 8} weitere im Kalender</p>` : "") : '<div class="swipehint" style="text-align:left">Nichts offen. Mirella meldet sich, wenn etwas fällig wird.</div>'}`;
+  /* Nur was in den nächsten 14 Tagen fällig ist, steht groß da. Alles Spätere nur klein und zugeklappt;
+     sobald es ansteht, kommt es ohnehin auf „Heute“. */
+  const soonEnd = addDays(today(), 14), soon = todos.filter(t => !t.date || t.date <= soonEnd), later = todos.filter(t => t.date && t.date > soonEnd).sort((a, b) => a.date < b.date ? -1 : 1);
+  if (soon.length) h += `<div class="sec"><span class="label">Steht bald an</span><span class="label">${soon.length}</span></div>${soon.slice(0, 8).map(todoRow).join("")}${soon.length > 8 ? `<p class="swipehint">und ${soon.length - 8} weitere im Kalender</p>` : ""}`;
+  if (later.length) h += `<details class="later"><summary>Später: ${later.length === 1 ? "1 Erinnerung" : later.length + " Erinnerungen"}, als Nächstes ${fmtDate(later[0].date)}</summary>${later.map(t => `<button class="laterrow" data-act="edittodo" data-id="${t.id}"><span>${esc(t.t)}</span><small>${fmtDate(t.date)}</small></button>`).join("")}</details>`;
   const kinds = Object.keys(KINDS).filter(k => KINDS[k].area === A.id);
   for (const k of kinds) {
     const K = KINDS[k], list = S.items.filter(x => x.kind === k).sort((a, b) => kindTitle(k, a).localeCompare(kindTitle(k, b), "de"));

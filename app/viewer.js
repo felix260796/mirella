@@ -62,8 +62,31 @@ async function openViewer(blob, name) {
       if (!o.isConnected) return;
       const pg = await doc.getPage(i), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: want / v1.width });
       const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height); c.setAttribute("aria-label", "Seite " + i);
-      ct.appendChild(c);
+      const wrap = document.createElement("div"); wrap.className = "zvp"; wrap.dataset.page = i; wrap.appendChild(c);
+      ct.appendChild(wrap);
       await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+      // Verweise im PDF antippbar machen: Sprünge im Dokument (z. B. „Vertiefung“) und Links nach außen
+      try {
+        for (const an of await pg.getAnnotations()) {
+          if (an.subtype !== "Link" || !an.rect || !(an.dest || an.url)) continue;
+          const r = lib.Util.normalizeRect(vp.convertToViewportRectangle(an.rect));
+          const l = document.createElement("a"); l.className = "zvl"; l.setAttribute("role", "link"); l.setAttribute("aria-label", an.url ? "Link öffnen" : "Zur Stelle im Dokument springen");
+          l.style.cssText = `left:${r[0] / vp.width * 100}%;top:${r[1] / vp.height * 100}%;width:${(r[2] - r[0]) / vp.width * 100}%;height:${(r[3] - r[1]) / vp.height * 100}%`;
+          if (an.url) { l.href = an.url; l.target = "_blank"; l.rel = "noopener"; }
+          else l.onclick = async e => {
+            e.preventDefault();
+            try {
+              const d = typeof an.dest === "string" ? await doc.getDestination(an.dest) : an.dest; if (!d) return;
+              const pi = typeof d[0] === "object" ? await doc.getPageIndex(d[0]) : +d[0];
+              const tw = ct.querySelector(`.zvp[data-page="${pi + 1}"]`); if (!tw) return;
+              let frac = 0;
+              try { const tp = await doc.getPage(pi + 1), tv = tp.getViewport({ scale: 1 }); const y = d[1] && d[1].name === "XYZ" ? d[3] : d[1] && /^FitB?H$/.test(d[1].name) ? d[2] : null; if (y != null) frac = Math.max(0, Math.min(1, tv.convertToViewportPoint(0, y)[1] / tv.height)); } catch (_) { }
+              sc.scrollTo({ top: Math.max(0, tw.offsetTop + tw.offsetHeight * frac - 8), behavior: "smooth" });
+            } catch (_) { }
+          };
+          wrap.appendChild(l);
+        }
+      } catch (_) { }
     }
   } catch (e) {
     // ohne Netz oder bei Fehlern: wie bisher im eingebauten Anzeiger

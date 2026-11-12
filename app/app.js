@@ -115,6 +115,14 @@ function migrate() {
   const OLD = ["Paddeln", "Fußball München", "Stammtisch", "Arbeit"], used = new Set(S.people.map(p => p.group).filter(Boolean));
   S.groups = [...new Set([...BASEGROUPS, ...(S.groups || []).filter(g => !OLD.includes(g) || used.has(g)), ...used])];
 }
+/* Einmalig (Wunsch Felix 12.11.): Supplements als ganz normale tägliche To-dos mit Nerv-Modus.
+   Läuft erst, wenn die Daten da sind, legt nichts doppelt an und kommt nicht wieder, wenn Felix sie löscht. */
+function suppTodosAnlegen() {
+  if (S.settings.suppTodos || S.people.length < 5) return false;
+  const T = [["Supplements morgens: Kreatin, Multivitamin, Omega-3", S.settings.suppMorning || "07:30"], ["Magnesium-Bisglycinat nehmen", "15:00"]];
+  for (const [t, time] of T) if (!S.todos.some(x => x.t.toLowerCase() === t.toLowerCase())) S.todos.push({ id: uid(), t, pid: "", list: "todo", done: false, created: today(), date: today(), time, trig: "zeit", rep: "täglich", area: "gesund", nerv: true, prio: "", ort: "" });
+  S.settings.suppTodos = 1; save(); return true;
+}
 function save() {
   for (const p of S.people) { if (p.tel && p.tel[0] !== "+") p.tel = telNice(p.tel); if (p.tels) for (const x of p.tels) if (x.n && x.n[0] !== "+") x.n = telNice(x.n); }
   try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }

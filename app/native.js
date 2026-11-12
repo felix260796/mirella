@@ -1316,7 +1316,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;
   }
 
-  setTimeout(() => { if (!N.setup) wizard(); else { tick(); setTimeout(() => { nachfrage(); keyCheck(); }, 1200); } }, 600);
+  setTimeout(() => { if (!N.setup) wizard(); else { tick(); setTimeout(() => { nachfrage(); keyCheck(); }, 1200); setTimeout(() => { if (suppTodosAnlegen()) render(true); }, 9000); } }, 600);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && N.setup) setTimeout(nachfrage, 1500); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 })();

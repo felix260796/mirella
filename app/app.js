@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.34.1";
+const VERSION = "0.35";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -341,7 +341,7 @@ function isoWeek(s) { const d = D(s); d.setDate(d.getDate() + 3 - ((d.getDay() +
 
 /* ---------- Zustand ---------- */
 let akteOpen = {}, akteOpenFor = null;
-let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", grpOpen = false, showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false, showShopHist = 0;
+let view = "heute", cur = null, area = null, todoList = "todo", calY, calM, selDate, calView = "monat", q = "", showDone = false, grpFilter = "", grpOpen = false, todoFold = { m: false, s: false }, showAllCalls = false, allCallsFor = null, setSec = "", setFrom = null, setIdxY = 0, showArch = false, showShopHist = 0;
 { const t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); selDate = today(); }
 
 /* ---------- Bausteine ---------- */
@@ -497,8 +497,13 @@ const R = {
     const open = all.filter(t => !t.done).concat(typeof suppTodos === "function" ? suppTodos() : []).sort((a, b) => ((a.date || "9999") + (a.time || "")) < ((b.date || "9999") + (b.time || "")) ? -1 : 1).sort(byPrio);
     const doneToday = all.filter(t => t.done && t.doneAt === today());
     const older = all.filter(t => t.done && t.doneAt !== today()).sort((a, b) => (a.doneAt || "") < (b.doneAt || "") ? 1 : -1);
+    /* Groß nur, was heute dran ist (auch Überfälliges und Aufgaben ohne Datum). Morgen und Später einzeln aufklappen. */
+    const tm = addDays(today(), 1), nowT = open.filter(t => !t.date || t.date <= today()), morgenT = open.filter(t => t.date === tm), spaeterT = open.filter(t => t.date && t.date > tm).sort((a, b) => a.date < b.date ? -1 : 1);
+    const rowOf = t => t.supp ? suppTodoRow(t) : todoRow(t);
+    const fold = (k, label, list) => list.length ? `<button class="tfold" data-act="tfold" data-k="${k}" aria-expanded="${!!todoFold[k]}"><span>${label}</span><small>${list.length === 1 ? "1 Aufgabe" : list.length + " Aufgaben"}</small><span class="chev">${todoFold[k] ? "▾" : "▸"}</span></button>${todoFold[k] ? list.map(rowOf).join("") : ""}` : "";
     return `${topbar("To-dos")}${todoSeg(false)}
-    ${open.length ? open.map(t => t.supp ? suppTodoRow(t) : todoRow(t)).join("") : empty(doneToday.length ? "Alles erledigt für heute. Stark!" : "Keine offenen Aufgaben. Neu per + oder per Mikrofon.")}
+    ${nowT.length ? nowT.map(rowOf).join("") : empty(doneToday.length ? "Alles erledigt für heute. Stark!" : open.length ? "Für heute ist nichts offen." : "Keine offenen Aufgaben. Neu per + oder per Mikrofon.")}
+    ${fold("m", "Morgen", morgenT)}${fold("s", "Später", spaeterT)}
     ${doneToday.length ? `<div class="sec"><span class="label">Heute erledigt</span><span class="label">${doneToday.length}</span></div>${doneToday.map(todoRow).join("")}` : ""}
     ${todoInsights(all)}
     ${older.length ? `<div class="sec"><button class="mini" data-act="showdone">${showDone ? "Erledigte ausblenden" : "Alle erledigten zeigen (" + older.length + ")"}</button></div>${showDone ? older.slice(0, 100).map(todoRow).join("") : ""}` : ""}`;
@@ -1776,6 +1781,7 @@ const ACT = {
   allcalls: el => { showAllCalls = !showAllCalls; allCallsFor = el.dataset.id; render(true); },
   grpf: el => { grpFilter = el.dataset.g; grpOpen = false; render(true); },
   grpopen: () => { grpOpen = !grpOpen; render(true); },
+  tfold: el => { todoFold[el.dataset.k] = !todoFold[el.dataset.k]; render(true); },
   setday: el => { const k = el.dataset.k, d = +el.dataset.d, cur = (k === "callDays" ? callDays() : msgDays()).slice(); const i = cur.indexOf(d); if (i >= 0) { if (cur.length === 1) { toast("Mindestens ein Tag muss bleiben"); return; } cur.splice(i, 1); } else cur.push(d); S.settings[k] = cur.sort(); save(); render(true); },
   setage: el => { const a = +el.dataset.a, cur = (S.settings.roundAges || []).slice(); const i = cur.indexOf(a); if (i >= 0) cur.splice(i, 1); else cur.push(a); S.settings.roundAges = cur.sort((x, y) => x - y); save(); render(true); },
   shophist: () => { showShopHist = showShopHist ? 0 : 1; render(true); },

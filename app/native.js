@@ -1161,6 +1161,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     { k: "ki", missing: () => typeof kiOn === "function" && !kiOn(), bad: () => typeof KI !== "undefined" && keyIsBad("ki", KI.key), html: b => keyField("nf-ki", "Claude-Schlüssel (für die Mirella-KI)", { ph: "sk-ant-… einfügen", warn: b ? "Der eingetragene Schlüssel funktioniert nicht mehr. Bitte neu eintragen." : "" }), save: () => { const v = ($("#nf-ki").value || "").trim(); if (v) { KI.key = v; kiSave(); keyBad("ki", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.ki; } } },
     { k: "gmaps", missing: () => !S.settings.gmapsKey, bad: () => keyIsBad("gmaps", S.settings.gmapsKey), html: b => keyField("nf-gm", "Google-Maps-Schlüssel (für den Wecker nach Verkehr)", { ph: "AIza… einfügen", warn: b ? "Der eingetragene Schlüssel funktioniert nicht. Google sagt: ungültig. Bitte neu eintragen." : "" }), save: () => { const v = ($("#nf-gm").value || "").trim(); if (v) { S.settings.gmapsKey = v; keyBad("gmaps", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.gmaps; } } },
     { k: "db", missing: () => !(S.settings.dbClientId && S.settings.dbApiKey), bad: () => keyIsBad("db", S.settings.dbApiKey), html: b => `${keyField("nf-dbid", "Bahn: Client ID (DB API Marketplace)", { ph: "Client ID einfügen", warn: b ? "Die Bahn lehnt den Zugang ab. Bitte Client ID und API Key neu eintragen." : "" })}${keyField("nf-dbkey", "Bahn: API Key", { ph: "API Key einfügen" })}`, save: () => { const a = ($("#nf-dbid").value || "").trim(), k = ($("#nf-dbkey").value || "").trim(); if (a) S.settings.dbClientId = a; if (k) { S.settings.dbApiKey = k; keyBad("db", k, false); } } },
+    { k: "erinnerungen", missing: () => !!P.CapacitorCalendar && !N.remState, html: () => `<p class="hint"><b>Apple-Erinnerungen:</b> Was du Apple mit „Erinnere mich …“ sagst, holt Mirella beim Öffnen ab und bietet es dir zum Übernehmen an. Dein iPhone fragt gleich, ob Mirella deine Erinnerungen sehen darf. Bitte <b>Erlauben</b> tippen.</p>`, save: async () => { try { const r = await P.CapacitorCalendar.requestFullRemindersAccess(); N.remState = r.result || "denied"; } catch (_) { N.remState = "denied"; } } },
     { k: "wecker", missing: () => !!P.MirellaAlarm && !N.alarmState, html: () => `<p class="hint">Dein iPhone fragt gleich einmal, ob Mirella echte Wecker stellen darf. Bitte <b>Erlauben</b> tippen.</p>`, save: async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; } catch (_) { } } }
   ];
   /* Fehlendes nur einmal fragen. Ein Schlüssel, den der Dienst abgelehnt hat, kommt beim nächsten Öffnen wieder,
@@ -1219,7 +1220,14 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     ACT.lscopy = () => { try { navigator.clipboard.writeText($("#ls-t").value); toast("Kopiert"); } catch (_) { toast("Kopieren geht hier nicht"); } };
     ACT.lsperson = el => { closeSheet(); personForm(null); setTimeout(() => { const i = $("#c-tel"); if (i) { i.value = el.dataset.tel; i.dispatchEvent(new Event("input", { bubbles: true })); } }, 200); };
     // Siri, Kurzbefehle, Action-Taste: "Sag Mirella …" kommt hier als Text an
-    const intentIn = async () => { try { const r = await SY.takeIntent(); const t = (r && r.text || "").trim(); if (!t || !N.setup) return; closeAll(); voiceStart(); recStop(); $("#v-text").value = t; voiceReview(); } catch (_) { } };
+    const intentIn = async () => {
+      try {
+        const r = await SY.takeIntent(); let t = (r && r.text || "").trim(); if (!t || !N.setup) return;
+        const go = t.includes("§LOS§"); t = t.split("§LOS§").join("").replace(/^[\s.]+|[\s.]+$/g, "").replace(/\.\s*\./g, ".");
+        if (go) { closeAll(); losHinweise(); if (t) toast("Notiertes zeige ich dir danach"); if (t) N.losRest = t; return; }
+        closeAll(); voiceStart(); recStop(); $("#v-text").value = t; voiceReview();
+      } catch (_) { }
+    };
     SY.addListener("intent", () => setTimeout(intentIn, 300)); setTimeout(intentIn, 1500);
     // Anruf zu Ende: kurzer Anruf ohne Gespräch zählt als nicht erreicht, sonst fragt Mirella nach
     SY.addListener("callEnded", d => {
@@ -1318,6 +1326,43 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       <button class="drow" data-act="nfaceid"><span class="dt"><b>Mirella nur mit Face ID öffnen</b><small>${N.faceId ? "an" : "aus"}</small></span><span class="chev">›</span></button>
       <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;
   }
+
+  /* ---------- Apple-Erinnerungen: beim Öffnen abholen und zum Übernehmen anbieten ----------
+     Was Felix Apple mit „Erinnere mich …“ sagt, landet in Apples Erinnerungen. Mirella zeigt neue Einträge an;
+     „Übernehmen“ legt eine Aufgabe an und hakt den Eintrag bei Apple ab, „Lassen“ blendet ihn nur in Mirella aus. */
+  let remBusy = false, remList = [];
+  async function remindersIn() {
+    if (remBusy || !N.setup || N.remState !== "granted" || !P.CapacitorCalendar || document.querySelector("#sheet.open")) return;
+    remBusy = true;
+    try {
+      const lists = ((await P.CapacitorCalendar.getRemindersLists()).result || []).map(l => l.id).filter(Boolean);
+      if (!lists.length) return;
+      const all = (await P.CapacitorCalendar.getRemindersFromLists({ listIds: lists })).result || [];
+      N.remSeen = N.remSeen || {};
+      remList = all.filter(r => r && r.id && !r.isCompleted && !N.remSeen[r.id] && (r.title || "").trim());
+      if (remList.length) remSheet();
+    } catch (e) { console.warn("Erinnerungen", e); } finally { remBusy = false; }
+  }
+  const remWhen = r => { const ms = r.dueDate || r.startDate; if (!ms) return { date: "", time: "" }; const d = new Date(ms); return { date: isoOf(ms), time: d.getHours() || d.getMinutes() ? pad2(d.getHours()) + ":" + pad2(d.getMinutes()) : "" }; };
+  function remSheet() {
+    if (!remList.length) { closeSheet(); render(true); return; }
+    openSheet(`<p class="stitle">Aus Apple-Erinnerungen</p><p class="hint" style="margin-top:0">${remList.length === 1 ? "Ein neuer Eintrag" : remList.length + " neue Einträge"}. Übernehmen legt eine Aufgabe in Mirella an und hakt ihn bei Apple ab.</p>
+    ${remList.map(r => { const w = remWhen(r); return `<div class="remrow"><div><b>${esc(r.title)}</b>${w.date ? `<small>${esc(fmtDate(w.date))}${w.time ? " · " + esc(w.time) : ""}</small>` : ""}${r.notes ? `<small>${esc(r.notes.slice(0, 120))}</small>` : ""}</div><div class="row2"><button class="btn" data-act="remskip" data-id="${esc(r.id)}">Lassen</button><button class="btn pri" data-act="remtake" data-id="${esc(r.id)}">Übernehmen</button></div></div>`; }).join("")}
+    ${remList.length > 1 ? `<button class="btn pri" data-act="remall" style="width:100%;margin-top:8px">Alle übernehmen</button>` : ""}`);
+  }
+  async function remTake(r) {
+    const w = remWhen(r);
+    S.todos.push({ id: uid(), t: r.title.trim(), list: "todo", done: false, created: today(), date: w.date, time: w.time, trig: "zeit", rep: "nie", note: r.notes || "", from: "apple" });
+    N.remSeen[r.id] = 1;
+    try { await P.CapacitorCalendar.modifyReminder({ id: r.id, isCompleted: true, completionDate: Date.now() }); } catch (_) { }
+  }
+  ACT.remtake = async el => { const r = remList.find(x => x.id === el.dataset.id); if (!r) return; await remTake(r); remList = remList.filter(x => x !== r); nSave(); save(); toast("Übernommen: " + r.title); remSheet(); };
+  ACT.remskip = el => { N.remSeen[el.dataset.id] = 1; remList = remList.filter(x => x.id !== el.dataset.id); nSave(); remSheet(); };
+  ACT.remall = async () => { for (const r of remList) await remTake(r); const n = remList.length; remList = []; nSave(); save(); closeSheet(); render(true); toast(n + " Erinnerungen übernommen"); };
+  window.mirellaEventsOn = d => (N.events || []).filter(e => e.d <= d && (e.e || e.d) >= d && !(N.calHide || []).includes(e.cid));
+  window.mirellaLosRest = () => { const t = N.losRest || ""; delete N.losRest; nSave(); return t; };
+  setTimeout(remindersIn, 5000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(remindersIn, 3000); });
 
   setTimeout(() => { if (!N.setup) wizard(); else { tick(); setTimeout(() => { nachfrage(); keyCheck(); }, 1200); setTimeout(() => { if (suppTodosAnlegen()) render(true); }, 9000); } }, 600);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && N.setup) setTimeout(nachfrage, 1500); });

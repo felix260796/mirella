@@ -344,7 +344,7 @@ struct NotierMirellaIntent: AppIntent {
     static let description = IntentDescription("Notiert es, ohne Mirella zu öffnen. Beim nächsten Öffnen zeigt Mirella alles zum Bestätigen.")
     static let openAppWhenRun: Bool = false
 
-    @Parameter(title: "Was soll Mirella sich merken?", requestValueDialog: "Was soll ich für Mirella notieren?")
+    @Parameter(title: "Was soll Mirella sich merken?", requestValueDialog: "Was soll ich Mirella sagen?")
     var text: String
 
     @MainActor
@@ -354,20 +354,41 @@ struct NotierMirellaIntent: AppIntent {
     }
 }
 
+/// „Ich gehe los“: öffnet Mirella mit den Hinweisen fürs Rausgehen (Wetter, Termine, Einkaufsliste).
+/// Gedacht für die Kurzbefehle-Automation mit dem NFC-Aufkleber an der Wohnungstür.
+@available(iOS 16.0, *)
+struct IchGeheLosIntent: AppIntent {
+    static let title: LocalizedStringResource = "Ich gehe los"
+    static let description = IntentDescription("Öffnet Mirella mit Wetter, Terminen und Einkaufsliste, bevor du aus der Tür gehst.")
+    static let openAppWhenRun: Bool = true
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        MirellaIntentBox.put("§LOS§")
+        return .result()
+    }
+}
+
 @available(iOS 16.0, *)
 struct MirellaShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: SagMirellaIntent(),
-            phrases: ["Sag \(.applicationName)", "Sag \(.applicationName) etwas", "Neue Aufgabe in \(.applicationName)"],
+            phrases: ["Sag \(.applicationName) etwas", "Neue Aufgabe in \(.applicationName)", "Öffne \(.applicationName) zum Sprechen"],
             shortTitle: "Sag Mirella",
             systemImageName: "mic.fill"
         )
         AppShortcut(
             intent: NotierMirellaIntent(),
-            phrases: ["Notier für \(.applicationName)", "Notiere für \(.applicationName)", "Schreib in \(.applicationName)", "Merk dir etwas in \(.applicationName)", "Für \(.applicationName) notieren"],
+            phrases: ["Sag \(.applicationName) Bescheid", "Gib \(.applicationName) Bescheid", "Notier für \(.applicationName)", "Notier für die App \(.applicationName)", "Notiz für \(.applicationName)", "Merk dir etwas in \(.applicationName)"],
             shortTitle: "Für Mirella notieren",
             systemImageName: "text.badge.plus"
+        )
+        AppShortcut(
+            intent: IchGeheLosIntent(),
+            phrases: ["Ich gehe los, \(.applicationName)", "\(.applicationName), ich gehe los", "Ich gehe los mit \(.applicationName)", "\(.applicationName) ich geh los"],
+            shortTitle: "Ich gehe los",
+            systemImageName: "door.left.hand.open"
         )
     }
 }

@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>de</string>
 	<key>CFBundleDisplayName</key>
 	<string>Mirella</string>
 	<key>CFBundleExecutable</key>
@@ -55,7 +55,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Mirella legt Fotos aus deiner Mediathek ab.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Mirella kann Erinnerungen in deiner Erinnerungen-App anlegen.</string>
+	<string>Mirella holt neue Einträge aus deinen Erinnerungen ab, damit du sie in Mirella übernehmen kannst.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Mirella wandelt deine Sprache in Text um.</string>
 	<key>UIBackgroundModes</key>

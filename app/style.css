@@ -729,3 +729,24 @@ details.later{margin:6px 0 10px;font-size:14px;color:var(--ink-2)}
 details.later summary{cursor:pointer;padding:6px 0;list-style:revert}
 .laterrow{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;font:inherit;font-size:14px;color:var(--ink-2);background:none;border:0;border-bottom:1px solid var(--line);padding:8px 2px}
 .laterrow small{flex:none;font-size:13px}
+
+/* To-dos: Morgen und Später zum Aufklappen */
+.tfold{display:flex;align-items:center;gap:10px;width:100%;margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2);font:inherit;color:var(--ink);text-align:left}
+.tfold span:first-child{font-weight:700;font-size:16px;flex:1}
+.tfold small{font-size:13px;color:var(--ink-2)}
+
+/* Ich gehe los */
+.losrow{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.losrow .losic{flex:none;width:36px;height:36px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-size:20px}
+.losrow b{display:block;font-size:16px}
+.losrow small{display:block;font-size:14px;color:var(--ink-2);margin-top:2px}
+.losguide{padding-left:20px;margin:6px 0;font-size:15px;line-height:1.45}
+.losguide li{margin:6px 0}
+/* Apple-Erinnerungen übernehmen */
+.remrow{padding:10px 0;border-bottom:1px solid var(--line)}
+.remrow b{display:block;font-size:16px}
+.remrow small{display:block;font-size:13px;color:var(--ink-2)}
+.remrow .row2{margin-top:8px}
+/* Bahn im Wecker */
+.bweg .ok{color:#1f8a4c}
+.bweg .late{color:var(--late)}.bweg .warn{color:#b26a00}

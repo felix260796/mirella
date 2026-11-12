@@ -82,6 +82,7 @@ async function planAlarm(w) {
     const target = new Date(+new Date(w.date + "T" + w.arrive + ":00") - (+w.bufMin || 0) * 60e3);
     if (target < new Date()) throw new Error("Start: Die Ankunftszeit liegt in der Vergangenheit");
     rs = await routeGoogle(from, to, target, "bahn"); live = true; src = "Verbindung von Google Maps (Fahrplan)";
+    if (typeof bahnLive === "function" && rs[0] && rs[0].parts) { try { await bahnLive(rs[0].parts); if (rs[0].parts.some(x => x.liveAt)) src += ", Verspätung und Gleis von der Bahn"; } catch (_) { } }
   } else {
     const f = mode === "auto" ? L.trafficFactor(w.date, w.arrive) : 1;
     src = mode === "auto" ? "Route ohne Live-Verkehr, mit Zuschlag für Berufsverkehr" : "Route aus OpenStreetMap";
@@ -197,11 +198,25 @@ function festForm(w) {
   <div class="fgrid"><div class="fld"><label for="w-cnt">Anzahl Wecker</label><select id="w-cnt">${[1, 2, 3, 4, 5].map(m => `<option value="${m}"${+v.count === m ? " selected" : ""}>${m}</option>`).join("")}</select></div><div class="fld"><label for="w-gap">Abstand</label><select id="w-gap">${[3, 5, 10].map(m => `<option value="${m}"${+v.gap === m ? " selected" : ""}>${m} Min.</option>`).join("")}</select></div></div>
   <div class="row2">${w ? `<button class="btn danger" data-act="delwecker" data-id="${w.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savefest" data-id="${w ? w.id : ""}">Speichern</button></div></div>`);
 }
+/* Der ganze Weg mit der Bahn: zu Fuß, Abfahrt mit Gleis und Verspätung, Umstieg mit Wartezeit, Ankunft */
+function bahnWeg(parts) {
+  const mins = t => { const [h, m] = String(t || "0:0").split(":").map(Number); return h * 60 + m; };
+  let lastAn = null, lastNach = "", walk = 0;
+  return parts.map(x => {
+    if (x.fuss) { walk += x.fuss; return `<small class="bweg">🚶 ${x.fuss} Min. zu Fuß${lastNach ? " ab " + esc(lastNach) : ""}</small>`; }
+    let out = "";
+    if (lastAn) { const wait = (mins(x.ab) - mins(lastAn) + 1440) % 1440 - walk; if (wait > 0) out += `<small class="bweg">⏱ ${wait} Min. warten${x.von ? " in " + esc(x.von) : ""}</small>`; }
+    const live = x.aus ? ' <b class="late">fällt aus</b>' : x.delay > 0 ? ` <b class="${x.delay >= 5 ? "late" : "warn"}">+${x.delay} Min.</b>` : x.liveAt ? ' <b class="ok">pünktlich</b>' : "";
+    out += `<small class="bweg"><b>${esc(x.ab)}</b>${live} ${esc(x.linie)}${x.richtung ? " Richtung " + esc(x.richtung) : ""}${x.gl ? ` · Gleis ${esc(x.gl)}${x.glNeu ? " (geändert)" : ""}` : ""}<br>${esc(x.von)} › ${esc(x.nach)} (an ${esc(x.an)})</small>`;
+    lastAn = x.an; lastNach = x.nach; walk = 0;
+    return out;
+  }).join("");
+}
 function resHTML(w) {
   const mode = modeOf(w), others = (w.routes || []).map((r, i) => ({ r, i })).filter(x => !x.r.on);
   const verkehr = mode !== "auto" ? "" : w.live ? (w.stauMin >= 2 ? `Davon etwa ${w.stauMin} Min. durch Verkehr, der um diese Uhrzeit zu erwarten ist.` : "Um diese Uhrzeit ist voraussichtlich freie Fahrt.") : (w.stauMin >= 2 ? `Davon ${w.stauMin} Min. geschätzter Zuschlag für Berufsverkehr.` : "");
   const weg = mode === "bahn"
-    ? `<small><b>Verbindung</b>${w.an ? " · Ankunft " + esc(w.an) : ""}</small>` + (w.parts || []).map(x => x.fuss ? `<small>🚶 ${x.fuss} Min. zu Fuß</small>` : `<small><b>${esc(x.ab)}</b> ${esc(x.linie)}${x.richtung ? " Richtung " + esc(x.richtung) : ""}<br>${esc(x.von)} › ${esc(x.nach)} (an ${esc(x.an)})</small>`).join("")
+    ? `<small><b>Verbindung</b>${w.an ? " · Ankunft " + esc(w.an) : ""}</small>` + bahnWeg(w.parts || [])
     : `<small><b>Strecke: ${kmTxt(w.km)}</b> · ${w.travelMin} Min. ${{ auto: "Fahrt", rad: "mit dem Rad", fuss: "zu Fuß" }[mode]}${w.via ? " über " + esc(w.via) : ""}</small>`;
   const altTxt = x => mode === "bahn" ? `Andere Verbindung: ${esc(x.r.desc)}` : `Andere Route${x.r.desc ? " über " + esc(x.r.desc) : ""}: ${x.r.min} Min. · ${kmTxt(x.r.km)}`;
   const losW = mode === "auto" ? "Losfahren" : "Losgehen", fahrtW = { auto: "Fahrzeit", bahn: "Weg mit Bahn und Bus", rad: "Fahrzeit mit dem Rad", fuss: "Gehzeit" }[mode];

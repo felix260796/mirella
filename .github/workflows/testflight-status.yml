@@ -33,4 +33,19 @@ jobs:
               beta = inc.get((bd.get('type'), bd.get('id')), {})
               print(f"Version {ver} Build {a.get('version')}: hochgeladen {a.get('uploadedDate')}, Verarbeitung {a.get('processingState')}, abgelaufen {a.get('expired')}, intern {beta.get('internalBuildState')}, extern {beta.get('externalBuildState')}")
           if 'errors' in r: print(r['errors'])
+          # Hochgeladene Pakete (auch abgelehnte, die nie als Build erscheinen) mit Apples Fehlermeldungen
+          for url, prm in (('https://api.appstoreconnect.apple.com/v1/apps/' + app + '/buildUploads', {'limit': 6}),
+                           ('https://api.appstoreconnect.apple.com/v1/buildUploads', {'filter[app]': app, 'limit': 6})):
+              u = requests.get(url, params=prm, headers=H)
+              print('Abfrage Uploads:', u.status_code)
+              if u.status_code != 200: continue
+              for b in u.json().get('data', []):
+                  a = b.get('attributes', {})
+                  st = a.get('state') or {}
+                  print(f"Upload {a.get('cfBundleShortVersionString')} Build {a.get('cfBundleVersion')}: erstellt {a.get('createdDate')}, Zustand {st.get('state') if isinstance(st, dict) else st}")
+                  if isinstance(st, dict):
+                      for k in ('errors', 'warnings'):
+                          for e in st.get(k) or []:
+                              print('   ', k, e.get('code'), e.get('description') or e.get('message') or e)
+              break
           PY

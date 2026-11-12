@@ -48,6 +48,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Mirella zeigt dir das Wetter an deinem Standort.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Mirella nutzt deinen Standort für das Wetter und für Hinweise unterwegs.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mirella hört zu, wenn du ihr etwas sagst.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -341,7 +341,7 @@ struct SagMirellaIntent: AppIntent {
 @available(iOS 16.0, *)
 struct NotierMirellaIntent: AppIntent {
     static let title: LocalizedStringResource = "Für Mirella notieren"
-    static let description = IntentDescription("Siri notiert es, ohne Mirella zu öffnen. Beim nächsten Öffnen zeigt Mirella alles zum Bestätigen.")
+    static let description = IntentDescription("Notiert es, ohne Mirella zu öffnen. Beim nächsten Öffnen zeigt Mirella alles zum Bestätigen.")
     static let openAppWhenRun: Bool = false
 
     @Parameter(title: "Was soll Mirella sich merken?", requestValueDialog: "Was soll ich für Mirella notieren?")

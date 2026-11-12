@@ -35,7 +35,7 @@ const BASEGROUPS = ["Familie", "Freunde", "Bekannte", "Geschäftlich"];
 const PRIOS = [[1, "Hoch", "#C2372D"], [2, "Mittel", "#D98E04"], [3, "Niedrig", "#2E7BBF"]];
 const prioOf = t => PRIOS.find(p => p[0] === +t.prio) || null;
 const byPrio = (a, b) => (+a.prio || 9) - (+b.prio || 9);
-const REPS = ["nie", "täglich", "wöchentlich", "alle 2 Wochen", "monatlich", "vierteljährlich", "jährlich"];
+const REPS = ["nie", "täglich", "Mo–Fr", "Sa+So", "wöchentlich", "alle 2 Wochen", "monatlich", "vierteljährlich", "jährlich"];
 const BASECATS = ["Lebensmittel & Supermarkt", "Getränke", "Bäcker & Metzger", "Restaurant & Café", "Tanken & Auto", "Kleidung", "Drogerie & Gesundheit", "Haushalt & Wohnen", "Hobby & Sport", "Freizeit & Ausgehen", "Reisen", "Geschenke", "Technik & Abos", "Sonstiges"];
 const catList = () => [...new Set([...BASECATS, ...((S && S.settings.cats) || []), ...((S && S.expenses.map(e => e.cat)) || [])].filter(Boolean))];
 const FOLDERS = ["Brief", "Rechnung", "Bescheid", "Vertrag", "Versicherung", "Kontoauszug", "Lohnabrechnung", "Steuer", "Ausweis & Urkunde", "Garantie & Kaufbeleg", "Gesundheit", "Sonstiges"];
@@ -119,8 +119,9 @@ function migrate() {
    Läuft erst, wenn die Daten da sind, legt nichts doppelt an und kommt nicht wieder, wenn Felix sie löscht. */
 function suppTodosAnlegen() {
   if (S.settings.suppTodos || S.people.length < 5) return false;
-  const T = [["Kreatin nehmen, bevor du losgehst", "07:00"], ["Multivitamin und Omega-3 zum Mittagessen", "12:00"], ["Magnesium-Bisglycinat nehmen", "20:00"]];
-  for (const [t, time] of T) if (!S.todos.some(x => x.t.toLowerCase() === t.toLowerCase())) S.todos.push({ id: uid(), t, pid: "", list: "todo", done: false, created: today(), date: today(), time, trig: "zeit", rep: "täglich", area: "gesund", nerv: true, prio: "", ort: "" });
+  /* Mo–Fr isst Felix bis 12 Uhr nichts: Kreatin beim Rausgehen, der Rest zum Mittagessen. Am Wochenende alles zum Frühstück. */
+  const T = [["Kreatin nehmen, bevor du losgehst", "07:00", "Mo–Fr"], ["Multivitamin und Omega-3 zum Mittagessen", "12:00", "Mo–Fr"], ["Kreatin, Multivitamin und Omega-3 zum Frühstück", "09:00", "Sa+So"], ["Magnesium-Bisglycinat nehmen", "20:00", "täglich"]];
+  for (const [t, time, rep] of T) if (!S.todos.some(x => x.t.toLowerCase() === t.toLowerCase())) S.todos.push({ id: uid(), t, pid: "", list: "todo", done: false, created: today(), date: rep === "täglich" ? today() : repDay(today(), rep, true), time, trig: "zeit", rep, area: "gesund", nerv: true, prio: "", ort: "" });
   S.settings.suppTodos = 1; save(); return true;
 }
 function save() {
@@ -269,7 +270,13 @@ function findPersonsIn(text) {
 }
 
 /* ---------- Aufgaben ---------- */
+/* Nächster passender Tag nach date (Mo–Fr oder Sa+So); mit same=true zählt date selbst mit */
+function repDay(date, rep, same) {
+  const ok = d => { const w = new Date(d + "T12:00").getDay(); return rep === "Sa+So" ? (w === 0 || w === 6) : (w >= 1 && w <= 5); };
+  let d = same ? date : addDays(date, 1); for (let i = 0; i < 8 && !ok(d); i++) d = addDays(d, 1); return d;
+}
 function stepRep(date, rep) {
+  if (rep === "Mo–Fr" || rep === "Sa+So") return repDay(date, rep);
   return { "täglich": addDays(date, 1), "wöchentlich": addDays(date, 7), "alle 2 Wochen": addDays(date, 14), "monatlich": addMonths(date, 1), "vierteljährlich": addMonths(date, 3), "jährlich": addMonths(date, 12) }[rep] || null;
 }
 function todoMeta(t) {

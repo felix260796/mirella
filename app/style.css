@@ -651,3 +651,16 @@ a.mini.route{display:inline-flex;align-items:center;gap:6px;text-decoration:none
 .kmbox.res{border:2px solid var(--ink)}.kmplus{text-align:center;margin:4px 0;color:var(--ink-3)}
 .kmname{flex-wrap:wrap}.kmname button{white-space:normal}
 .kbsrc{margin:8px 0 0}
+
+/* Kontakt-Formular: weitere Nummern und E-Mails, Plus-Zeilen */
+.telrow.tel3{grid-template-columns:auto minmax(0,1fr) 116px}.telrow.tel3 select:last-child{min-width:0;width:116px}
+.xrow{display:grid;grid-template-columns:minmax(0,1fr) 116px 40px;gap:6px;margin-top:6px;align-items:center}.xrow.mail{grid-template-columns:minmax(0,1fr) 40px}
+.xdel{height:44px;border:1px solid var(--line,#ddd);border-radius:10px;background:none;color:var(--late,#c00);font-size:16px;cursor:pointer}
+.plusline{margin-top:6px}.plusrow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.fhint{display:block;color:var(--ink-3);margin-top:4px}
+/* Akte: Nachfragen, Notizen, Geschenkideen als kompakte Zeilen */
+.alines{margin:0 0 12px}.alines .block{margin:8px 0}
+.aline{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;width:100%;text-align:left;background:var(--card,#fff);border:1px solid var(--line,#ddd);border-radius:12px;padding:10px 12px;margin:0 0 6px;font:inherit;color:inherit;cursor:pointer}
+.aline .at{display:flex;gap:6px;align-items:baseline}.aline .an{color:var(--ink-3);font-size:13px}
+.aline .as{grid-column:1;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.aline .chev{grid-column:2;grid-row:1/3;align-self:center;color:var(--ink-3)}

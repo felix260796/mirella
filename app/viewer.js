@@ -17,12 +17,12 @@ function pdfLib() {
 }
 
 /* blob: Bild oder PDF; name: Titel oben */
-async function openViewer(blob, name) {
+async function openViewer(blob, name, ext) {
   document.querySelectorAll(".zv").forEach(x => x.remove());
   const isPdf = /pdf/.test(blob.type || "") || /\.pdf$/i.test(name || "");
   const url = URL.createObjectURL(isPdf && !blob.type ? new Blob([blob], { type: "application/pdf" }) : blob);
   const o = document.createElement("div"); o.className = "zv";
-  o.innerHTML = `<div class="zvbar"><b>${esc(name || (isPdf ? "Dokument" : "Foto"))}</b><button class="iconbtn" data-z="-1" aria-label="Verkleinern">−</button><button class="iconbtn" data-z="1" aria-label="Vergrößern">+</button><a class="mini" href="${url}" target="_blank" rel="noopener" style="text-decoration:none">Öffnen</a><button class="iconbtn" data-x="1" aria-label="Schließen">✕</button></div><div class="zvs"><div class="zvc">${isPdf ? '<p class="zvload">Dokument wird geladen …</p>' : `<img src="${url}" alt="">`}</div></div>`;
+  o.innerHTML = `<div class="zvbar"><b>${esc(name || (isPdf ? "Dokument" : "Foto"))}</b><button class="iconbtn" data-z="-1" aria-label="Verkleinern">−</button><button class="iconbtn" data-z="1" aria-label="Vergrößern">+</button><a class="mini" data-o="1" href="${url}" target="_blank" rel="noopener" style="text-decoration:none">Öffnen</a><button class="iconbtn" data-x="1" aria-label="Schließen">✕</button></div><div class="zvs"><div class="zvc">${isPdf ? '<p class="zvload">Dokument wird geladen …</p>' : `<img src="${url}" alt="">`}</div></div>`;
   document.body.appendChild(o);
   const sc = o.querySelector(".zvs"), ct = o.querySelector(".zvc");
   let z = 1;
@@ -36,6 +36,19 @@ async function openViewer(blob, name) {
     o.classList.toggle("zoomed", z > 1.01);
   };
   o.querySelector("[data-x]").onclick = close;
+  /* „Öffnen“: In der iPhone-App kann ein neues Fenster die Datei nicht zeigen. Liegt sie im Netz (Briefing), geht sie in Safari auf,
+     sonst reicht Mirella sie an das iPhone weiter (Teilen-Fenster: in Dateien sichern, drucken, in einer anderen App öffnen). */
+  o.querySelector("[data-o]").onclick = async e => {
+    if (typeof NATIVE === "undefined" || !NATIVE) return;
+    e.preventDefault();
+    if (ext) { window.open(ext, "_blank"); return; }
+    try {
+      const nm = (name || (isPdf ? "Dokument" : "Foto")).replace(/[^\wäöüÄÖÜß .()-]+/g, " ").trim(), en = isPdf ? ".pdf" : /png/.test(blob.type) ? ".png" : ".jpg";
+      const f = new File([blob], /\.[a-z0-9]{3,4}$/i.test(nm) ? nm : nm + en, { type: blob.type || (isPdf ? "application/pdf" : "image/jpeg") });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f] });
+      else toast("Öffnen geht auf diesem Gerät nicht. Zoomen kannst du hier mit zwei Fingern.");
+    } catch (er) { if (!er || er.name !== "AbortError") toast("Das Öffnen hat nicht geklappt"); }
+  };
   o.querySelectorAll("[data-z]").forEach(b => b.onclick = () => setZ(z * (+b.dataset.z > 0 ? 1.5 : 1 / 1.5)));
   // Zwei-Finger-Zoom
   let pin = null, lastTap = 0;
@@ -107,7 +120,7 @@ openBrief = async function (id) {
   if (b.remote) {
     if (!b.pdf) { toast("Das PDF ist noch nicht da. Es kommt in wenigen Minuten."); return; }
     b.read = true; save();
-    try { const r = await fetch(webBase() + b.pdf, { cache: "no-store" }); if (!r.ok) throw new Error(); const bl = await r.blob(); openViewer(bl.type ? bl : new Blob([bl], { type: "application/pdf" }), "Briefing " + fmtDate(b.d)); }
+    try { const r = await fetch(webBase() + b.pdf, { cache: "no-store" }); if (!r.ok) throw new Error(); const bl = await r.blob(); openViewer(bl.type ? bl : new Blob([bl], { type: "application/pdf" }), "Briefing " + fmtDate(b.d), webBase() + b.pdf); }
     catch (_) { window.open(webBase() + b.pdf, "_blank", "noopener"); }
     return;
   }

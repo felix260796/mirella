@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.32";
+const VERSION = "0.33";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -116,6 +116,7 @@ function migrate() {
   S.groups = [...new Set([...BASEGROUPS, ...(S.groups || []).filter(g => !OLD.includes(g) || used.has(g)), ...used])];
 }
 function save() {
+  for (const p of S.people) { if (p.tel && p.tel[0] !== "+") p.tel = telNice(p.tel); if (p.tels) for (const x of p.tels) if (x.n && x.n[0] !== "+") x.n = telNice(x.n); }
   try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
   catch (e) { toast("Speichern fehlgeschlagen: Speicher voll?"); return false; }
 }
@@ -405,7 +406,7 @@ const R = {
   },
   menschen() {
     const ql = q.trim().toLowerCase();
-    let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "") + " " + (p.woher || "")).toLowerCase().includes(ql) || fuzzyHas(fullName(p) + " " + (p.nick || ""), ql)));
+    let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "") + " " + (p.woher || "") + " " + (p.job || "")).toLowerCase().includes(ql) || fuzzyHas(fullName(p) + " " + (p.nick || "") + " " + (p.job || ""), ql)));
     const grps = S.groups.filter(g => S.people.some(p => p.group === g));
     const rank = p => { const d = nextDue(p); return d || "9999"; }, az = (S.settings.peopleSort || "az") === "az";
     const key = p => (p.last || p.first || "").trim(), letter = p => { const c = key(p).normalize("NFD").replace(/[̀-ͯ]/g, "").charAt(0).toUpperCase(); return /[A-Z]/.test(c) ? c : "#"; };
@@ -413,7 +414,7 @@ const R = {
     let body = "", have = new Set();
     if (az) { let cur0 = ""; for (const p of list) { const l = letter(p); if (l !== cur0) { cur0 = l; have.add(l); body += `<div class="sec" id="az-${l === "#" ? "x" : l}"><span class="label">${l}</span></div>`; } body += personCard(p, false); } }
     else body = list.map(p => personCard(p, false)).join("");
-    return `${topbar("Kontakte")}${HOOKS.menschenTop.map(f => f()).join("")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Nummer, Gruppe oder woher (z. B. Schule)" aria-label="Suchen" value="${esc(q)}">
+    return `${topbar("Kontakte")}${HOOKS.menschenTop.map(f => f()).join("")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Nummer, Gruppe, Beruf oder woher" aria-label="Suchen" value="${esc(q)}">
     ${grps.length ? `<div class="chips"><button class="chip2" data-act="grpf" data-g="" aria-pressed="${!grpFilter}">Alle</button>${grps.map(g => `<button class="chip2" data-act="grpf" data-g="${esc(g)}" aria-pressed="${grpFilter === g}">${esc(g)}</button>`).join("")}</div>` : ""}
     <div class="seg" style="margin-bottom:8px"><button data-act="psort" data-m="az" aria-pressed="${az}">A bis Z</button><button data-act="psort" data-m="dran" aria-pressed="${!az}">Wer ist dran</button></div>
     ${az ? "" : `<div class="sec"><span class="label">Wer zuerst dran ist</span><span class="label">${list.length}</span></div>`}
@@ -434,9 +435,9 @@ const R = {
     const listFull = (h, k, emptyT, ph) => `<div class="block"><div class="bh"><h4>${h}</h4><button class="mini" data-act="akteopen" data-k="${k}">Zuklappen</button></div>${(p[k] || []).length ? (p[k]).map(x => `<div class="listrow">${k === "ask" ? `<button class="box" role="checkbox" aria-checked="${!!x.done}" data-act="askdone" data-id="${x.id}" aria-label="erledigt"></button>` : ""}<span class="grow" ${x.done ? 'style="text-decoration:line-through;color:var(--ink-3)"' : ""}>${esc(x.t)}${x.d ? `<small>${esc(fmtDate(x.d))}</small>` : ""}</span><button class="rowdel" data-act="delakte" data-k="${k}" data-id="${x.id}" aria-label="löschen">✕</button></div>`).join("") : `<div class="emptyline">${emptyT}</div>`}<form class="shoprow" data-form="akte" data-k="${k}" style="margin-top:8px"><input class="search" style="margin:0" placeholder="${ph}" aria-label="${h} hinzufügen"><button class="btn pri" style="flex:none">+</button></form></div>`;
     const calls = (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1);
     return `${subtop("Kontakte", "go\" data-v=\"menschen")}
-    <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>${p.woher ? `<p>Kennen uns: ${esc(p.woher)}</p>` : ""}
+    <div class="hero${p.death ? " dead" : ""}"><button class="heroedit" data-act="editperson" data-id="${p.id}" aria-label="Kontakt bearbeiten">${IC.pen}<span>Bearbeiten</span></button><button class="avbtn" data-act="avpick" data-id="${p.id}" aria-label="Profilbild ${p.pic ? "ändern" : "hinzufügen"}">${avHTML(p)}<span class="avcam">${IC.cam}</span></button><h3>${esc(fullName(p))}</h3><p>${esc(p.death ? [p.group, "verstorben"].filter(Boolean).join(" · ") : [p.group, cycLabel(p.cyc)].filter(Boolean).join(" · "))}</p>${p.woher || p.job ? `<p>${esc([p.woher ? "Kennen uns: " + p.woher : "", p.job ? "Beruf: " + p.job : ""].filter(Boolean).join(" · "))}</p>` : ""}
     ${p.tel ? `<button class="bigcall" data-act="call" data-id="${p.id}">${IC.call} ${esc(p.tel)}${p.telL ? ` <small style="font-weight:500;opacity:.8">· ${esc(p.telL)}</small>` : ""}</button>` : `<button class="bigcall" data-act="editperson" data-id="${p.id}">Telefonnummer eintragen</button>`}
-    ${(p.tels || []).map(x => `<a class="mini" href="tel:${esc(x.n.replace(/[^\d+]/g, ""))}" style="text-decoration:none;display:block;margin:0 0 6px">${IC.call} ${esc(x.n)}${x.l ? " · " + esc(x.l) : ""}</a>`).join("")}
+    ${(p.tels || []).map(x => `<a class="mini" href="tel:${esc(intlTel(x.n))}" style="text-decoration:none;display:block;margin:0 0 6px">${IC.call} ${esc(x.n)}${x.l ? " · " + esc(x.l) : ""}</a>`).join("")}
     <div class="callrow"><button class="mini" data-act="logcall" data-id="${p.id}">Anruf eintragen</button>${p.tel ? `<a class="mini" href="sms:${esc(p.tel.replace(/\s/g, ""))}" style="text-decoration:none">Nachricht</a><a class="mini" href="https://wa.me/${esc(waNum(p.tel))}" style="text-decoration:none">WhatsApp</a>` : ""}${p.email ? `<a class="mini" href="mailto:${esc(p.email)}" style="text-decoration:none">E-Mail</a>` : ""}${st !== "none" ? `<button class="mini" data-act="snooze" data-id="${p.id}">Später</button>` : ""}</div></div>
     ${p.death ? "" : p.arch ? `<div class="hint"><b>Im Archiv.</b> Mirella erinnert nicht an Anrufe und Geburtstage. <button class="mini" data-act="unarchperson" data-id="${p.id}">Zurückholen</button></div>` : nextCallBlock(p)}
     ${bdayBlock(p, nb)}
@@ -776,14 +777,17 @@ function grussForm(p) {
   <div class="row2"><button class="btn pri" data-act="grusssend" data-id="${p.id}" data-via="wa">WhatsApp</button><button class="btn pri" data-act="grusssend" data-id="${p.id}" data-via="sms">Nachricht</button></div>
   <p class="hint">Es öffnet sich die App mit dem Text. Abgeschickt wird erst, wenn du dort auf Senden tippst.</p>`);
 }
+/* So wird eine Nummer gespeichert und gezeigt: „0163 123“ wird „+49 163 123“. Kurze Nummern ohne 0 (110, 116117) bleiben, wie sie sind. */
+function telNice(t) { t = String(t || "").trim(); if (!t || t.startsWith("+")) return t; if (t.startsWith("00")) return "+" + t.slice(2).trim(); if (/^0\d/.test(t)) return "+49 " + t.slice(1).replace(/^[\s\-/()]+/, ""); return t; }
 function intlTel(t) { let n = (t || "").replace(/[^\d+]/g, ""); if (n.startsWith("00")) n = "+" + n.slice(2); else if (n.startsWith("0")) n = "+49" + n.slice(1); return n; }
 /* Kontaktdaten: jede Zeile gleich aufgebaut (Bezeichnung, Wert, Knopf) */
 function contactBlock(p) {
   const rows = [];
-  if (p.tel) rows.push(["Telefon", esc(p.tel), `<a class="mini" href="tel:${esc(p.tel.replace(/[^\d+]/g, ""))}">Anrufen</a>`]);
+  if (p.tel) rows.push(["Telefon", esc(p.tel), `<a class="mini" href="tel:${esc(intlTel(p.tel))}">Anrufen</a>`]);
   for (const m of [p.email, ...(p.emails || [])].filter(Boolean)) rows.push(["E-Mail", esc(m), `<a class="mini" href="mailto:${esc(m)}">Schreiben</a>`]);
   if (p.addr) rows.push(["Adresse", esc(p.addr), routeBtn(p.addr, "Route")]);
   if (p.nick) rows.push(["Spitzname", esc(p.nick), ""]);
+  if (p.job) rows.push(["Beruf", esc(p.job), ""]);
   if (!rows.length) return "";
   return `<div class="block"><h4>Kontakt</h4>${rows.map(([k, v, b]) => `<div class="kvrow"><span class="k">${k}</span><span class="v">${v}</span>${b}</div>`).join("")}</div>`;
 }
@@ -834,7 +838,7 @@ function render(keepScroll) {
   sc.scrollTop = keepScroll ? st : 0;
   const tabView = view === "akte" ? "menschen" : view;
   $$(".tab").forEach(b => b.dataset.v === tabView ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
-  $("#plus").hidden = !["heute", "menschen", "todos", "kalender", "bereich"].includes(view);
+  $("#plus").hidden = !["menschen", "todos", "kalender", "bereich"].includes(view); // auf „Heute“ steckt das Plus im Mikro
   if (view === "heute" || view === "wetter") loadWeather();
   loadThumbs();
 }
@@ -1034,43 +1038,62 @@ function shopExtras(open) {
   ${open.length ? `<button class="btn" data-act="savetpl" style="width:100%;margin-top:6px">Aktuelle Liste als Vorlage speichern</button>` : ""}`;
 }
 /* Bausteine für das Kontakt-Formular */
-const telArt = (id, val, cls) => `<select ${id ? `id="${id}"` : ""} class="${cls || ""}" aria-label="Art der Nummer"><option value="">Art</option>${TELL.map(x => `<option${val === x ? " selected" : ""}>${x}</option>`).join("")}</select>`;
-const telRow = (n, l) => `<div class="xrow"><input class="telx-n" type="tel" inputmode="tel" value="${esc(n || "")}" placeholder="weitere Nummer" autocomplete="off" aria-label="Weitere Nummer">${telArt("", l || "", "telx-l")}<button type="button" class="xdel" data-act="rowdel" aria-label="Diese Nummer entfernen">✕</button></div>`;
-const mailRow = m => `<div class="xrow mail"><input class="mailx" type="email" inputmode="email" autocapitalize="off" value="${esc(m || "")}" placeholder="weitere E-Mail" autocomplete="off" aria-label="Weitere E-Mail"><button type="button" class="xdel" data-act="rowdel" aria-label="Diese E-Mail entfernen">✕</button></div>`;
+const telArt = (id, val, cls) => `<select ${id ? `id="${id}"` : ""} class="lblsel ${cls || ""}" aria-label="Art der Nummer"><option value="">Art wählen</option>${TELL.map(x => `<option${val === x ? " selected" : ""}>${x}</option>`).join("")}</select>`;
+const telRow = (n, l) => `<div class="xrow"><div class="xlab">Weitere Nummer (${telArt("", l || "", "telx-l")})</div><div class="xin"><input class="telx-n" type="tel" inputmode="tel" value="${esc(n || "")}" placeholder="weitere Nummer" autocomplete="off" aria-label="Weitere Nummer"><button type="button" class="xdel" data-act="rowdel" aria-label="Diese Nummer entfernen">✕</button></div></div>`;
+const mailRow = m => `<div class="xrow"><div class="xin"><input class="mailx" type="email" inputmode="email" autocapitalize="off" value="${esc(m || "")}" placeholder="weitere E-Mail" autocomplete="off" aria-label="Weitere E-Mail"><button type="button" class="xdel" data-act="rowdel" aria-label="Diese E-Mail entfernen">✕</button></div></div>`;
 const entryHint = (l, one, many) => (l || []).length ? `<small class="fhint">Schon da: ${l.length === 1 ? "1 " + one : l.length + " " + many}. Die stehen in der Akte.</small>` : "";
 /* Ein kompaktes Feld: Antippen öffnet die Auswahl, „Eigene …“ macht daraus ein Textfeld. Der Wert steht immer im Eingabefeld mit der Kennung id. */
-function pickField(id, opts, val, none) {
+function pickField(id, opts, val, none, kind) {
   const list = [...new Set(opts.concat(val ? [val] : []))];
-  return `<select id="${id}-s" data-pick="${id}"><option value="">${esc(none)}</option>${list.map(o => `<option value="${esc(o)}"${o === val ? " selected" : ""}>${esc(o)}</option>`).join("")}<option value="__own">Eigene …</option></select><input id="${id}" value="${esc(val)}" placeholder="Eigene Angabe" autocomplete="off" hidden style="margin-top:6px">`;
+  return `<select id="${id}-s" data-pick="${id}" data-kind="${kind || ""}"><option value="">${esc(none)}</option>${list.map(o => `<option value="${esc(o)}"${o === val ? " selected" : ""}>${esc(o)}</option>`).join("")}<option value="__own">Eigene …</option></select><input id="${id}" type="hidden" value="${esc(val)}">`;
 }
-/* nach dem Wiederherstellen von Eingaben: Auswahl und Textfeld wieder passend zeigen */
-function pickSync() { for (const sl of $$("select[data-pick]")) { const i = document.getElementById(sl.dataset.pick); if (!i) continue; if (sl.value === "__own" && !i.value) { i.hidden = false; continue; } if ([...sl.options].some(o => o.value === i.value)) { sl.value = i.value; i.hidden = true; } else { sl.value = "__own"; i.hidden = false; } } }
+/* Eigene Einträge merkt sich Mirella sofort und dauerhaft, damit sie beim nächsten Kontakt wieder zur Auswahl stehen */
+const PICKQ = { group: "Name der eigenen Gruppe, z. B. Paddeln", woher: "Woher kennst du ihn oder sie? Eigene Angabe, z. B. Bundeswehr", job: "Beruf, z. B. Elektriker" };
+function pickRemember(kind, v) {
+  if (!v) return;
+  if (kind === "group") { if (!S.groups.includes(v)) S.groups.push(v); }
+  else if (kind === "woher" || kind === "job") { const k = kind === "woher" ? "wohers" : "jobs", l = S.settings[k] = S.settings[k] || []; if (!l.includes(v) && !(kind === "woher" ? WOHER : JOBS).includes(v)) l.push(v); }
+  else return;
+  save();
+}
+function pickSet(sl, v) { if (v && ![...sl.options].some(o => o.value === v)) { const o = document.createElement("option"); o.value = o.textContent = v; sl.insertBefore(o, sl.options[sl.options.length - 1]); } sl.value = v || ""; }
+/* nach dem Wiederherstellen von Eingaben: Auswahl wieder passend zum gemerkten Wert zeigen */
+function pickSync() { for (const sl of $$("select[data-pick]")) { const i = document.getElementById(sl.dataset.pick); if (i) pickSet(sl, i.value); } }
+document.addEventListener("change", e => { if (e.target && e.target.id === "kp-gift") { const b = document.getElementById("kp-gideabox"); if (b) b.hidden = !e.target.checked; } });
 document.addEventListener("change", e => {
   const t = e.target; if (!t || !t.dataset || !t.dataset.pick) return;
   const i = document.getElementById(t.dataset.pick); if (!i) return;
-  if (t.value === "__own") { i.hidden = false; i.value = ""; i.focus(); } else { i.hidden = true; i.value = t.value; }
+  if (t.value === "__own") {
+    const v = (prompt(PICKQ[t.dataset.kind] || "Eigene Angabe") || "").trim().slice(0, 40);
+    if (!v) { pickSet(t, i.value); return; }
+    pickRemember(t.dataset.kind, v); pickSet(t, v); i.value = v;
+  } else i.value = t.value;
   i.dispatchEvent(new Event("input", { bubbles: true }));
 });
 /* Woher kenne ich jemanden: feste Auswahl, damit sich danach suchen und filtern lässt. Eigene Angaben kommen dazu. */
 const WOHER = ["Schule", "Studium", "Ausbildung", "Arbeit", "Geschäftlich", "Verein", "Sport", "Nachbarschaft", "Familie", "Freundeskreis", "Urlaub", "Über die Kinder"];
-const woherAll = () => [...new Set(WOHER.concat(S.people.map(x => (x.woher || "").trim()).filter(Boolean)))];
+const woherAll = () => [...new Set(WOHER.concat(S.settings.wohers || [], S.people.map(x => (x.woher || "").trim()).filter(Boolean)))];
+/* Beruf: grobe Richtung zur Auswahl, eigene (auch genaue wie „Elektriker“) kommen dazu. Danach lässt sich suchen und fragen. */
+const JOBS = ["Handwerk", "Vertrieb", "Einzelhandel", "Büro und Verwaltung", "Technik und IT", "Gesundheit und Pflege", "Schule und Erziehung", "Gastronomie", "Bau", "Bank und Versicherung", "Selbstständig", "Studium oder Ausbildung", "Im Ruhestand"];
+const jobAll = () => [...new Set(JOBS.concat(S.settings.jobs || [], S.people.map(x => (x.job || "").trim()).filter(Boolean)))];
 const woherChips = (inp, cur) => `<div class="chips woher" data-for="${inp}" style="margin-top:6px">${woherAll().map(w => `<button type="button" class="chip2" data-act="woherset" data-t="${inp}" data-w="${esc(w)}" aria-pressed="${w === cur}">${esc(w)}</button>`).join("")}</div>`;
 function personForm(p) {
   const v = p || { first: "", last: "", tel: "", email: "", cyc: "monatlich", group: "Freunde", bday: "", gift: false, addr: "", nick: "" };
   const tl = L.splitTel(v.tel);
   openSheet(`<div data-draft="person:${p ? p.id : "new"}"><p class="stitle">${p ? "Kontakt bearbeiten" : "Neuer Kontakt"}</p>
   <div class="fgrid"><div class="fld"><label for="c-first">Vorname</label><input id="c-first" value="${esc(v.first)}" autocomplete="off" autocapitalize="words"></div><div class="fld"><label for="c-last">Nachname</label><input id="c-last" value="${esc(v.last)}" autocomplete="off" autocapitalize="words"></div></div>
-  <div class="fld"><label for="c-tel">Telefon</label><div class="telrow tel3"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678">${telArt("c-tell", v.telL || "")}</div><div class="fwarn" id="w-tel" hidden></div>
+  <div class="fld"><div class="lblrow">Telefon (${telArt("c-tell", v.telL || "")})</div><div class="telrow telcc"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678" aria-label="Telefonnummer"></div><div class="fwarn" id="w-tel" hidden></div>
   <div id="c-tels">${(v.tels || []).map(x => telRow(x.n, x.l)).join("")}</div><button type="button" class="mini plusline" data-act="teladd">+ weitere Nummer</button></div>
   <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"><div class="fwarn" id="w-mail" hidden></div>
   <div id="c-mails">${(v.emails || []).map(mailRow).join("")}</div><button type="button" class="mini plusline" data-act="mailadd">+ weitere E-Mail</button></div>
-  <div class="fgrid"><div class="fld"><label for="c-grp-s">Gruppe</label>${pickField("c-grp", S.groups, v.group || "", "keine")}</div><div class="fld"><label for="c-woher-s">Woher kenne ich ihn/sie?</label>${pickField("c-woher", woherAll(), v.woher || "", "keine Angabe")}</div></div>
+  <div class="fgrid"><div class="fld"><label for="c-grp-s">Gruppe</label>${pickField("c-grp", S.groups, v.group || "", "keine", "group")}</div><div class="fld"><label for="c-woher-s">Woher bekannt?</label>${pickField("c-woher", woherAll(), v.woher || "", "keine Angabe", "woher")}</div></div>
+  <div class="fld"><label for="c-job-s">Beruf (heute oder früher)</label>${pickField("c-job", jobAll(), v.job || "", "keine Angabe", "job")}</div>
   <div class="fgrid"><div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}</option>`).join("")}</select></div><div class="fld"><label for="c-lunch">Treffen vereinbaren</label><select id="c-lunch"><option value="">nie</option>${Object.keys(LUNCH).map(c => `<option value="${c}"${c === v.lunch ? " selected" : ""}>${c}</option>`).join("")}</select></div></div>
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.bday))}" autocomplete="off"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
   <label class="tgl" style="margin:-2px 0 10px"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Zum Geburtstag ein Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
   <div class="fld" style="position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
   <div class="fld"><label for="c-note">Notiz</label><input id="c-note" placeholder="Was du dir merken willst" autocomplete="off">${p ? entryHint(p.notes, "Notiz", "Notizen") : ""}</div>
-  <div class="fld"><label for="c-gidea">Geschenkidee</label><input id="c-gidea" placeholder="z. B. Kochkurs" autocomplete="off">${p ? entryHint(p.gifts, "Idee", "Ideen") : ""}</div>
+  <div class="fld" id="c-gideabox"${v.gift ? "" : " hidden"}><label for="c-gidea">Geschenkidee</label><input id="c-gidea" placeholder="z. B. Kochkurs" autocomplete="off">${p ? entryHint(p.gifts, "Idee", "Ideen") : ""}</div>
   <div class="fld"><label for="c-ask">Offene Nachfrage</label><input id="c-ask" placeholder="z. B. fragen, wie die Reha läuft" autocomplete="off">${p ? entryHint((p.ask || []).filter(x => !x.done), "Nachfrage", "Nachfragen") : ""}</div>
   ${(() => { const par = p && p.parent ? fullName(S.people.find(x => x.id === p.parent) || {}) : "", dth = L.bdayToInput(v.death || ""); return `<div class="plusrow"><button type="button" class="mini" data-act="plusshow" data-t="c-parentbox"${par ? " hidden" : ""}>+ Kind von …</button><button type="button" class="mini" data-act="plusshow" data-t="c-deathbox"${dth ? " hidden" : ""}>+ Verstorben</button></div>
   <div class="fld" id="c-parentbox"${par ? "" : " hidden"}><label for="c-parent">Kind von</label><input id="c-parent" list="c-parent-l" value="${esc(par)}" placeholder="Name des Elternteils" autocomplete="off"><datalist id="c-parent-l">${S.people.filter(x => !x.arch && !x.parent && (!p || x.id !== p.id)).map(x => `<option value="${esc(fullName(x))}">`).join("")}</datalist></div>
@@ -1083,9 +1106,10 @@ function personForm(p) {
       addrSuggest($("#c-addr"), $("#addr-sug"));
       const chk = () => { const wm = L.checkEmail($("#c-mail").value), wt = L.checkTel($("#c-cc").value, $("#c-tel").value); $("#w-mail").hidden = !wm; $("#w-mail").textContent = wm ? "⚠ " + wm : ""; $("#w-tel").hidden = !wt; $("#w-tel").textContent = wt ? "⚠ " + wt : ""; };
       ["#c-mail", "#c-tel"].forEach(q => $(q).addEventListener("blur", chk)); $("#c-cc").addEventListener("change", chk); if ($("#c-mail").value || $("#c-tel").value) chk();
+      $("#c-gift").addEventListener("change", e => { $("#c-gideabox").hidden = !e.target.checked; });
       $("#c-death").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
       $("#c-bday").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
-      $("#sheetbody [data-draft]").addEventListener("draftapplied", () => { pickSync(); for (const k of ["c-parent", "c-death"]) if ($("#" + k) && $("#" + k).value) { $("#" + k + "box").hidden = false; } });
+      $("#sheetbody [data-draft]").addEventListener("draftapplied", () => { pickSync(); $("#c-gideabox").hidden = !$("#c-gift").checked; for (const k of ["c-parent", "c-death"]) if ($("#" + k) && $("#" + k).value) { $("#" + k + "box").hidden = false; } });
     });
 }
 function grpChips(sel) { return S.groups.map(g => `<button type="button" class="chip2" data-act="pickgrp" data-g="${esc(g)}" aria-pressed="${g === sel}">${esc(g)}</button>`).join("") + `<button type="button" class="chip2" data-act="newgrp">+ Eigene</button>`; }
@@ -1156,7 +1180,7 @@ function findDups(d, exceptId) {
 /* Kontakte, die auf „Heute“ nichts zu suchen haben (die iPhone-App blendet hier ungeprüfte, übernommene Kontakte aus) */
 let heuteSkip = () => false;
 function mergeInto(t, src, label) {
-  for (const k of ["first", "last", "tel", "email", "addr", "bday", "nick", "group", "woher"]) if (!t[k] && src[k]) t[k] = src[k];
+  for (const k of ["first", "last", "tel", "email", "addr", "bday", "nick", "group", "woher", "job"]) if (!t[k] && src[k]) t[k] = src[k];
   // andere Nummern gehen nicht verloren: sie stehen als weitere Nummer am Kontakt
   for (const x of [src.tel ? { n: src.tel, l: label || "" } : null, ...(src.tels || [])]) {
     if (!x || !telKey(x.n) || telKey(x.n) === telKey(t.tel) || (t.tels || []).some(y => telKey(y.n) === telKey(x.n))) continue;
@@ -1175,7 +1199,7 @@ function mergeInto(t, src, label) {
 }
 function readPersonForm() {
   const bd = L.parseBday($("#c-bday").value), dd = L.parseBday($("#c-death").value);
-  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, lunch: $("#c-lunch") ? $("#c-lunch").value : "", group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tels: $("#c-tels") ? $$("#c-tels .xrow").map(r => ({ n: r.querySelector(".telx-n").value.trim(), l: r.querySelector(".telx-l").value })).filter(x => x.n) : null, emails: $("#c-mails") ? [...new Set($$("#c-mails .mailx").map(i => i.value.trim()).filter(Boolean))] : null, newNote: $("#c-note") ? $("#c-note").value.trim() : "", newGift: $("#c-gidea") ? $("#c-gidea").value.trim() : "", newAsk: $("#c-ask") ? $("#c-ask").value.trim() : "", woher: $("#c-woher") ? $("#c-woher").value.trim() : "", parentName: $("#c-parent") ? $("#c-parent").value.trim() : null };
+  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, lunch: $("#c-lunch") ? $("#c-lunch").value : "", group: $("#c-grp").value.trim(), job: $("#c-job") ? $("#c-job").value.trim() : "", bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tels: $("#c-tels") ? $$("#c-tels .xrow").map(r => ({ n: r.querySelector(".telx-n").value.trim(), l: r.querySelector(".telx-l").value })).filter(x => x.n) : null, emails: $("#c-mails") ? [...new Set($$("#c-mails .mailx").map(i => i.value.trim()).filter(Boolean))] : null, newNote: $("#c-note") ? $("#c-note").value.trim() : "", newGift: $("#c-gidea") ? $("#c-gidea").value.trim() : "", newAsk: $("#c-ask") ? $("#c-ask").value.trim() : "", woher: $("#c-woher") ? $("#c-woher").value.trim() : "", parentName: $("#c-parent") ? $("#c-parent").value.trim() : null };
 }
 function savePerson(id) {
   const data = readPersonForm(), first = data.first, last = data.last;
@@ -1187,6 +1211,7 @@ function savePerson(id) {
   const warn = [L.checkEmail(data.email), L.checkTel($("#c-cc").value, $("#c-tel").value)].filter(Boolean);
   if (warn.length && !savePerson.force && !ask(warn.join("\n") + "\n\nTrotzdem so speichern?")) return;
   if (data.group && !S.groups.includes(data.group)) S.groups.push(data.group);
+  pickRemember("woher", data.woher); pickRemember("job", data.job);
   const dups = findDups(data, id);
   if (dups.length && !savePerson.force) {
     $("#dup-warn").innerHTML = `<div class="hint" style="border:1px solid var(--late)"><b>Gibt es schon?</b> ${dups.map(d => esc(fullName(d)) + (d.tel ? " · " + esc(d.tel) : "")).join(", ")}<div class="row2" style="margin-top:8px;flex-wrap:wrap"><button class="btn" data-act="dupmerge" data-id="${dups[0].id}" data-self="${id || ""}">Zusammenführen</button><button class="btn" data-act="dupforce" data-id="${id || ""}">Trotzdem speichern</button></div></div>`;
@@ -1206,7 +1231,7 @@ function savePerson(id) {
     }
   }
   savePerson.last = data;
-  const addExtra = t => { if (extra.n) (t.notes = t.notes || []).unshift({ id: uid(), t: extra.n, d: today() }); if (extra.g) (t.gifts = t.gifts || []).push({ id: uid(), t: extra.g, d: today() }); if (extra.a) (t.ask = t.ask || []).push({ id: uid(), t: extra.a, d: today() }); };
+  const addExtra = t => { if (extra.n) (t.notes = t.notes || []).unshift({ id: uid(), t: extra.n, d: today() }); if (extra.g) { if (data.gift) (t.gifts = t.gifts || []).push({ id: uid(), t: extra.g, d: today() }); else (t.notes = t.notes || []).unshift({ id: uid(), t: "Geschenkidee: " + extra.g, d: today() }); } if (extra.a) (t.ask = t.ask || []).push({ id: uid(), t: extra.a, d: today() }); };
   if (id) { const t = S.people.find(x => x.id === id); Object.assign(t, data); addExtra(t); }
   else {
     const p = Object.assign({ id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [] }, data);
@@ -1217,7 +1242,7 @@ function savePerson(id) {
   draftClear(); save(); closeSheet(); render(); toast("Gespeichert: " + [first, last].join(" ").trim());
 }
 function callMenu(p) {
-  const tel = p.tel ? p.tel.replace(/[^\d+]/g, "") : "";
+  const tel = p.tel ? intlTel(p.tel) : "";
   openSheet(`<p class="stitle">${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">${esc(cycLabel(p.cyc))} · zuletzt ${esc(agoText(lastCall(p)))}</p>
   <div style="display:grid;gap:8px">${tel ? `<a class="btn pri" href="tel:${esc(tel)}" data-act="dial" data-id="${p.id}" style="text-decoration:none;text-align:center">📞 ${esc(p.tel)} anrufen</a>` : `<button class="btn" data-act="call" data-id="${p.id}">Telefonnummer eintragen</button>`}
   <button class="btn" data-act="callok" data-id="${p.id}">✓ Erledigt, erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Probiert, nicht erreicht</button><button class="btn" data-act="snooze" data-id="${p.id}">Später anrufen</button><button class="btn" data-act="person" data-id="${p.id}">Zum Kontaktprofil</button></div>`);
@@ -1239,7 +1264,7 @@ document.addEventListener("change", e => { if (e.target.id === "f-avatar" && e.t
 function callResult(p, autoDial) {
   openSheet(`<p class="stitle">Anruf mit ${esc(fullName(p))}</p><p class="swipehint" style="text-align:left;margin:0 0 10px">Wie ist es gelaufen?</p>
   <div style="display:grid;gap:8px"><button class="btn pri" data-act="callok" data-id="${p.id}">Erreicht</button><button class="btn" data-act="callno" data-id="${p.id}">Nicht erreicht (neuer Versuch ${relDate(addCallDays(today(), +S.settings.retryWorkdays || 2))})</button><button class="btn" data-act="snooze" data-id="${p.id}">Später</button><button class="btn" data-close="sheet" style="background:none;border:0">Abbrechen</button></div>`);
-  if (autoDial && p.tel) location.href = "tel:" + p.tel.replace(/[^\d+]/g, "");
+  if (autoDial && p.tel) location.href = "tel:" + intlTel(p.tel);
 }
 function snoozeForm(p) {
   const opts = [["morgen", addDays(today(), 1)], ["in 3 Tagen", addDays(today(), 3)], ["in 1 Woche", addDays(today(), 7)], ["in 3 Wochen", addDays(today(), 21)], ["in 2 Monaten", addMonths(today(), 2)]];
@@ -1356,6 +1381,7 @@ function voiceStart() {
   <div class="vstate"><span class="vdot" id="v-dot"></span><span id="v-state">${SR ? "Ich höre zu …" : "Tippe ins Feld und nutze das Mikrofon auf der Tastatur."}</span></div>
   <div class="fld"><textarea id="v-text" placeholder="z. B. Erinnere mich morgen um 9 an die Steuer. Butter und Eier auf die Einkaufsliste. Hab mit Tim telefoniert, er fliegt Freitag nach China."></textarea></div>
   <div class="row2" style="margin-top:4px">${SR ? `<button class="btn" data-act="vagain" style="flex:none" aria-label="Nochmal sprechen">🎙 Nochmal</button>` : ""}<button class="btn" data-close="sheet">Abbrechen</button><button class="btn pri" data-act="vnext">Weiter</button></div>
+  ${view === "heute" ? `<button class="btn" data-act="vplus" style="width:100%;margin-top:8px">+ Lieber von Hand anlegen</button>` : ""}
   <p class="swipehint" style="margin-top:12px">Sprich in ganzen Sätzen. Danach zeige ich dir, was ich verstanden habe, und du kannst alles ändern.</p>`,
     () => { if (SR) recStart(); else $("#v-text").focus(); });
   sheetCleanup = recStop;
@@ -1679,7 +1705,7 @@ const ACT = {
   avnew: () => { closeSheet(); const f = $("#f-avatar"); f.value = ""; f.click(); },
   avdel: () => { const p = S.people.find(x => x.id === avFor); if (!p || !ask("Profilbild wirklich entfernen?")) return; const old = p.pic; delete p.pic; save(); photoDel(old).catch(() => { }); closeSheet(); render(true); toast("Profilbild entfernt"); },
   // Telefon-Symbol: sofort wählen (iPhone zeigt die Nummer mit „Anrufen“), danach fragt Mirella, wie es lief
-  dialnow: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p || !p.tel) return; pendingCall = p.id; location.href = "tel:" + p.tel.replace(/[^\d+]/g, ""); },
+  dialnow: el => { const p = S.people.find(x => x.id === el.dataset.id); if (!p || !p.tel) return; pendingCall = p.id; location.href = "tel:" + intlTel(p.tel); },
   pcbackup: () => { if (view !== "einstellungen" || setSec !== "sicherung") { setFrom = view === "einstellungen" ? null : { v: view, area, cur, t: "Zurück", y: $("#screen").scrollTop }; view = "einstellungen"; setSec = "sicherung"; closeAll(); render(); } window.pcBackup && window.pcBackup(); },
   roundack: (el, e) => { e.stopPropagation(); const p = S.people.find(x => x.id === el.dataset.id); if (!p) return; p.roundAck = el.dataset.d; save(); render(true); toast("Gemerkt. Am Geburtstag erinnere ich dich wie gewohnt."); },
   callmenu: el => callMenu(S.people.find(x => x.id === el.dataset.id)),
@@ -1761,6 +1787,7 @@ const ACT = {
   delnote: el => { const n = S.notes.find(x => x.id === el.dataset.id); if (!n || !ask(`Notiz „${n.t}“ löschen?`)) return; S.notes = S.notes.filter(x => x !== n); save(); render(true); },
   vagain: () => recStart(),
   kidnew: el => kidForm(el.dataset.id),
+  vplus: () => { closeSheet(); setTimeout(() => { if (typeof plusMenu === "function") plusMenu("heute"); else todoForm(null); }, 60); },
   teladd: () => { const b = $("#c-tels"); if (!b) return; b.insertAdjacentHTML("beforeend", telRow("", "")); const i = b.lastElementChild.querySelector("input"); if (i) i.focus(); },
   mailadd: () => { const b = $("#c-mails"); if (!b) return; b.insertAdjacentHTML("beforeend", mailRow("")); const i = b.lastElementChild.querySelector("input"); if (i) i.focus(); },
   rowdel: el => { const r = el.closest(".xrow"); if (!r) return; const i = r.querySelector("input"); if (i && i.value.trim() && !ask("„" + i.value.trim() + "“ entfernen?")) return; r.remove(); sheetDirty = true; },
@@ -1930,3 +1957,23 @@ function start() {
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else setTimeout(start, 0);
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => { });
+
+/* ---------- Erklärtexte zugeklappt (Wunsch Felix): Es steht nur „So funktioniert’s“ da, der Text klappt beim Antippen auf ----------
+   Gilt für alle längeren Hinweise. Meldungen mit Zahlen oder Zustand, Warnungen und Hinweise mit Knöpfen bleiben offen sichtbar. */
+const HOW_KEEP = /^(\d|Angemeldet|Bisher|Wecker:|Apple-KI|Nächstes|Gerade|Dein Geburtstags-Kalender|Ich sehe|Es wartet|Mirella hat|Das fehlt|Jetzt kurz|„Rein|„Nicht|Im iPhone-Telefonbuch|Im Telefonbuch|Neu aufsetzen|Gibt es schon|Standort|Aus den angehakten|Nummer)/;
+function howFold(root) {
+  for (const h of (root || document).querySelectorAll(".hint:not([data-how])")) {
+    h.dataset.how = "1";
+    const t = h.textContent.trim();
+    if (t.length < 110 || HOW_KEEP.test(t) || h.querySelector("button,input,select,a,details") || /border/.test(h.getAttribute("style") || "") || h.closest("details,.nerv,.wres")) continue;
+    const d = document.createElement("details"); d.className = "how"; d.dataset.how = "1";
+    const sm = document.createElement("summary"); sm.textContent = "So funktioniert’s";
+    const body = document.createElement("div"); body.className = "hint"; body.dataset.how = "1";
+    body.innerHTML = h.innerHTML.replace(/^\s*<b>So funktioniert[’']s:?<\/b>:?\s*/, "");
+    d.append(sm, body); h.replaceWith(d);
+  }
+}
+if (typeof MutationObserver !== "undefined") {
+  let howT = 0;
+  new MutationObserver(() => { if (howT) return; howT = setTimeout(() => { howT = 0; howFold(document); }, 0); }).observe(document.documentElement, { childList: true, subtree: true });
+}

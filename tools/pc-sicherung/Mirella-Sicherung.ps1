@@ -277,7 +277,7 @@ function Run-Backup {
 
     # Kontakte
     $kon = New-Object System.Collections.ArrayList
-    [void]$kon.Add(@('Vorname', 'Nachname', 'Spitzname', 'Gruppe', 'Telefon', 'E-Mail', 'Adresse', 'Geburtstag', 'Alter', 'Anrufen', 'zuletzt erreicht', 'Anrufe gesamt', 'Anrufverlauf', 'Offene Nachfragen', 'Geschenk-Erinnerung', 'Archiv'))
+    [void]$kon.Add(@('Vorname', 'Nachname', 'Spitzname', 'Gruppe', 'Woher bekannt', 'Beruf', 'Telefon', 'weitere Nummern', 'E-Mail', 'weitere E-Mails', 'Adresse', 'Geburtstag', 'Alter', 'Anrufen', 'zuletzt erreicht', 'Anrufe gesamt', 'Anrufverlauf', 'Offene Nachfragen', 'Geschenk-Erinnerung', 'Archiv'))
     foreach ($p in (@(Arr $S 'people') | Sort-Object { ((S (G $_ 'first')) + ' ' + (S (G $_ 'last'))).Trim() })) {
       $calls = @(@(Arr $p 'calls') | Sort-Object { S (G $_ 'd') } -Descending)
       $ok = @($calls | Where-Object { G $_ 'ok' }) | Select-Object -First 1
@@ -286,7 +286,9 @@ function Run-Backup {
       $cyc = S (G $p 'cyc'); if ($cyc -eq 'nie' -or $cyc -eq 'nur Geburtstag') { $cyc = 'nie anrufen' }
       $verlauf = ($calls | ForEach-Object { (De (G $_ 'd')) + $(if (G $_ 'ok') { ' erreicht' } else { ' nicht erreicht' }) }) -join "`n"
       $ask = (@(Arr $p 'ask') | Where-Object { -not (G $_ 'done') } | ForEach-Object { S (G $_ 't') }) -join "`n"
-      [void]$kon.Add(@((S (G $p 'first')), (S (G $p 'last')), (S (G $p 'nick')), (S (G $p 'group')), (S (G $p 'tel')), (S (G $p 'email')), (S (G $p 'addr')), (De $bd), $age, $cyc, $(if ($ok) { De (G $ok 'd') } else { '' }), @($calls).Count, $verlauf, $ask, $(if (G $p 'gift') { 'ja' } else { '' }), $(if (G $p 'arch') { 'archiviert' } else { '' })))
+      $tels = (@(Arr $p 'tels') | ForEach-Object { (S (G $_ 'n')) + $(if (G $_ 'l') { ' (' + (S (G $_ 'l')) + ')' } else { '' }) }) -join "`n"
+      $mails = (@(Arr $p 'emails') | ForEach-Object { [string]$_ }) -join "`n"
+      [void]$kon.Add(@((S (G $p 'first')), (S (G $p 'last')), (S (G $p 'nick')), (S (G $p 'group')), (S (G $p 'woher')), (S (G $p 'job')), (S (G $p 'tel')), $tels, (S (G $p 'email')), $mails, (S (G $p 'addr')), (De $bd), $age, $cyc, $(if ($ok) { De (G $ok 'd') } else { '' }), @($calls).Count, $verlauf, $ask, $(if (G $p 'gift') { 'ja' } else { '' }), $(if (G $p 'arch') { 'archiviert' } else { '' })))
     }
 
     # Aufgaben und Einkauf

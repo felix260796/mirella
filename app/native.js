@@ -250,7 +250,7 @@
         if (bc.has(e.calendarId) || e.birthdayContactIdentifier || (N.mcal && e.calendarId === N.mcal)) continue;
         const d0 = isoOf(e.startDate), d1 = isoOf(Math.max(e.startDate, (e.endDate || e.startDate) - 1));
         const dt = new Date(e.startDate), time = e.isAllDay ? "" : pad2(dt.getHours()) + ":" + pad2(dt.getMinutes());
-        out.push({ id: e.id + "@" + d0, t: e.title || "(ohne Titel)", d: d0, e: d1 > d0 ? d1 : "", time, cal: names[e.calendarId] || "", loc: e.location || "" });
+        out.push({ id: e.id + "@" + d0, t: e.title || "(ohne Titel)", d: d0, e: d1 > d0 ? d1 : "", time, cal: names[e.calendarId] || "", cid: e.calendarId || "", loc: e.location || "" });
       }
       N.events = out; N.eventsAt = Date.now(); nSave();
       return out.length;
@@ -323,7 +323,9 @@
   if (S.settings.calFilter.termin === undefined) S.settings.calFilter.termin = 1;
   HOOKS.events.push((from, to) => {
     const out = [];
+    const hide = new Set(N.calHide || []);
     for (const e of N.events || []) {
+      if (e.cid && hide.has(e.cid)) continue;
       let d = e.d, g = 0;
       do { if (d >= from && d <= to) out.push({ d, c: "termin", k: e.cal || "Termin", t: e.t, act: "iosev", id: e.id, time: d === e.d ? e.time : "" }); d = isoOf(new Date(d + "T12:00:00").getTime() + 864e5); } while (e.e && d <= e.e && g++ < 31);
     }
@@ -400,16 +402,24 @@
     alarmSync();
   }
 
+  let liveSyncRef = null;
   /* ---------- Echter iPhone-Wecker (AlarmKit ab iOS 26): klingelt auch bei geschlossener App und im Stumm-Modus ---------- */
   function alarmList() {
     const now = Date.now(), list = [];
+    try { weckerRoll(); } catch (_) { }
     for (const w of S.alarms || []) {
       if (!w.wake || !w.alarms || w.off) continue;
-      const all = alarmTimes(w), nm = weckerName(w);
-      all.forEach((d, i) => { if (+d > now + 30e3) list.push({ at: +d, title: nm + ": los um " + w.leave + (all.length > 1 ? " (Wecker " + (i + 1) + " von " + all.length + ")" : ""), near: +d - now < 23 * 3600e3 ? 1 : 0 }); });
+      const nm = weckerName(w), sz = Math.max(1, +w.gap || 5) * 60;
+      for (const o of wOccs(w, 7)) {
+        if (isAwake(w, o.wakeDate)) continue; // „Ich bin wach“: die weiteren Wecker zu diesem Termin sind aus
+        const all = o.alarms.map(t => new Date(o.wakeDate + "T" + t + ":00"));
+        all.forEach((d, i) => { if (+d > now + 30e3) list.push({ at: +d, title: nm + (o.leave ? ": los um " + o.leave : "") + (all.length > 1 ? " (Wecker " + (i + 1) + " von " + all.length + ")" : ""), near: +d - now < 23 * 3600e3 ? 1 : 0, snooze: sz }); });
+      }
     }
-    return list.sort((a, b) => a.at - b.at).slice(0, 30);
+    return list.sort((a, b) => a.at - b.at).slice(0, 40);
   }
+  /* „Ich bin wach“ in Mirella: weitere Wecker und Mitteilungen dazu aus, Countdown fürs Losgehen gleich starten */
+  window.mirellaAwake = async () => { try { await alarmSync(true); scheduleLocal(); N.liveSig = ""; nSave(); if (typeof liveSyncRef === "function") liveSyncRef(); } catch (_) { } };
   let alarmBusy = false;
   async function alarmSync(force) {
     const A = P.MirellaAlarm; if (!A || alarmBusy) return;
@@ -469,7 +479,7 @@
       else { view = "todos"; }
       render(); scheduleLocal(); return;
     }
-    if (x.call) { const p = S.people.find(y => y.id === x.call); if (p && act === "call" && p.tel) { pendingCall = p.id; N.dialAt = Date.now(); location.href = "tel:" + p.tel.replace(/[^\d+]/g, ""); } else { view = "heute"; render(); } return; }
+    if (x.call) { const p = S.people.find(y => y.id === x.call); if (p && act === "call" && p.tel) { pendingCall = p.id; N.dialAt = Date.now(); location.href = "tel:" + intlTel(p.tel); } else { view = "heute"; render(); } return; }
     if (x.bday) { const p = S.people.find(y => y.id === x.bday); if (p) { cur = p.id; view = "akte"; render(); if (p.tel) grussForm(p); } }
   });
 
@@ -871,6 +881,19 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     openSheet(`<p class="stitle">Geburtstags-Kalender</p><p class="hint" style="margin-top:0">Aus den angehakten Kalendern liest Mirella die Geburtstage. Gelesen sind gerade <b>${(N.bdays || []).length}</b> Einträge.</p>${(N.cals || []).map(c => `<button class="drow" data-act="kbcal" data-id="${esc(c.id)}"><span class="dt"><b>${esc(c.title || "(ohne Namen)")}</b></span><span class="chev">${on.has(c.id) ? "●" : "○"}</span></button>`).join("") || '<p class="hint">Ich sehe keinen Kalender. Bitte unter Einstellungen › iPhone die Freigaben prüfen.</p>'}<button class="btn pri" data-act="cancel" style="width:100%;margin-top:10px">Fertig</button>`);
   }
   ACT.kcals = () => kCalSheet();
+  /* Kalender-Filter „iPhone-Termine“: Antippen öffnet die Liste der iPhone-Kalender. Dort wählt Felix, welche er sehen will. */
+  function terminSheet() {
+    const hide = new Set(N.calHide || []), on = !!(S.settings.calFilter.termin ?? 1), skip = new Set([...(N.bcals || []), N.mcal].filter(Boolean));
+    const cals = (N.cals || []).filter(c => !skip.has(c.id)), cnt = id => (N.events || []).filter(e => e.cid === id).length;
+    openSheet(`<p class="stitle">iPhone-Termine</p>
+    <button class="drow" data-act="terminall"><span class="dt"><b>iPhone-Termine im Kalender zeigen</b><small>${on ? "an" : "aus"}</small></span><span class="chev">${on ? "●" : "○"}</span></button>
+    ${on ? `<div class="label" style="margin:12px 0 6px">Welche Kalender?</div>${cals.map(c => `<button class="drow" data-act="termincal" data-id="${esc(c.id)}"><span class="dt"><b>${esc(c.title || "(ohne Namen)")}</b><small>${cnt(c.id) === 1 ? "1 Termin" : cnt(c.id) + " Termine"}</small></span><span class="chev">${hide.has(c.id) ? "○" : "●"}</span></button>`).join("") || '<p class="hint">Ich sehe keinen Kalender. Bitte unter Einstellungen › iPhone die Freigaben prüfen.</p>'}` : ""}
+    <button class="btn pri" data-act="cancel" style="width:100%;margin-top:10px">Fertig</button>`);
+  }
+  const origCalf = ACT.calf;
+  ACT.calf = el => { if (el.dataset.k === "termin") { terminSheet(); if (!(N.events || []).some(e => e.cid)) calendarEvents().then(() => { if ($("#sheet.open [data-act=terminall]")) terminSheet(); }); return; } origCalf(el); };
+  ACT.terminall = () => { S.settings.calFilter.termin = (S.settings.calFilter.termin ?? 1) ? 0 : 1; save(); render(true); terminSheet(); };
+  ACT.termincal = el => { const h = new Set(N.calHide || []); h.has(el.dataset.id) ? h.delete(el.dataset.id) : h.add(el.dataset.id); N.calHide = [...h]; nSave(); render(true); terminSheet(); };
   ACT.kbcal = async el => { const on = new Set(N.bcals || []); on.has(el.dataset.id) ? on.delete(el.dataset.id) : on.add(el.dataset.id); N.bcalPick = [...on]; nSave(); await calendarBirthdays(); kCalSheet(); kFresh = true; render(true); };
   ACT.klater = () => { const c = kCard(); if (!c) return; (N.later = N.later || {})[kKey(c)] = Date.now(); kCur = null; kQ = ""; kAfter(); toast("Kommt am Ende nochmal"); };
   ACT.krein = () => { const c = kCard(); if (!c) return null; if (kCands(c).length) { toast("Erst bitte oben entscheiden: verbinden oder nicht dieselbe Person"); return null; } const p = kTake(c); kPid = p.id; kStep = "pflege"; kCur = null; kQ = ""; kAfter(); return p; };
@@ -894,11 +917,12 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     if (bd === null) return "Geburtstag bitte als TT.MM.JJJJ, z. B. 07041964";
     if (dd === null) return "Todestag bitte als TT.MM.JJJJ";
     const first = $("#kp-first").value.trim(), last = $("#kp-last").value.trim(); if (!first && !last) return "Bitte einen Namen eintragen";
-    Object.assign(p, { first, last, bday: bd || "", death: dd || "", cyc: dd || !p.tel ? "nie" : $("#kp-cyc").value, lunch: dd ? "" : $("#kp-lunch").value, group: $("#kp-grp").value, gift: !dd && $("#kp-gift").checked, woher: $("#kp-woher").value.trim() });
+    Object.assign(p, { first, last, bday: bd || "", death: dd || "", cyc: dd || !p.tel ? "nie" : $("#kp-cyc").value, lunch: dd ? "" : $("#kp-lunch").value, group: $("#kp-grp").value, gift: !dd && $("#kp-gift").checked, woher: $("#kp-woher").value.trim(), job: $("#kp-job").value.trim() });
+    pickRemember("woher", p.woher); pickRemember("job", p.job);
     if (p.group && !S.groups.includes(p.group)) S.groups.push(p.group);
     const aq = $("#kp-ask").value.trim(); if (aq) (p.ask = p.ask || []).push({ id: uid(), t: aq, d: today() });
     const gi = $("#kp-gidea").value.trim(), no = $("#kp-note").value.trim();
-    if (gi) (p.gifts = p.gifts || []).push({ id: uid(), t: gi, d: today() });
+    if (gi) { if (p.gift) (p.gifts = p.gifts || []).push({ id: uid(), t: gi, d: today() }); else (p.notes = p.notes || []).unshift({ id: uid(), t: "Geschenkidee: " + gi, d: today() }); }
     if (no) (p.notes = p.notes || []).unshift({ id: uid(), t: no, d: today() });
     nSave(); save(); return "";
   }
@@ -908,11 +932,12 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     return `<div class="block"><h4>${esc(fullName(p))} ist drin</h4><p class="hint" style="margin:4px 0 0">Jetzt kurz pflegen, dann ist der Kontakt fertig und kommt nicht wieder als Karte.${p.local ? " Ohne Nummer, deshalb steht er nur in Mirella." : ""}</p>${nums.length ? `<p class="hint" style="margin:6px 0 0">${nums.length === 1 ? "Nummer" : "Nummern"}: <b>${esc(nums.join(" · "))}</b></p>` : ""}</div>
     <div class="fgrid"><div class="fld"><label for="kp-first">Vorname</label><input id="kp-first" value="${esc(p.first || "")}" autocomplete="off"></div><div class="fld"><label for="kp-last">Nachname</label><input id="kp-last" value="${esc(p.last || "")}" autocomplete="off"></div></div>
     <div class="fgrid"><div class="fld"><label for="kp-cyc">Anrufen</label>${p.tel ? sel("kp-cyc", CYCLES.map(c => [c, cycLabel(c)]), noCycle(p.cyc) ? "nie" : p.cyc) : '<select id="kp-cyc" disabled><option value="nie">ohne Nummer nicht</option></select>'}</div><div class="fld"><label for="kp-lunch">Treffen vereinbaren</label>${sel("kp-lunch", [["", "nie"], ...Object.keys(LUNCH).map(c => [c, c])], p.lunch || "")}</div></div>
-    <div class="fgrid"><div class="fld"><label for="kp-grp-s">Gruppe</label>${pickField("kp-grp", S.groups, p.group || "", "keine")}</div><div class="fld"><label for="kp-woher-s">Woher kenne ich ihn/sie?</label>${pickField("kp-woher", woherAll(), p.woher || "", "keine Angabe")}</div></div>
+    <div class="fgrid"><div class="fld"><label for="kp-grp-s">Gruppe</label>${pickField("kp-grp", S.groups, p.group || "", "keine", "group")}</div><div class="fld"><label for="kp-woher-s">Woher bekannt?</label>${pickField("kp-woher", woherAll(), p.woher || "", "keine Angabe", "woher")}</div></div>
+    <div class="fld"><label for="kp-job-s">Beruf (heute oder früher)</label>${pickField("kp-job", jobAll(), p.job || "", "keine Angabe", "job")}</div>
     <div class="fld"><label for="kp-bday">Geburtstag</label><input id="kp-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(p.bday || ""))}" autocomplete="off"></div>
     <label class="tgl" style="margin:-2px 0 10px"><input type="checkbox" id="kp-gift"${p.gift ? " checked" : ""}> Zum Geburtstag ein Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
     <div class="fld"><label for="kp-note">Notiz</label><input id="kp-note" placeholder="Was du dir merken willst" autocomplete="off"></div>
-    <div class="fld"><label for="kp-gidea">Geschenkidee</label><input id="kp-gidea" placeholder="z. B. Kochkurs" autocomplete="off"></div>
+    <div class="fld" id="kp-gideabox"${p.gift ? "" : " hidden"}><label for="kp-gidea">Geschenkidee</label><input id="kp-gidea" placeholder="z. B. Kochkurs" autocomplete="off"></div>
     <div class="fld"><label for="kp-ask">Offene Nachfrage</label><input id="kp-ask" placeholder="z. B. fragen, wie die Reha läuft" autocomplete="off"></div>
     <div class="plusrow">${par ? "" : '<button type="button" class="mini" data-act="kparent">+ Kind von …</button>'}<button type="button" class="mini" data-act="plusshow" data-t="kp-deathbox"${p.death ? " hidden" : ""}>+ Verstorben</button></div>
     ${par ? `<div class="block"><div class="listrow"><span class="grow">Kind von ${esc(fullName(par))}<small>steht nur in Mirella, ohne Anruf-Erinnerung</small></span><button class="rowdel" data-act="kparentoff" aria-label="Verweis entfernen">✕</button></div></div>` : ""}
@@ -980,7 +1005,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       else if (rh && p.tel) { const ck = CYCLES.find(x => x.toLowerCase() === rh); if (ck) { p.cyc = ck; did = true; } }
       const no = /^(notiz|merke?)[:,]?\s+(.+)/i.exec(txt), gi = /^(geschenk(idee)?)[:,]?\s+(.+)/i.exec(txt);
       if (no) { (p.notes = p.notes || []).unshift({ id: uid(), t: no[2], d: today() }); did = true; }
-      if (gi) { (p.gifts = p.gifts || []).push({ id: uid(), t: gi[3], d: today() }); did = true; }
+      if (gi) { const gb = $("#kp-gift"); if (gb ? gb.checked : p.gift) (p.gifts = p.gifts || []).push({ id: uid(), t: gi[3], d: today() }); else (p.notes = p.notes || []).unshift({ id: uid(), t: "Geschenkidee: " + gi[3], d: today() }); did = true; }
       save();
       if (/\b(fertig|weiter|nächste[rn]?)\b/.test(t)) { kStep = "karte"; kPid = null; kAfter(); return true; }
       if (!did) { toast("Das habe ich hier nicht verstanden"); return true; }
@@ -1027,7 +1052,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     kFresh = false;
     const r = kOrigRender.apply(this, arguments);
     if (keep && view === "kdurch" && kStep === "pflege" && pid === kPid) for (const k of keep) { const e = document.getElementById(k.id); if (!e || e.disabled) continue; if (e.type === "checkbox") e.checked = k.v; else e.value = k.v; if (k.f) { e.focus(); try { e.setSelectionRange(k.s, k.s); } catch (_) { } } }
-    if (keep && view === "kdurch" && kStep === "pflege" && pid === kPid) { pickSync(); const d = $("#kp-death"); if (d && d.value) $("#kp-deathbox").hidden = false; }
+    if (keep && view === "kdurch" && kStep === "pflege" && pid === kPid) { pickSync(); const d = $("#kp-death"); if (d && d.value) $("#kp-deathbox").hidden = false; const g = $("#kp-gift"); if (g) $("#kp-gideabox").hidden = !g.checked; }
     return r;
   };
   HOOKS.menschenTop.push(() => !N.kNeu && S.people.length ? `<div class="card" role="button" tabindex="0" data-act="kneu"><span class="av">↻</span><span style="min-width:0"><div class="t">Kontakte neu aufsetzen</div><div class="s" style="white-space:normal">Telefonbuch sichern, Mirella leeren, dann jeden Eintrag einzeln als Karte durchgehen</div></span><span class="chev">›</span></div>` : "");
@@ -1103,6 +1128,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     <div class="row2" style="margin-top:8px"><button class="btn" data-act="nkontakte">Jetzt abgleichen</button><button class="btn" data-act="nfreigaben">Freigaben prüfen</button></div>
     <button class="btn" data-act="kopen" style="width:100%;margin-top:8px">Kontakte durchgehen (${kQueue().length} offen)</button>
     ${S.settings.appleIgnored.length ? `<button class="btn" data-act="nunignore" style="width:100%;margin-top:8px">Aussortierte wieder vorschlagen (${S.settings.appleIgnored.length})</button>` : ""}
+    <p class="hint"><b>Teilen an Mirella</b> (aus Safari, Mail, Fotos): Teilen-Knopf antippen, in der Reihe mit den App-Symbolen ganz nach rechts wischen, „Mehr“ antippen, oben „Bearbeiten“, bei Mirella das Plus antippen und Mirella nach oben ziehen. Danach steht Mirella immer vorne in der Reihe.</p>
     ${P.MirellaAlarm ? `<p class="hint"><b>Wecker:</b> ${alarmNote()}${alarmDiag()}</p>${N.alarmState === "authorized" || N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nwecker" style="width:100%">Echten Wecker erlauben</button>'}${N.alarmState === "unavailable" ? "" : '<button class="btn" data-act="nweckertest" style="width:100%;margin-top:8px">Wecker jetzt testen (klingelt in 1 bis 2 Minuten)</button>'}` : ""}
     <p class="hint">Termine aus deinem iPhone-Kalender zeigt Mirella im Kalender mit an${N.events ? " (" + N.events.length + " geladen)" : ""}. Sie bleiben auf dem iPhone und werden nicht kopiert.</p>
     ${setH("In beide Richtungen")}
@@ -1157,7 +1183,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       const t = (r && r.text || "").trim(); if (!t) return;
       const tel = (t.match(/(\+|0)[\d\s\/().-]{6,}\d/) || [])[0];
       openSheet(`<p class="stitle">Das habe ich gelesen</p><div class="fld"><textarea id="ls-t" rows="4">${esc(t)}</textarea></div><div style="display:grid;gap:8px">
-        ${tel ? `<a class="btn pri" href="tel:${esc(tel.replace(/[^\d+]/g, ""))}" style="text-decoration:none;text-align:center">📞 ${esc(tel.trim())} anrufen</a><button class="btn" data-act="lsperson" data-tel="${esc(tel.trim())}">Als neuen Kontakt anlegen</button>` : ""}
+        ${tel ? `<a class="btn pri" href="tel:${esc(intlTel(tel))}" style="text-decoration:none;text-align:center">📞 ${esc(tel.trim())} anrufen</a><button class="btn" data-act="lsperson" data-tel="${esc(tel.trim())}">Als neuen Kontakt anlegen</button>` : ""}
         <button class="btn${tel ? "" : " pri"}" data-act="lsvoice">An Mirella geben (Aufgabe, Termin, Notiz)</button><button class="btn" data-act="lscopy">Kopieren</button></div>`);
     };
     ACT.lsvoice = () => { const t = $("#ls-t").value; voiceStart(); recStop(); $("#v-text").value = t; };
@@ -1209,7 +1235,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       for (const t of S.todos) { if (t.done || !t.los || !t.ort || !t.time) continue; out.push({ at: +new Date((t.losDate || t.date) + "T" + t.los + ":00"), titel: t.t, ziel: String(t.ort).split(",")[0], info: t.fahrt + " Min. mit dem Auto · Ankunft " + t.time }); }
       return out.filter(x => x.at > now - 10 * 60e3 && x.at < now + 3 * 3600e3).sort((a, b) => a.at - b.at)[0] || null;
     };
-    const liveSync = async () => {
+    const liveSync = liveSyncRef = async () => {
       if (N.live === false || document.hidden) return;
       const x = nextLos(), sig = x ? x.at + "|" + x.titel + "|" + x.info : "";
       if (sig === (N.liveSig || "")) return;

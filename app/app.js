@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.33";
+const VERSION = "0.33.1";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -118,11 +118,19 @@ function migrate() {
 /* Einmalig (Wunsch Felix 12.11.): Supplements als ganz normale tägliche To-dos mit Nerv-Modus.
    Läuft erst, wenn die Daten da sind, legt nichts doppelt an und kommt nicht wieder, wenn Felix sie löscht. */
 function suppTodosAnlegen() {
-  if (S.settings.suppTodos || S.people.length < 5) return false;
-  /* Mo–Fr isst Felix bis 12 Uhr nichts: Kreatin beim Rausgehen, der Rest zum Mittagessen. Am Wochenende alles zum Frühstück. */
-  const T = [["Kreatin nehmen, bevor du losgehst", "07:00", "Mo–Fr"], ["Multivitamin und Omega-3 zum Mittagessen", "12:00", "Mo–Fr"], ["Kreatin, Multivitamin und Omega-3 zum Frühstück", "09:00", "Sa+So"], ["Magnesium-Bisglycinat nehmen", "20:00", "täglich"]];
-  for (const [t, time, rep] of T) if (!S.todos.some(x => x.t.toLowerCase() === t.toLowerCase())) S.todos.push({ id: uid(), t, pid: "", list: "todo", done: false, created: today(), date: rep === "täglich" ? today() : repDay(today(), rep, true), time, trig: "zeit", rep, area: "gesund", nerv: true, prio: "", ort: "" });
-  S.settings.suppTodos = 1; save(); return true;
+  if ((+S.settings.suppTodos || 0) >= 2 || S.people.length < 5) return false;
+  /* [Text, Uhrzeit, Wiederholung, frühere Texte] – frühere Texte werden umbenannt statt doppelt angelegt */
+  const T = [["Kreatin (3–5 g) vor dem Losgehen", "07:00", "Mo–Fr", ["Kreatin nehmen, bevor du losgehst"]],
+    ["Multivitamin (1) + Omega-3 (4)", "12:00", "Mo–Fr", ["Multivitamin und Omega-3 zum Mittagessen"]],
+    ["Kreatin (3–5 g) + Multivitamin (1) + Omega-3 (4)", "09:00", "Sa+So", ["Kreatin, Multivitamin und Omega-3 zum Frühstück"]],
+    ["Magnesium (2)", "20:00", "täglich", ["Magnesium-Bisglycinat nehmen"]]];
+  const low = x => String(x || "").toLowerCase();
+  for (const [t, time, rep, old] of T) {
+    const have = S.todos.find(x => [t, ...old].some(o => low(o) === low(x.t)));
+    if (have) { have.t = t; continue; }
+    S.todos.push({ id: uid(), t, pid: "", list: "todo", done: false, created: today(), date: rep === "täglich" ? today() : repDay(today(), rep, true), time, trig: "zeit", rep, area: "gesund", nerv: true, prio: "", ort: "" });
+  }
+  S.settings.suppTodos = 2; save(); return true;
 }
 function save() {
   for (const p of S.people) { if (p.tel && p.tel[0] !== "+") p.tel = telNice(p.tel); if (p.tels) for (const x of p.tels) if (x.n && x.n[0] !== "+") x.n = telNice(x.n); }

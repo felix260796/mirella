@@ -1156,8 +1156,8 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   /* ---------- Nachfrage beim Start: alles, was neu einzugeben ist, einmal gesammelt (Wunsch Felix), danach nie wieder ----------
      Kommt später etwas dazu, das Felix eingeben oder erlauben muss: hier einen Eintrag in NEED ergänzen. */
   const NEED = [
-    { k: "ki", missing: () => typeof kiOn === "function" && !kiOn(), bad: () => typeof KI !== "undefined" && keyIsBad("ki", KI.key), html: b => `<div class="fld"><label for="nf-ki">Claude-Schlüssel (für die Mirella-KI)</label>${b ? '<small class="fwarn">Der eingetragene Schlüssel funktioniert nicht mehr. Bitte neu eintragen.</small>' : ""}<input id="nf-ki" type="password" autocomplete="off" placeholder="sk-ant-… einfügen"></div>`, save: () => { const v = ($("#nf-ki").value || "").trim(); if (v) { KI.key = v; kiSave(); keyBad("ki", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.ki; } } },
-    { k: "gmaps", missing: () => !S.settings.gmapsKey, bad: () => keyIsBad("gmaps", S.settings.gmapsKey), html: b => `<div class="fld"><label for="nf-gm">Google-Maps-Schlüssel (für den Wecker nach Verkehr)</label>${b ? '<small class="fwarn">Der eingetragene Schlüssel funktioniert nicht. Google sagt: ungültig. Bitte neu eintragen.</small>' : ""}<input id="nf-gm" type="password" autocomplete="off" placeholder="AIza… einfügen"></div>`, save: () => { const v = ($("#nf-gm").value || "").trim(); if (v) { S.settings.gmapsKey = v; keyBad("gmaps", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.gmaps; } } },
+    { k: "ki", missing: () => typeof kiOn === "function" && !kiOn(), bad: () => typeof KI !== "undefined" && keyIsBad("ki", KI.key), html: b => keyField("nf-ki", "Claude-Schlüssel (für die Mirella-KI)", { ph: "sk-ant-… einfügen", warn: b ? "Der eingetragene Schlüssel funktioniert nicht mehr. Bitte neu eintragen." : "" }), save: () => { const v = ($("#nf-ki").value || "").trim(); if (v) { KI.key = v; kiSave(); keyBad("ki", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.ki; } } },
+    { k: "gmaps", missing: () => !S.settings.gmapsKey, bad: () => keyIsBad("gmaps", S.settings.gmapsKey), html: b => keyField("nf-gm", "Google-Maps-Schlüssel (für den Wecker nach Verkehr)", { ph: "AIza… einfügen", warn: b ? "Der eingetragene Schlüssel funktioniert nicht. Google sagt: ungültig. Bitte neu eintragen." : "" }), save: () => { const v = ($("#nf-gm").value || "").trim(); if (v) { S.settings.gmapsKey = v; keyBad("gmaps", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.gmaps; } } },
     { k: "wecker", missing: () => !!P.MirellaAlarm && !N.alarmState, html: () => `<p class="hint">Dein iPhone fragt gleich einmal, ob Mirella echte Wecker stellen darf. Bitte <b>Erlauben</b> tippen.</p>`, save: async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; } catch (_) { } } }
   ];
   /* Fehlendes nur einmal fragen. Ein Schlüssel, den der Dienst abgelehnt hat, kommt beim nächsten Öffnen wieder,
@@ -1176,8 +1176,9 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   };
   ACT.nflater = () => { for (const x of needOpen()) { N.asked[x.k] = 1; if (x.bad && x.bad()) N.badLater[x.k] = keyBadGet()[x.k]; } nSave(); closeAll(); toast("Unter Einstellungen kannst du ihn jederzeit neu eintragen"); };
   /* Beim Öffnen: jeden neu eingetragenen Schlüssel einmal kurz ausprobieren. Ein funktionierender Schlüssel wird nicht wieder geprüft. */
-  async function keyCheck() {
+  async function keyCheck(loud) {
     N.keyOk = N.keyOk || {}; let bad = false;
+    if (loud === true) delete N.keyOk.gmaps;
     try {
       if (typeof KI !== "undefined" && KI.key && N.keyOk.ki !== keySum(KI.key) && !keyIsBad("ki", KI.key)) {
         const r = await fetch("https://api.anthropic.com/v1/models?limit=1", { headers: { "x-api-key": KI.key, "anthropic-version": "2026-10-21", "anthropic-dangerous-direct-browser-access": "true" } });
@@ -1192,8 +1193,10 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       }
     } catch (_) { }
     nSave();
+    if (loud === true) { const g = S.settings.gmapsKey; if (g) toast(keyIsBad("gmaps", g) ? "Google lehnt diesen Schlüssel ab. Bitte prüfen." : N.keyOk.gmaps === keySum(g) ? "Google-Schlüssel funktioniert" : "Gespeichert. Prüfen klappt gerade nicht (kein Netz?)"); render(true); return; }
     if (bad) nachfrage();
   }
+  window.mirellaKeyCheck = keyCheck;
   /* ---------- Was das iPhone selbst kann (MirellaSystemPlugin) ---------- */
   const SY = P.MirellaSystem;
   const b64Of = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = rej; r.readAsDataURL(blob); });

@@ -785,6 +785,13 @@ const keySum = k => { let h = 5381; const s = String(k || ""); for (let i = 0; i
 function keyBadGet() { try { return JSON.parse(localStorage.getItem(KEYBAD) || "{}"); } catch (_) { return {}; } }
 function keyBad(kind, key, bad) { const o = keyBadGet(); if (bad) o[kind] = keySum(key); else delete o[kind]; try { localStorage.setItem(KEYBAD, JSON.stringify(o)); } catch (_) { } }
 const keyIsBad = (kind, key) => !!key && keyBadGet()[kind] === keySum(key);
+/* Eingabefeld für Schlüssel: über die volle Breite, darunter „Einfügen“ (ersetzt alles) und „Löschen“ (leert das Feld, mit Rückfrage).
+   set = Name der Einstellung, die beim Ändern sofort gespeichert wird (sonst speichert der Knopf des Fensters). */
+function keyField(id, label, opt = {}) {
+  return `<div class="fld keyfld"><label for="${id}">${label}</label>${opt.warn ? `<small class="fwarn">${opt.warn}</small>` : ""}${opt.note ? `<small class="keynote">${opt.note}</small>` : ""}<input id="${id}" class="keyin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(opt.ph || "")}" value="${esc(opt.value || "")}"${opt.set ? ` data-set="${opt.set}"` : ""}><div class="keybtns"><button type="button" class="btn" data-act="keypaste" data-for="${id}">Einfügen</button><button type="button" class="btn" data-act="keyclear" data-for="${id}">Löschen</button></div></div>`;
+}
+/* Antippen eines Schlüssel-Felds markiert gleich alles, damit Einfügen den alten Schlüssel ganz ersetzt */
+document.addEventListener("focusin", e => { if (e.target.classList && e.target.classList.contains("keyin")) setTimeout(() => { try { e.target.select(); } catch (_) { } }, 0); });
 function telNice(t) { t = String(t || "").trim(); if (!t || t.startsWith("+")) return t; if (t.startsWith("00")) return "+" + t.slice(2).trim(); if (/^0\d/.test(t)) return "+49 " + t.slice(1).replace(/^[\s\-/()]+/, ""); return t; }
 function intlTel(t) { let n = (t || "").replace(/[^\d+]/g, ""); if (n.startsWith("00")) n = "+" + n.slice(2); else if (n.startsWith("0")) n = "+49" + n.slice(1); return n; }
 /* Kontaktdaten: jede Zeile gleich aufgebaut (Bezeichnung, Wert, Knopf) */
@@ -1843,6 +1850,21 @@ const ACT = {
   import: () => { const f = $("#f-import"); f.value = ""; f.click(); },
   wipe: async () => { if (!ask("Wirklich ALLE Daten auf diesem Gerät löschen? Das geht nicht rückgängig.") || !ask("Ganz sicher? Kontakte, Aufgaben, Dokumente und Fotos sind dann weg.")) return; S = blank(); save(); await photoClear(); view = "heute"; render(); toast("Alles gelöscht"); }
 };
+/* Knöpfe am Schlüssel-Feld */
+ACT.keypaste = async el => {
+  const inp = document.getElementById(el.dataset.for); if (!inp) return;
+  let t = "";
+  try { t = await navigator.clipboard.readText(); } catch (_) { }
+  t = String(t || "").replace(/\s+/g, "");
+  if (!t) { inp.value = ""; inp.focus(); toast("Zwischenablage leer. Halte das Feld gedrückt und tippe auf Einfügen."); return; }
+  inp.value = t; inp.dispatchEvent(new Event("change", { bubbles: true }));
+  toast("Eingefügt, endet auf " + t.slice(-4));
+};
+ACT.keyclear = el => {
+  const inp = document.getElementById(el.dataset.for); if (!inp || !inp.value) { inp && inp.focus(); return; }
+  if (!ask("Den Schlüssel in diesem Feld löschen?")) return;
+  inp.value = ""; inp.dispatchEvent(new Event("change", { bubbles: true })); inp.focus();
+};
 document.addEventListener("click", e => {
   const c = e.target.closest("[data-close]");
   if (c) { c.dataset.close === "drawer" ? closeDrawer() : closeSheet(true); return; }
@@ -1867,7 +1889,9 @@ document.addEventListener("change", e => {
   if (el.dataset.set) {
     const k = el.dataset.set;
     const v = el.type === "checkbox" ? (el.checked ? 1 : 0) : el.tagName === "SELECT" && !el.dataset.str ? +el.value : el.dataset.num ? (parseAmount(el.value) || 0) : el.value.trim();
-    putSet(k, v); save(); toast("Gespeichert"); return;
+    putSet(k, v); save(); toast("Gespeichert");
+    if (k === "gmapsKey") { if (v && typeof window.mirellaKeyCheck === "function") setTimeout(() => window.mirellaKeyCheck(true), 300); else if (!v) setTimeout(() => render(true), 300); }
+    return;
   }
   if (el.closest && el.closest("#sheetbody [data-draft]")) draftSave();
   if (el.id === "f-cam" || el.id === "f-lib") { photoChosen(el.files[0]); return; }

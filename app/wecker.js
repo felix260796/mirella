@@ -226,6 +226,7 @@ function nervList() {
 let nervShown = 0;
 function nervCheck(force) {
   if (document.hidden || $("#sheet").classList.contains("open") || document.querySelector(".nerv,.pdfview,.imgfull,.zv")) return;
+  if (view === "kdurch") return; // beim Durchgehen der Kontakte stört Mirella nicht dazwischen
   if (!force && Date.now() - nervShown < (+S.settings.nervEvery || 30) * 60e3) return;
   const list = nervList(); if (!list.length) return;
   nervShown = Date.now(); beep(2);

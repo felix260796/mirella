@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.30";
+const VERSION = "0.31";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -92,7 +92,7 @@ function blank() {
       name: "Felix", maxCalls: 3, retryWorkdays: 2, giveUp: 5, giftLead: 14, callFrom: 8, callTo: 18, callDays: [1, 2, 3, 4, 5], msgFrom: 8, msgTo: 21, msgDays: [0, 1, 2, 3, 4, 5, 6], roundLead: 183, roundAges: [18, 20, 30, 40, 50, 60, 70, 80, 90, 100], wxHint: { regen: 1, schnee: 1, gewitter: 1, frost: 1, sturm: 1, wind: 1, hitze: 1, jacke: 1, zwiebel: 1, uv: 1, nebel: 1 }, shopHistDays: 90,
       cats: [], wxName: "", wxLat: null, wxLon: null, showBrief: 1, showWx: 1,
       nerv: { anrufe: 1, aufgaben: 1, geburtstage: 1, fristen: 1, supplements: 1 }, nervEvery: 30, nervSound: 1,
-      calFilter: { geb: 1, erin: 1, todo: 1, anruf: 1 }, calStart: "monat",
+      calFilter: { geb: 1, erin: 1, todo: 1, anruf: 1, treff: 1 }, calStart: "monat",
       income: 0, budgets: {}, contractLead: 30, huLead: 28, pcEvery: 0, pcLast: "", washMin: 120, suppMorning: "07:30", suppNoon: "12:30", suppEvening: "21:00",
       homeAddr: "", homeLat: null, homeLon: null, prepMin: 30, bufMin: 10, alarmCount: 3, alarmGap: 5, gmapsKey: ""
     },
@@ -196,7 +196,7 @@ function callPlanMap() {
 function callsForToday() { const m = callPlanMap(), t = today(); return S.people.filter(p => m[p.id] === t).sort((a, b) => (nextDue(a) || "9999") < (nextDue(b) || "9999") ? -1 : 1); }
 function pullPool() { const m = callPlanMap(), t = today(); return S.people.filter(p => !(p.calls || []).some(c => c.d === t)).filter(p => m[p.id] ? m[p.id] > t : (nextDue(p) && nextDue(p) > t && diffDays(t, nextDue(p)) <= 21)).sort((a, b) => (m[a.id] || nextDue(a)) < (m[b.id] || nextDue(b)) ? -1 : 1); }
 function planLabel(p) { const m = callPlanMap()[p.id]; if (!m) return null; const n = diffDays(today(), m); return n <= 0 ? "heute" : n === 1 ? "morgen" : fmtDate(m).replace(/^(\w+)\.?,? /, "$1. "); }
-/* Mittagessen vereinbaren: eigener Rhythmus je Kontakt, unabhängig von den Anrufen */
+/* Treffen vereinbaren (früher „Mittagessen“): eigener Rhythmus je Kontakt, unabhängig von den Anrufen. Die Feldnamen lunch… bleiben, damit alte Daten und die PC-Sicherung passen. */
 const LUNCH = { "monatlich": 1, "alle 2 Monate": 2, "vierteljährlich": 3, "halbjährlich": 6, "jährlich": 12 };
 function lunchDue(p) {
   if (!LUNCH[p.lunch] || p.arch || p.death) return null;
@@ -233,7 +233,7 @@ function kidForm(parentId) {
 }
 function kinBlock(p) {
   const ks = p.kin || [], kids = kidsOf(p), par = p.parent && S.people.find(x => x.id === p.parent);
-  return `${par ? `<div class="block"><div class="listrow"><span class="grow" role="button" tabindex="0" data-act="person" data-id="${par.id}" style="cursor:pointer">Kind von ${esc(fullName(par))}<small>antippen für die Akte</small></span><span class="chev">›</span></div></div>` : ""}<div class="block"><div class="bh"><h4>Kinder</h4><button class="mini" data-act="kidnew" data-id="${p.id}">+ Kind</button></div>${kids.length ? kids.map(k => { const nb = nextBirthday(k), age = nb && ageAt(k, nb); return `<div class="listrow"><span class="grow" role="button" tabindex="0" data-act="person" data-id="${k.id}" style="cursor:pointer">${esc(fullName(k))}<small>${k.bday ? "* " + esc(longDate(k.bday)) + (age ? " · wird " + age : "") : "Geburtstag fehlt noch"}</small></span><span class="chev">›</span></div>`; }).join("") : '<p class="swipehint" style="text-align:left;margin:0">Kinder bekommen einen eigenen Kontakt mit Geburtstag, Geschenkideen und Notizen.</p>'}</div>${ks.length ? `<div class="block"><div class="bh"><h4>Familie</h4><button class="mini" data-act="kinedit" data-id="">+ Kind oder Angehörigen</button></div>${ks.length ? ks.map(k => { const nb = nextBirthday({ bday: k.bday, death: k.death }), age = nb && ageAt(k, nb); return `<div class="listrow"><span class="grow" role="button" tabindex="0" data-act="kinedit" data-id="${k.id}" style="cursor:pointer">${esc(k.name)}${k.rel ? " · " + esc(k.rel) : ""}<small>${k.bday ? "* " + esc(longDate(k.bday)) + (age ? " · wird " + age : "") : "Geburtstag fehlt noch"}${k.death ? " · † " + esc(longDate(k.death)) : ""}</small></span></div>`; }).join("") : '<p class="swipehint" style="text-align:left;margin:0">Kinder oder Partner mit Geburtstag, ohne eigenen Kontakt. Mirella erinnert trotzdem.</p>'}</div>` : ""}`;
+  return `${par ? `<div class="block"><div class="listrow"><span class="grow" role="button" tabindex="0" data-act="person" data-id="${par.id}" style="cursor:pointer">Kind von ${esc(fullName(par))}<small>antippen für die Akte</small></span><span class="chev">›</span></div></div>` : ""}${ks.length ? `<div class="block"><div class="bh"><h4>Familie</h4><button class="mini" data-act="kinedit" data-id="">+ Kind oder Angehörigen</button></div>${ks.length ? ks.map(k => { const nb = nextBirthday({ bday: k.bday, death: k.death }), age = nb && ageAt(k, nb); return `<div class="listrow"><span class="grow" role="button" tabindex="0" data-act="kinedit" data-id="${k.id}" style="cursor:pointer">${esc(k.name)}${k.rel ? " · " + esc(k.rel) : ""}<small>${k.bday ? "* " + esc(longDate(k.bday)) + (age ? " · wird " + age : "") : "Geburtstag fehlt noch"}${k.death ? " · † " + esc(longDate(k.death)) : ""}</small></span></div>`; }).join("") : '<p class="swipehint" style="text-align:left;margin:0">Kinder oder Partner mit Geburtstag, ohne eigenen Kontakt. Mirella erinnert trotzdem.</p>'}</div>` : ""}`;
 }
 function kinForm(id) {
   const p = S.people.find(x => x.id === cur); if (!p) return; const k = (p.kin || []).find(x => x.id === id) || { name: "", rel: "Kind", bday: "", death: "" };
@@ -364,7 +364,7 @@ const R = {
     S.people.forEach(p => !p.arch && (p.ask || []).forEach(a => { if (!a.done) asks.push([p, a]); }));
     const counts = [];
     if (dueCalls.length) counts.push(dueCalls.length === 1 ? "ein Anruf" : dueCalls.length + " Anrufe");
-    if (lunches.length) counts.push(lunches.length === 1 ? "ein Mittagessen zum Vereinbaren" : lunches.length + " Mittagessen zum Vereinbaren");
+    if (lunches.length) counts.push(lunches.length === 1 ? "ein Treffen zum Vereinbaren" : lunches.length + " Treffen zum Vereinbaren");
     if (dueTodos.length) counts.push(dueTodos.length === 1 ? "eine Aufgabe" : dueTodos.length + " Aufgaben");
     const nB = bdays.filter(([, b]) => b === t).length; if (nB) counts.push(nB === 1 ? "ein Geburtstag" : nB + " Geburtstage");
     const one = counts.length === 1 && /^ein/.test(counts[0]);
@@ -382,7 +382,7 @@ const R = {
     }
     if (leave.length) h2 += `<div class="sec"><span class="label">Bevor du losgehst</span></div><div class="morning">${leave.map(x => `<label class="chk"><input type="checkbox" data-act="toggle" data-id="${x.id}"><span>${esc(x.t)}</span></label>`).join("")}</div>`;
     if (dueCalls.length || doneCalls) h2 += `<div class="sec"><span class="label">Anrufe</span><span class="label">${dueCalls.length ? dueCalls.length + " heute" : ""}${doneCalls ? (dueCalls.length ? " · " : "") + doneCalls + " erledigt" : ""}</span></div>${dueCalls.map(p => personCard(p, true)).join("")}${!dueCalls.length ? `<div class="swipehint" style="text-align:left">Für heute alle Anrufe geschafft. 👍</div>` : ""}${pool.length && dueCalls.length < 2 ? `<button class="btn" data-act="pullcalls" style="width:100%;margin-top:6px">Weitere Anrufe vorziehen (${Math.min(pool.length, +S.settings.maxCalls || 3)} von ${pool.length})</button>` : ""}`;
-    if (lunches.length) h2 += `<div class="sec"><span class="label">Mittagessen vereinbaren</span><span class="label">${lunches.length}</span></div>${lunches.map(p => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(p.lunch)} · ${p.lunchLast ? "zuletzt " + esc(fmtDate(p.lunchLast)) : "noch nie"}</div><div class="actrow"><button class="mini" data-act="lunchset" data-id="${p.id}">Termin steht</button><button class="mini" data-act="lunchlater" data-id="${p.id}">Später</button></div></span></div>`).join("")}`;
+    if (lunches.length) h2 += `<div class="sec"><span class="label">Treffen vereinbaren</span><span class="label">${lunches.length}</span></div>${lunches.map(p => `<div class="card" role="button" tabindex="0" data-act="person" data-id="${p.id}">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s">${esc(p.lunch)} · ${p.lunchLast ? "zuletzt " + esc(fmtDate(p.lunchLast)) : "noch nie"}</div><div class="actrow"><button class="mini" data-act="lunchset" data-id="${p.id}">Termin steht</button><button class="mini" data-act="lunchlater" data-id="${p.id}">Später</button></div></span></div>`).join("")}`;
     const quit = S.people.filter(p => !p.arch && gaveUp(p));
     if (quit.length) h2 += `<div class="sec"><span class="label">Mirella nervt hier nicht mehr</span></div>${quit.map(p => `<div class="card">${avHTML(p)}<span style="min-width:0;flex:1"><div class="t">${esc(fullName(p))}</div><div class="s" style="white-space:normal">${failStreak(p)}-mal hintereinander nicht erreicht. Weiter versuchen oder ins Archiv?</div><div class="actrow"><button class="mini" data-act="giveon" data-id="${p.id}">Weiter versuchen</button><button class="mini" data-act="archperson" data-id="${p.id}">Archivieren</button></div></span></div>`).join("")}`;
     const kins = kinSoon(S.settings.giftLead).filter(x => !heuteSkip(x.p));
@@ -404,7 +404,7 @@ const R = {
   },
   menschen() {
     const ql = q.trim().toLowerCase();
-    let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "")).toLowerCase().includes(ql)));
+    let list = S.people.filter(p => !p.arch && (!grpFilter || p.group === grpFilter) && (!ql || (fullName(p) + " " + (p.group || "") + " " + (p.nick || "") + " " + (p.tel || "") + " " + (p.woher || "")).toLowerCase().includes(ql)));
     const grps = S.groups.filter(g => S.people.some(p => p.group === g));
     const rank = p => { const d = nextDue(p); return d || "9999"; }, az = (S.settings.peopleSort || "az") === "az";
     const key = p => (p.last || p.first || "").trim(), letter = p => { const c = key(p).normalize("NFD").replace(/[̀-ͯ]/g, "").charAt(0).toUpperCase(); return /[A-Z]/.test(c) ? c : "#"; };
@@ -412,7 +412,7 @@ const R = {
     let body = "", have = new Set();
     if (az) { let cur0 = ""; for (const p of list) { const l = letter(p); if (l !== cur0) { cur0 = l; have.add(l); body += `<div class="sec" id="az-${l === "#" ? "x" : l}"><span class="label">${l}</span></div>`; } body += personCard(p, false); } }
     else body = list.map(p => personCard(p, false)).join("");
-    return `${topbar("Kontakte")}${HOOKS.menschenTop.map(f => f()).join("")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Gruppe oder Nummer" aria-label="Suchen" value="${esc(q)}">
+    return `${topbar("Kontakte")}${HOOKS.menschenTop.map(f => f()).join("")}<input class="search" id="q" type="search" placeholder="Suchen: Name, Nummer, Gruppe oder woher (z. B. Schule)" aria-label="Suchen" value="${esc(q)}">
     ${grps.length ? `<div class="chips"><button class="chip2" data-act="grpf" data-g="" aria-pressed="${!grpFilter}">Alle</button>${grps.map(g => `<button class="chip2" data-act="grpf" data-g="${esc(g)}" aria-pressed="${grpFilter === g}">${esc(g)}</button>`).join("")}</div>` : ""}
     <div class="seg" style="margin-bottom:8px"><button data-act="psort" data-m="az" aria-pressed="${az}">A bis Z</button><button data-act="psort" data-m="dran" aria-pressed="${!az}">Wer ist dran</button></div>
     ${az ? "" : `<div class="sec"><span class="label">Wer zuerst dran ist</span><span class="label">${list.length}</span></div>`}
@@ -456,7 +456,7 @@ const R = {
   kalender() {
     const f = S.settings.calFilter, dd = D(selDate);
     const seg = `<div class="seg">${[["tag", "Tag"], ["woche", "Woche"], ["monat", "Monat"], ["liste", "Liste"]].map(([v, l]) => `<button data-act="calview" data-cv="${v}" aria-pressed="${calView === v}">${l}</button>`).join("")}</div>`;
-    const filt = `<div class="chips calfilt">${CALF.map(([k, l]) => `<button class="chip2 cf-${k}" data-act="calf" data-k="${k}" aria-pressed="${!!f[k]}"><i></i>${l}</button>`).join("")}</div>`;
+    const filt = `<div class="chips calfilt">${CALF.map(([k, l]) => `<button class="chip2 cf-${k}" data-act="calf" data-k="${k}" aria-pressed="${!!(f[k] ?? 1)}"><i></i>${l}</button>`).join("")}</div>`;
     let title = "", sub = "";
     if (calView === "tag") { title = `${WDL[dd.getDay()]}, ${dd.getDate()}. ${MN[dd.getMonth()]}`; sub = `${dd.getFullYear()} · KW ${isoWeek(selDate)}`; }
     else if (calView === "woche") { const mo = weekStart(selDate), su = addDays(mo, 6); title = `KW ${isoWeek(mo)}`; sub = `${D(mo).getDate()}. ${MN[D(mo).getMonth()].slice(0, 3)} bis ${D(su).getDate()}. ${MN[D(su).getMonth()].slice(0, 3)} ${D(su).getFullYear()}`; }
@@ -790,17 +790,17 @@ function waNum(tel) { let n = tel.replace(/[^\d+]/g, ""); if (n.startsWith("+"))
 function notePh(id) { return { auto: "z. B. getankt, 58.900 km, 72 €", geld: "z. B. Handyvertrag gekündigt zum 31.3.", gesund: "z. B. Zahnarzt: alles gut", haus: "z. B. Zählerstand Strom 19.310", frei: "z. B. Skiurlaub gebucht, 13.–20.2.", arbeit: "z. B. Jahresgespräch im Januar", sport: "z. B. Paddeln: neues Paddel gekauft", doku: "z. B. Pass beantragt" }[id] || "Notiz"; }
 function docRow(d) { return `<div class="listrow"><button data-act="viewphoto" data-id="${d.photo || ""}" style="border:0;padding:0;background:none" aria-label="Foto ansehen"><img class="thumbimg" data-thumb="${d.photo || ""}" alt=""></button><span class="grow">${esc(d.name)}<small>${esc([d.folder, d.until ? "gültig bis " + fmtDate(d.until) : "", fmtDate(d.created)].filter(Boolean).join(" · "))}</small></span><button class="rowdel" data-act="deldoc" data-id="${d.id}" aria-label="löschen">✕</button></div>`; }
 /* docsHTML() und financeHTML() stehen in bereiche.js */
-const CALF = [["geb", "Geburtstage"], ["erin", "Erinnerungen"], ["todo", "To-dos"], ["anruf", "Anrufe"]];
+const CALF = [["geb", "Geburtstage"], ["erin", "Erinnerungen"], ["todo", "To-dos"], ["anruf", "Anrufe"], ["treff", "Treffen"]];
 const weekStart = k => addDays(k, -((D(k).getDay() + 6) % 7));
 function eventsRange(from, to, all) {
-  const f = all ? { geb: 1, erin: 1, todo: 1, anruf: 1, termin: 1 } : S.settings.calFilter;
-  const ev = {}, add = (d, c, k, t, act, id, time) => { if (f[c] && d >= from && d <= to) (ev[d] = ev[d] || []).push({ c, k, t, act, id, time: time || "" }); };
+  const f = all ? { geb: 1, erin: 1, todo: 1, anruf: 1, termin: 1, treff: 1 } : S.settings.calFilter;
+  const ev = {}, add = (d, c, k, t, act, id, time) => { if ((f[c] ?? 1) && d >= from && d <= to) (ev[d] = ev[d] || []).push({ c, k, t, act, id, time: time || "" }); };
   for (const t of S.todos) {
     if (t.list !== "todo" || !t.date) continue;
-    const c = t.area || t.ref ? "erin" : "todo";
+    const c = t.kind === "treff" ? "treff" : t.area || t.ref ? "erin" : "todo";
     if (t.done) { add(t.date, c, "Erledigt", t.t, "edittodo", t.id); continue; }
     let d = t.date, guard = 0;
-    while (d && d <= to && guard++ < 400) { add(d, c, t.area ? areaById(t.area)?.n.split(" ")[0] || "Erinnerung" : "To-do", t.t, "edittodo", t.id, t.time); if (!t.rep || t.rep === "nie") break; d = stepRep(d, t.rep); }
+    while (d && d <= to && guard++ < 400) { add(d, c, c === "treff" ? "Treffen" : t.area ? areaById(t.area)?.n.split(" ")[0] || "Erinnerung" : "To-do", t.t, "edittodo", t.id, t.time); if (!t.rep || t.rep === "nie") break; d = stepRep(d, t.rep); }
   }
   for (const p of S.people) {
     if (p.bday) { const [, m, dd] = p.bday.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", p.death ? "Gedenken" : "Geburtstag", fullName(p) + (p.death ? " · Geburtstag" : ageAt(p, `${y}-${m}-${dd}`) ? " wird " + ageAt(p, `${y}-${m}-${dd}`) : ""), "person", p.id); }
@@ -810,6 +810,7 @@ function eventsRange(from, to, all) {
       if (k.death) { const [, m, dd] = k.death.split("-"); for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) add(`${y}-${m}-${dd}`, "geb", "Gedenken", k.name + " · Todestag", "person", p.id); }
     }
     const due = nextDue(p); if (due) add(due < today() ? today() : due, "anruf", "Anruf", fullName(p), "person", p.id);
+    const ld = lunchDue(p); if (ld) add(ld < today() ? today() : ld, "treff", "Treffen vereinbaren", fullName(p), "person", p.id);
     for (const c of p.calls || []) add(c.d, "anruf", "Anruf", fullName(p) + (c.ok ? " · erreicht" : " · nicht erreicht"), "person", p.id);
   }
   for (const d of S.docs) if (d.until) add(d.until, "erin", "Frist", d.name, "area", d.area || "doku");
@@ -1025,6 +1026,10 @@ function shopExtras(open) {
   ${S.shopTpl.length ? `<div class="chips">${S.shopTpl.map(t => `<span class="tplchip"><button class="chip2" data-act="usetpl" data-id="${t.id}">🧺 ${esc(t.n)} (${t.items.length})</button><button class="tplx" data-act="deltpl" data-id="${t.id}" aria-label="Vorlage ${esc(t.n)} löschen">✕</button></span>`).join("")}</div>` : '<p class="hint" style="margin-top:0">Lege z. B. „Wocheneinkauf“ oder „Grillen“ an: einmal die Liste füllen, dann als Vorlage speichern. Ein Tipp holt später alles wieder drauf.</p>'}
   ${open.length ? `<button class="btn" data-act="savetpl" style="width:100%;margin-top:6px">Aktuelle Liste als Vorlage speichern</button>` : ""}`;
 }
+/* Woher kenne ich jemanden: feste Auswahl, damit sich danach suchen und filtern lässt. Eigene Angaben kommen dazu. */
+const WOHER = ["Schule", "Studium", "Ausbildung", "Arbeit", "Geschäftlich", "Verein", "Sport", "Nachbarschaft", "Familie", "Freundeskreis", "Urlaub", "Über die Kinder"];
+const woherAll = () => [...new Set(WOHER.concat(S.people.map(x => (x.woher || "").trim()).filter(Boolean)))];
+const woherChips = (inp, cur) => `<div class="chips woher" data-for="${inp}" style="margin-top:6px">${woherAll().map(w => `<button type="button" class="chip2" data-act="woherset" data-t="${inp}" data-w="${esc(w)}" aria-pressed="${w === cur}">${esc(w)}</button>`).join("")}</div>`;
 function personForm(p) {
   const v = p || { first: "", last: "", tel: "", email: "", cyc: "monatlich", group: "Freunde", bday: "", gift: false, addr: "", nick: "" };
   const tl = L.splitTel(v.tel);
@@ -1032,14 +1037,18 @@ function personForm(p) {
   <div class="fld"><label for="c-first">Vorname</label><input id="c-first" value="${esc(v.first)}" autocomplete="off" autocapitalize="words"></div>
   <div class="fld"><label for="c-last">Nachname</label><input id="c-last" value="${esc(v.last)}" autocomplete="off" autocapitalize="words"></div>
   <div class="fld"><label for="c-tel">Telefon</label><div class="telrow"><select id="c-cc" aria-label="Land und Vorwahl">${L.COUNTRIES.map(c => `<option value="${c.p}"${c.p === tl.p ? " selected" : ""}>${c.f} ${c.p}</option>`).join("")}</select><input id="c-tel" type="tel" inputmode="tel" value="${esc(tl.n)}" placeholder="151 2345678"></div><div class="fwarn" id="w-tel" hidden></div></div>
-  <div class="fgrid"><div class="fld"><label for="c-tell">Diese Nummer ist</label><select id="c-tell"><option value="">(keine Angabe)</option>${TELL.map(x => `<option${v.telL === x ? " selected" : ""}>${x}</option>`).join("")}</select></div><div class="fld"><label for="c-tel2l">Zweite Nummer ist</label><select id="c-tel2l">${TELL.map(x => `<option${(((v.tels || [])[0] || {}).l || "Geschäft") === x ? " selected" : ""}>${x}</option>`).join("")}</select></div></div>
-  <div class="fld"><label for="c-tel2">Zweite Nummer (z. B. geschäftlich)</label><input id="c-tel2" type="tel" inputmode="tel" value="${esc(((v.tels || [])[0] || {}).n || "")}" placeholder="0711 1234567" autocomplete="off"></div>
+  ${(() => { const t2 = (v.tels || [])[0] || null, open = !!t2, more = Math.max(0, (v.tels || []).length - 1); return `<button type="button" class="mini" id="c-tel2btn" data-act="tel2show" style="margin:-4px 0 10px"${open ? " hidden" : ""}>+ weitere Nummer</button>
+  <div id="c-tel2box"${open ? "" : " hidden"}>
+  <div class="fld"><label for="c-tell">Die Nummer oben ist</label><select id="c-tell"><option value="">(keine Angabe)</option>${TELL.map(x => `<option${v.telL === x ? " selected" : ""}>${x}</option>`).join("")}</select></div>
+  <div class="fgrid"><div class="fld"><label for="c-tel2">Weitere Nummer</label><input id="c-tel2" type="tel" inputmode="tel" value="${esc((t2 || {}).n || "")}" placeholder="0711 1234567" autocomplete="off"></div><div class="fld"><label for="c-tel2l">Das ist</label><select id="c-tel2l">${TELL.map(x => `<option${((t2 || {}).l || "Geschäft") === x ? " selected" : ""}>${x}</option>`).join("")}</select></div></div>
+  ${more ? `<p class="swipehint" style="text-align:left;margin:-4px 0 10px">Dazu ${more === 1 ? "1 weitere Nummer" : more + " weitere Nummern"}: ${esc((v.tels || []).slice(1).map(x => x.n + (x.l ? " (" + x.l + ")" : "")).join(", "))}</p>` : ""}</div>`; })()}
   <div class="fld"><label for="c-mail">E-Mail</label><input id="c-mail" type="email" inputmode="email" autocapitalize="off" value="${esc(v.email || "")}" placeholder="name@beispiel.de"><div class="fwarn" id="w-mail" hidden></div></div>
   <div class="fld"><label>Gruppe</label><div class="chips" id="c-grps">${grpChips(v.group)}</div><input type="hidden" id="c-grp" value="${esc(v.group || "")}"></div>
   <div class="fld"><label for="c-cyc">Anrufen</label><select id="c-cyc">${CYCLES.map(c => `<option value="${c}"${c === (noCycle(v.cyc) && p ? "nie" : v.cyc) ? " selected" : ""}>${cycLabel(c)}${c === "nie" ? " (nur Geburtstag merken)" : ""}</option>`).join("")}</select></div>
-  <div class="fld"><label for="c-lunch">Mittagessen vereinbaren</label><select id="c-lunch"><option value="">nie</option>${Object.keys(LUNCH).map(c => `<option value="${c}"${c === v.lunch ? " selected" : ""}>${c}</option>`).join("")}</select></div>
+  <div class="fld"><label for="c-lunch">Treffen vereinbaren (erinnert dich, euch wieder zu verabreden)</label><select id="c-lunch"><option value="">nie</option>${Object.keys(LUNCH).map(c => `<option value="${c}"${c === v.lunch ? " selected" : ""}>${c}</option>`).join("")}</select></div>
   <div class="fgrid"><div class="fld"><label for="c-bday">Geburtstag</label><input id="c-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.bday))}" autocomplete="off"></div><div class="fld"><label for="c-nick">Spitzname (für Sprache)</label><input id="c-nick" value="${esc(v.nick || "")}" placeholder="z. B. Oma"></div></div>
-  <div class="fld"><label for="c-woher">Woher kenne ich ihn/sie?</label><input id="c-woher" list="c-woher-l" value="${esc(v.woher || "")}" placeholder="z. B. Schule, Verein, Arbeit" autocomplete="off"><datalist id="c-woher-l">${[...new Set(S.people.map(x => x.woher).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de")).map(x => `<option value="${esc(x)}">`).join("")}</datalist></div>
+  <div class="fld"><label for="c-woher">Woher kenne ich ihn/sie?</label><input id="c-woher" value="${esc(v.woher || "")}" placeholder="antippen oder selbst schreiben" autocomplete="off">${woherChips("c-woher", v.woher || "")}</div>
+  ${p && p.parent || !p || !(p.tel) ? `<div class="fld"><label for="c-parent">Kind von (nur bei Kindern)</label><input id="c-parent" list="c-parent-l" value="${esc(p && p.parent ? fullName(S.people.find(x => x.id === p.parent) || {}) : "")}" placeholder="Name des Elternteils, sonst leer" autocomplete="off"><datalist id="c-parent-l">${S.people.filter(x => !x.arch && !x.parent && (!p || x.id !== p.id)).map(x => `<option value="${esc(fullName(x))}">`).join("")}</datalist></div>` : ""}
   <label class="tgl"><input type="checkbox" id="c-gift"${v.gift ? " checked" : ""}> Geschenk besorgen (Erinnerung ${S.settings.giftLead} Tage vorher)</label>
   <div class="fld" style="margin-top:8px;position:relative"><label for="c-addr">Adresse</label><input id="c-addr" value="${esc(v.addr || "")}" autocomplete="off" placeholder="Straße eintippen, Vorschläge erscheinen"><div id="addr-sug" class="sug" hidden></div></div>
   <div class="fld"><label for="c-death">Verstorben am (nur falls zutreffend)</label><input id="c-death" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(v.death || ""))}" autocomplete="off"></div>
@@ -1049,6 +1058,7 @@ function personForm(p) {
   <p class="swipehint">Deine Eingaben werden laufend gemerkt. Schließt sich das Fenster, ist beim nächsten Öffnen alles wieder da.</p></div>`,
     () => {
       addrSuggest($("#c-addr"), $("#addr-sug"));
+      { const bx = $("#sheet [data-draft]"); if (bx) bx.addEventListener("draftapplied", () => { if ($("#c-tel2") && $("#c-tel2").value) { $("#c-tel2box").hidden = false; $("#c-tel2btn").hidden = true; } }); }
       const chk = () => { const wm = L.checkEmail($("#c-mail").value), wt = L.checkTel($("#c-cc").value, $("#c-tel").value); $("#w-mail").hidden = !wm; $("#w-mail").textContent = wm ? "⚠ " + wm : ""; $("#w-tel").hidden = !wt; $("#w-tel").textContent = wt ? "⚠ " + wt : ""; };
       ["#c-mail", "#c-tel"].forEach(q => $(q).addEventListener("blur", chk)); $("#c-cc").addEventListener("change", chk); if ($("#c-mail").value || $("#c-tel").value) chk();
       $("#c-death").addEventListener("input", e => { if (e.inputType && e.inputType.startsWith("delete")) return; const el = e.target, f = L.fmtBdayInput(el.value); if (f !== el.value) el.value = f; });
@@ -1117,7 +1127,7 @@ function mergeInto(t, src, label) {
 }
 function readPersonForm() {
   const bd = L.parseBday($("#c-bday").value), dd = L.parseBday($("#c-death").value);
-  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, lunch: $("#c-lunch") ? $("#c-lunch").value : "", group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tel2: $("#c-tel2") ? { n: $("#c-tel2").value.trim(), l: $("#c-tel2l").value } : null, woher: $("#c-woher") ? $("#c-woher").value.trim() : "" };
+  return { death: dd || "", deathBad: dd === null, first: $("#c-first").value.trim(), last: $("#c-last").value.trim(), tel: L.joinTel($("#c-cc").value, $("#c-tel").value), email: $("#c-mail").value.trim(), cyc: $("#c-cyc").value, lunch: $("#c-lunch") ? $("#c-lunch").value : "", group: $("#c-grp").value.trim(), bday: bd || "", bdayBad: bd === null, gift: $("#c-gift").checked, addr: $("#c-addr").value.trim(), nick: $("#c-nick").value.trim(), telL: $("#c-tell") ? $("#c-tell").value : "", tel2: $("#c-tel2") ? { n: $("#c-tel2").value.trim(), l: $("#c-tel2l").value } : null, woher: $("#c-woher") ? $("#c-woher").value.trim() : "", parentName: $("#c-parent") ? $("#c-parent").value.trim() : null };
 }
 function savePerson(id) {
   const data = readPersonForm(), first = data.first, last = data.last;
@@ -1138,6 +1148,13 @@ function savePerson(id) {
   { // zweite Nummer: steht an erster Stelle der weiteren Nummern, die übrigen bleiben
     const old = id ? S.people.find(x => x.id === id) : null, rest = ((old && old.tels) || []).slice(1), t2 = data.tel2; delete data.tel2;
     if (t2) data.tels = (t2.n ? [{ n: t2.n, l: t2.l }] : []).concat(rest);
+  }
+  { // Kind von: Verweis auf das Elternteil (das Kind steht dann nur in Mirella, nicht im Telefonbuch)
+    const pn = data.parentName; delete data.parentName;
+    if (pn !== null) {
+      if (!pn) data.parent = "";
+      else { const par = S.people.find(x => x.id !== id && normName(fullName(x)) === normName(pn)); if (!par) { toast("„" + pn + "“ steht nicht in Mirella. Bitte das Elternteil aus der Liste wählen."); return; } data.parent = par.id; if (!data.tel) data.local = true; }
+    }
   }
   savePerson.last = data;
   if (id) Object.assign(S.people.find(x => x.id === id), data);
@@ -1645,7 +1662,7 @@ const ACT = {
   usetpl: el => { const t = S.shopTpl.find(x => x.id === el.dataset.id); if (!t) return; let n = 0; t.items.forEach(i => { if (addShop(i.t, i.qty, i.unit)) n++; }); save(); render(true); toast(n ? `${n} Artikel aus „${t.n}“ drauf` : "Steht schon alles drauf"); },
   deltpl: el => { const t = S.shopTpl.find(x => x.id === el.dataset.id); if (!t || !ask(`Vorlage „${t.n}“ löschen?`)) return; S.shopTpl = S.shopTpl.filter(x => x !== t); save(); render(true); },
   cstep: el => calStep(+el.dataset.n),
-  calf: el => { const k = el.dataset.k; S.settings.calFilter[k] = S.settings.calFilter[k] ? 0 : 1; save(); render(true); },
+  calf: el => { const k = el.dataset.k; S.settings.calFilter[k] = (S.settings.calFilter[k] ?? 1) ? 0 : 1; save(); render(true); },
   dayview: el => { selDate = el.dataset.d; calView = "tag"; render(); },
   mpick: () => monthPicker(calY),
   mpy: el => monthPicker(+el.dataset.y),
@@ -1692,6 +1709,8 @@ const ACT = {
   delnote: el => { const n = S.notes.find(x => x.id === el.dataset.id); if (!n || !ask(`Notiz „${n.t}“ löschen?`)) return; S.notes = S.notes.filter(x => x !== n); save(); render(true); },
   vagain: () => recStart(),
   kidnew: el => kidForm(el.dataset.id),
+  tel2show: () => { const b = $("#c-tel2box"), x = $("#c-tel2btn"); if (b) b.hidden = false; if (x) x.hidden = true; const i = $("#c-tel2"); if (i) i.focus(); },
+  woherset: el => { const i = document.getElementById(el.dataset.t); if (!i) return; i.value = i.value.trim() === el.dataset.w ? "" : el.dataset.w; i.dispatchEvent(new Event("input", { bubbles: true })); el.parentNode.querySelectorAll(".chip2").forEach(c => c.setAttribute("aria-pressed", String(c.dataset.w === i.value))); },
   kidsave: el => {
     const par = S.people.find(x => x.id === el.dataset.id), first = $("#kd-first").value.trim(), bd = L.parseBday($("#kd-bday").value); if (!par || !first) { toast("Bitte den Vornamen eintragen"); return; }
     if (bd === null) { toast("Geburtstag bitte als TT.MM.JJJJ"); return; }
@@ -1701,7 +1720,7 @@ const ACT = {
   lunchset: el => {
     const p = S.people.find(x => x.id === el.dataset.id); if (!p) return;
     let d = addDays(today(), 7); while ([0, 6].includes(D(d).getDay())) d = addDays(d, 1);
-    openSheet(`<p class="stitle">Mittagessen mit ${esc(p.first || fullName(p))}</p>
+    openSheet(`<p class="stitle">Treffen mit ${esc(p.first || fullName(p))}</p>
     <div class="fgrid"><div class="fld"><label for="lu-date">Wann?</label><input type="date" id="lu-date" value="${d}"></div><div class="fld"><label for="lu-time">Uhrzeit</label><input type="time" id="lu-time" value="12:00"></div></div>
     <div class="fld" style="position:relative"><label for="lu-ort">Wo? (leer lassen, wenn noch offen)</label><input id="lu-ort" placeholder="z. B. Tati-Café Stuttgart" autocomplete="off"><div id="lu-ort-sug" class="sug" hidden></div></div>
     <div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="lunchsave" data-id="${p.id}">Eintragen</button></div>`, () => addrSuggest($("#lu-ort"), $("#lu-ort-sug"), true));
@@ -1709,7 +1728,7 @@ const ACT = {
   lunchsave: el => {
     const p = S.people.find(x => x.id === el.dataset.id), d = $("#lu-date").value; if (!p || !d) { toast("Bitte ein Datum wählen"); return; }
     const o = $("#lu-ort"), ort = o.dataset.label || o.value.trim();
-    const nt = { id: uid(), t: "Mittagessen mit " + fullName(p), pid: p.id, list: "todo", done: false, created: today(), date: d, time: $("#lu-time").value || "", trig: "zeit", rep: "nie", area: "", nerv: false, ort };
+    const nt = { id: uid(), t: "Treffen mit " + fullName(p), kind: "treff", pid: p.id, list: "todo", done: false, created: today(), date: d, time: $("#lu-time").value || "", trig: "zeit", rep: "nie", area: "", nerv: false, ort };
     S.todos.push(nt); p.lunchLast = d; delete p.lunchSnooze;
     if (ort && !o.dataset.label) placeFind(ort).then(full => { if (full) { nt.ort = full; save(); render(true); } });
     save(); closeSheet(); render(true); toast(`Eingetragen für ${relDate(d)}. Danach erinnert Mirella ${p.lunch} wieder.`);

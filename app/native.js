@@ -103,9 +103,9 @@
       }
       // Karten vom letzten Mal behalten, was Felix schon daran gemacht hat (Geburtstag aus dem Kalender, Notizen)
       const oldC = new Map((N.cards || []).map(x => [x.appleId, x]));
-      for (const x of cards) { const o = oldC.get(x.appleId); if (o) { if (!x.bday && o.bday) x.bday = o.bday; if (o.notes) x.notes = o.notes; } }
+      for (const x of cards) { const o = oldC.get(x.appleId); if (o) { if (!x.bday && o.bday) x.bday = o.bday; if (o.notes) x.notes = o.notes; if (o.bsrc && x.bday === o.bday) x.bsrc = o.bsrc; } }
       res.added = cards.filter(x => !oldC.has(x.appleId)).length; N.cards = cards; liveIds = live;
-      N.contactsDone = true; N.freshContacts = fresh; res.fresh = fresh.length;
+      N.contactsDone = true; N.freshContacts = fresh; res.fresh = fresh.length; res.ok = true;
       // Neu in Mirella angelegte Kontakte auch im iPhone-Telefonbuch anlegen (nur ab dem Tag, an dem das Zurückschreiben eingeschaltet wurde)
       if (!N.twoWayFrom) N.twoWayFrom = today();
       if (twoWayOn()) for (const p of S.people) {
@@ -201,9 +201,11 @@
     let n = 0;
     try {
       const cals = (await P.CapacitorCalendar.listCalendars()).result || [];
-      const bc = new Set(cals.filter(c => /geburtstag|birthday/i.test((c.title || "") + " " + (c.internalTitle || "")) || c.type === "birthday").map(c => c.id));
+      const auto = cals.filter(c => /geburtstag|birthday|\bgeb\b/i.test((c.title || "") + " " + (c.internalTitle || "")) || c.type === "birthday").map(c => c.id);
+      const pick = (N.bcalPick || []).filter(id => cals.some(c => c.id === id));
+      const bc = new Set(pick.length ? pick : auto);
       N.cals = cals.map(c => ({ id: c.id, title: c.title || "" })); N.bcals = [...bc];
-      const from = Date.now(), to = from + 366 * 864e5;
+      const from = Date.now() - 864e5, to = from + 367 * 864e5;
       const evs = (await P.CapacitorCalendar.listEventsInRange({ from, to })).result || [];
       const seen = new Set(), list = [];
       for (const e of evs) {
@@ -226,6 +228,7 @@
         if (p && bApply(b, p)) { n++; changed = true; }
       }
       if (changed) save();
+      n += bAuto();
     } catch (e) { console.warn("Kalender", e); }
     return n;
   }
@@ -656,7 +659,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
      Jeder Eintrag im iPhone-Telefonbuch, der noch nicht in Mirella ist, ist eine Karte. Mirella führt nie still zusammen.
      Je Karte: 1. zusammenführen? 2. Rein / Nicht in Mirella / Ganz löschen / Später. 3. gleich fertig pflegen. */
   const MC = P.MirellaContacts;
-  let liveIds = new Set(), kCur = null, kStep = "karte", kPid = null, kQ = "", kFind = false;
+  let liveIds = new Set(), kCur = null, kStep = "karte", kPid = null, kQ = "";
   const phoneLabel = x => { const s = ((x.type || "") + " " + (x.label || "")).toLowerCase(); return /work|arbeit|gesch/.test(s) ? "Geschäft" : /mobile|iphone|cell|handy/.test(s) ? "Handy" : /home|privat/.test(s) ? "Privat" : /main|festnetz/.test(s) ? "Festnetz" : ""; };
   function cardOf(raw, c) {
     const phones = raw.phones || [], main = phones.find(x => telKey(x.number) === telKey(c.tel));
@@ -678,9 +681,9 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   const subset = (a, b) => a.length > 0 && a.every(t => b.includes(t));
   /* kind: c = Karte aus dem Telefonbuch, p = Kontakt in Mirella, b = Geburtstag aus dem Kalender */
   function ent(x, kind) {
-    if (kind === "b") return { kind, x, id: "b:" + x.key, key: "b:" + x.key, toks: x.tok || [], tels: [], mails: [], md: x.md, name: bName(x) };
+    if (kind === "b") return { kind, x, id: "b:" + x.key, key: "b:" + x.key, key2: "b:" + x.key, toks: x.tok || [], tels: [], mails: [], md: x.md, name: bName(x) };
     const tels = [x.tel, ...(x.tels || []).map(t => t.n)].map(telKey).filter(Boolean), mails = [x.email, ...(x.emails || [])].filter(Boolean).map(m => m.toLowerCase());
-    return { kind, x, id: kind === "p" ? "p:" + x.id : "a:" + x.appleId, key: kind === "p" ? "p:" + x.id : "c:" + ckey(x), toks: nameToks([x.first, x.last, kind === "p" ? x.nick : ""].filter(Boolean).join(" ")), tels, mails, md: (x.bday || "").slice(5), name: fullName(x) };
+    return { kind, x, id: kind === "p" ? "p:" + x.id : "a:" + x.appleId, key: (kind === "p" ? N.aid[x.id] || x.appleId : x.appleId) ? "a:" + (kind === "p" ? N.aid[x.id] || x.appleId : x.appleId) : "p:" + x.id, key2: "c:" + ckey(x), toks: nameToks([x.first, x.last, kind === "p" ? x.nick : ""].filter(Boolean).join(" ")), tels, mails, md: (x.bday || "").slice(5), name: fullName(x) };
   }
   function matchWhy(a, b) {
     if (a.kind === "b" || b.kind === "b") {
@@ -696,11 +699,14 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     if (a.toks.length >= 2 && b.toks.length >= 2 && (subset(a.toks, b.toks) || subset(b.toks, a.toks))) return "Name fast gleich";
     return "";
   }
-  const nsKey = (a, b) => [a.key, b.key].sort().join("~");
+  /* „Gehört nicht zusammen“ merkt sich Mirella doppelt: über die Kennung im Telefonbuch (bleibt gleich, wenn aus der Karte ein Kontakt wird) und über Name plus Nummer (gilt auch auf dem iPad) */
+  const nsKey = (a, b) => [a.key, b.key].sort().join("~"), nsKey2 = (a, b) => [a.key2, b.key2].sort().join("~");
+  const nsHas = (ns, a, b) => ns.has(nsKey(a, b)) || ns.has(nsKey2(a, b));
+  const nsAdd = (a, b) => { const l = (S.settings.notSame = S.settings.notSame || []); for (const k of [nsKey(a, b), nsKey2(a, b)]) if (!l.includes(k)) l.push(k); };
   function kCands(card) {
     const me = ent(card, card.b ? "b" : "c"), ns = new Set(S.settings.notSame || []), out = [];
-    for (const p of S.people) { if (p.arch) continue; const e = ent(p, "p"), w = matchWhy(me, e); if (w && !ns.has(nsKey(me, e))) out.push({ e, w }); }
-    for (const c of kQueue()) { if (kKey(c) === kKey(card)) continue; const e = ent(c, c.b ? "b" : "c"), w = matchWhy(me, e); if (w && !ns.has(nsKey(me, e))) out.push({ e, w }); }
+    for (const p of S.people) { if (p.arch) continue; const e = ent(p, "p"), w = matchWhy(me, e); if (w && !nsHas(ns, me, e)) out.push({ e, w }); }
+    for (const c of kQueue()) { if (kKey(c) === kKey(card)) continue; const e = ent(c, c.b ? "b" : "c"), w = matchWhy(me, e); if (w && !nsHas(ns, me, e)) out.push({ e, w }); }
     return out;
   }
   const kCard = () => { const q = kQueue(); return q.find(c => kKey(c) === kCur) || q[0] || null; };
@@ -712,35 +718,67 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   const extraLabel = (drop, keep) => { const kt = nameToks(fullName(keep)); const w = fullName(drop).split(/\s+/).filter(x => normName(x).length > 1 && !kt.includes(normName(x))); return w.join(" ") || drop.telL || ""; };
   const entSub = e => e.kind === "b" ? "Geburtstag im Kalender am " + fmtMd(e.x.md) + (e.x.year ? e.x.year : "") : [e.kind === "p" ? "schon in Mirella" : "weiterer Eintrag im Telefonbuch", e.x.tel, ...(e.x.tels || []).map(t => t.n), e.x.email, e.x.bday ? "* " + fmtB(e.x.bday) : ""].filter(Boolean).join(" · ");
 
-  async function kMerge(c, o) {
+  /* Eindeutige Treffer verknüpft Mirella selbst: Der Kalender-Eintrag hat denselben vollen Namen (Vor- und Nachname) wie genau ein Eintrag.
+     Dabei wird nichts gelöscht und nichts im Telefonbuch zusammengelegt, es kommt nur der Geburtstag an den Kontakt. Alles Unklare bleibt eine Frage. */
+  function bAuto() {
+    const links = bLinks(), pend = bPend(), ign = new Set(S.settings.appleIgnored), have = new Set(S.people.map(p => N.aid[p.id] || p.appleId).filter(Boolean)), ns = new Set(S.settings.notSame || []);
+    const cards = (N.cards || []).filter(c => !isIgnored(c, ign) && !have.has(c.appleId));
+    const same = (a, b) => a.length >= 2 && a.length === b.length && a.every(t => b.some(x => tokHit(t, x)));
+    let n = 0;
+    for (const b of N.bdays || []) {
+      if (links[b.key] || pend[b.key] || b.cid) continue;
+      const bt = (b.tok || []).filter(w => w.length > 1), be = ent(b, "b");
+      const ps = S.people.filter(p => !p.arch && same(bt, nameToks((p.first || "") + " " + (p.last || ""))) && !nsHas(ns, be, ent(p, "p")));
+      const cs = cards.filter(c => same(bt, nameToks((c.first || "") + " " + (c.last || ""))) && !nsHas(ns, be, ent(c, "c")));
+      if (ps.length + cs.length !== 1) continue;
+      const t = ps[0] || cs[0];
+      if (t.bday && t.bday.slice(5) !== b.md) continue; // anderes Datum als im Telefonbuch: lieber fragen
+      bApply(b, t);
+      if (ps[0]) links[b.key] = t.id; else { pend[b.key] = t.appleId; t.bsrc = b.title; }
+      n++;
+    }
+    if (n) { nSave(); save(); }
+    return n;
+  }
+  const sameName = (a, b) => normName(a) === normName(b);
+  /* Nach jedem Eingriff ins Telefonbuch liest Mirella es neu und prüft, ob es dort wirklich so steht */
+  async function kVerify(keep, drop) {
+    const r = await contactsSync(false); if (!r.ok) return;
+    if (drop && liveIds.has(drop)) alert("Achtung: Im iPhone-Telefonbuch steht der zweite Eintrag noch. Bitte dort einmal nachsehen.");
+    else if (keep && !liveIds.has(keep)) alert("Achtung: Den verbundenen Eintrag finde ich im iPhone-Telefonbuch nicht mehr. Bitte dort einmal nachsehen. Deine Sicherung liegt in der Dateien-App.");
+  }
+  /* nameFrom: "c" = Name der Karte bleibt, "o" = Name des anderen Eintrags bleibt. Gefragt wird vorher im Fenster „Verbinden?“. */
+  async function kMerge(c, o, nameFrom) {
     if (c.b && o.kind === "b") return false;
     if (c.b) {
       if (o.kind === "p") { bLinks()[c.key] = o.x.id; bApply(c, o.x); toast("Der Geburtstag steht jetzt bei " + fullName(o.x)); kCur = null; }
-      else { bApply(c, o.x); bPend()[c.key] = o.x.appleId; kCur = "a:" + o.x.appleId; toast("Geburtstag übernommen"); }
+      else { bApply(c, o.x); o.x.bsrc = c.title; bPend()[c.key] = o.x.appleId; kCur = "a:" + o.x.appleId; toast("Geburtstag übernommen"); }
       return true;
     }
-    if (o.kind === "b") { bApply(o.x, c); bPend()[o.x.key] = c.appleId; toast("Geburtstag übernommen. Der Kalender bleibt, wie er ist."); return true; }
+    if (o.kind === "b") { bApply(o.x, c); c.bsrc = o.x.title; bPend()[o.x.key] = c.appleId; toast("Geburtstag übernommen. Der Kalender bleibt, wie er ist."); return true; }
     if (o.kind === "p") {
-      const p = o.x, aid = liveAid(p);
-      if (aid && aid !== c.appleId) {
-        if (!ask(`„${fullName(c)}“ zu „${fullName(p)}“ dazufügen?\n\nIm iPhone-Telefonbuch bleibt ein Eintrag mit allen Nummern. Der zweite Eintrag wird dort gelöscht.`)) return false;
-        await MC.merge({ keep: aid, drop: c.appleId });
-      } else {
-        if (!ask(`„${fullName(c)}“ zu „${fullName(p)}“ dazufügen?`)) return false;
-        N.aid[p.id] = c.appleId; p.appleId = c.appleId; delete p.local;
-      }
+      const p = o.x, aid = liveAid(p), two = aid && aid !== c.appleId;
+      if (two) await MC.merge({ keep: aid, drop: c.appleId });
+      else { N.aid[p.id] = c.appleId; p.appleId = c.appleId; delete p.local; }
+      const cn = { first: c.first, last: c.last };
       mergeInto(p, c, extraLabel(c, p)); delete N.cs[p.id];
+      if (nameFrom === "c" && (cn.first || cn.last)) { p.first = cn.first; p.last = cn.last; }
+      if (!sameName(fullName(p), fullName(cn)) || two) { try { await MC.upsert({ id: two ? aid : c.appleId, given: p.first || "", family: p.last || "" }); } catch (e) { console.warn("Name", e); } }
       for (const [k, v] of Object.entries(bPend())) if (v === c.appleId) { bLinks()[k] = p.id; delete bPend()[k]; }
-      dropCard(c.appleId); kCur = null; toast("Dazugefügt zu " + fullName(p));
+      dropCard(c.appleId); kCur = null; nSave(); save();
+      await kVerify(two ? aid : c.appleId, two ? c.appleId : "");
+      toast("Verbunden mit " + fullName(p));
       return true;
     }
-    const other = o.x, keep = nameToks(fullName(other)).length < nameToks(fullName(c)).length ? other : c, drop = keep === c ? other : c;
-    if (!ask(`„${fullName(c)}“ und „${fullName(other)}“ zusammenführen?\n\nIm iPhone-Telefonbuch bleibt „${fullName(keep)}“ mit allen Nummern. Der zweite Eintrag wird dort gelöscht.`)) return false;
+    const other = o.x, keep = nameFrom === "o" ? other : c, drop = keep === c ? other : c;
     await MC.merge({ keep: keep.appleId, drop: drop.appleId });
     const live = (N.cards || []).find(x => x.appleId === keep.appleId) || keep;
     mergeInto(live, drop, extraLabel(drop, keep)); live.emails = [...new Set([...(live.emails || []), ...(drop.emails || [])])];
+    if (!live.bsrc && drop.bsrc && live.bday === drop.bday) live.bsrc = drop.bsrc;
     for (const [k, v] of Object.entries(bPend())) if (v === drop.appleId) bPend()[k] = keep.appleId;
-    dropCard(drop.appleId); kCur = "a:" + keep.appleId; toast("Zusammengeführt: " + fullName(live));
+    dropCard(drop.appleId); kCur = "a:" + keep.appleId; nSave();
+    await kVerify(keep.appleId, drop.appleId);
+    toast("Verbunden: " + fullName(live));
     return true;
   }
   function kTake(c) {
@@ -756,17 +794,68 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     p.cyc = "nie"; p.rev = today(); S.people.push(p); return p;
   }
   const kAfter = () => { nSave(); save(); render(); const sc = $("#screen"); if (sc) sc.scrollTop = 0; };
-  ACT.kopen = () => { closeAll(); kStep = "karte"; kPid = null; kFind = false; kQ = ""; view = "kdurch"; render(); };
-  ACT.kback = () => { if (kStep === "pflege" && kPid) kSave(); view = "menschen"; render(); };
-  ACT.kfind = () => { kFind = !kFind; kQ = ""; render(); const i = $("#kq"); if (i) i.focus(); };
-  ACT.kmerge = async el => {
-    const c = kCard(), o = kEnt(el.dataset.k || ""); if (!c || !o) return;
-    try { if (await kMerge(c, o)) kFind = false; } catch (e) { alert("Das Zusammenführen ging nicht: " + (e && e.message || e)); }
-    kAfter();
+  ACT.kopen = () => {
+    closeAll(); kStep = "karte"; kPid = null; kQ = ""; view = "kdurch"; render();
+    // beim Öffnen Telefonbuch und Geburtstags-Kalender frisch lesen, damit die Karten den wirklichen Stand zeigen
+    (async () => { await contactsSync(false); await calendarBirthdays(); if (view === "kdurch" && kStep === "karte" && !kQ && !$("#sheet").classList.contains("open")) render(true); })();
   };
-  ACT.knotsame = el => { const c = kCard(), o = kEnt(el.dataset.k || ""); if (!c || !o) return; (S.settings.notSame = S.settings.notSame || []).push(nsKey(ent(c, c.b ? "b" : "c"), o)); kAfter(); };
-  ACT.klater = () => { const c = kCard(); if (!c) return; (N.later = N.later || {})[kKey(c)] = Date.now(); kCur = null; kFind = false; kAfter(); toast("Kommt am Ende nochmal"); };
-  ACT.krein = () => { const c = kCard(); if (!c) return null; const p = kTake(c); kPid = p.id; kStep = "pflege"; kCur = null; kFind = false; kAfter(); return p; };
+  ACT.kback = () => { if (kStep === "pflege" && kPid) kSave(); view = "menschen"; render(); };
+  /* Verbinden geht nur per Tippen und immer über ein Fenster, das zeigt, was danach wo steht */
+  let kM = null, kBusy = false;
+  const entLines = e => e.kind === "b" ? ["Geburtstag " + fmtMd(e.x.md) + (e.x.year || ""), "aus deinem Geburtstags-Kalender"] : [e.x.org, ...[e.x.tel, ...(e.x.tels || []).map(t => t.n)].filter(Boolean), ...[...new Set([e.x.email, ...(e.x.emails || [])].filter(Boolean))], e.x.bday ? "Geburtstag " + fmtB(e.x.bday) : "", e.kind === "p" ? "schon in Mirella" : "im iPhone-Telefonbuch"].filter(Boolean);
+  function kMergeSheet() {
+    const c = kCard(), o = kM && kEnt(kM.o); if (!c || !o || kKey(c) !== kM.c) { closeSheet(); return; }
+    const me = ent(c, c.b ? "b" : "c"), bd = c.b || o.kind === "b";
+    const box = e => `<div class="kmbox"><b>${esc(e.name)}</b>${entLines(e).map(l => `<small>${esc(l)}</small>`).join("")}</div>`;
+    let mid = "", foot = "";
+    if (bd) {
+      const b = c.b ? me : o, t = c.b ? o : me;
+      mid = `<p class="hint">Der Geburtstag <b>${esc(fmtMd(b.x.md) + (b.x.year || ""))}</b> wird bei <b>${esc(t.name)}</b> eingetragen${t.x.bday && t.x.bday.slice(5) !== b.x.md ? `. Achtung: Dort steht bisher ${esc(fmtB(t.x.bday))}, das bleibt stehen` : ""}. Der Kalender-Eintrag bleibt, wie er ist, und kommt nicht mehr als eigene Karte.</p>`;
+    } else {
+      const diff = !sameName(me.name, o.name);
+      if (diff) mid = `<p class="label" style="margin:12px 0 6px">Welcher Name soll bleiben?</p><div class="seg kmname">${[["c", me.name], ["o", o.name]].map(([k, n]) => `<button data-act="kmname" data-n="${k}" aria-pressed="${kM.name === k}">${esc(n)}</button>`).join("")}</div>`;
+      const keepName = diff ? (kM.name === "o" ? o.name : me.name) : me.name;
+      const tels = [...new Map([...(kM.name === "o" ? [o, me] : [me, o])].flatMap(e => [e.x.tel, ...(e.x.tels || []).map(t => t.n)]).filter(Boolean).map(n => [telKey(n) || n, n])).values()];
+      const mails = [...new Set([me, o].flatMap(e => [e.x.email, ...(e.x.emails || [])]).filter(Boolean).map(m => m.toLowerCase()))];
+      const bdy = (kM.name === "o" ? o.x.bday || me.x.bday : me.x.bday || o.x.bday) || "";
+      mid += `<p class="label" style="margin:12px 0 6px">So steht es danach da</p><div class="kmbox res"><b>${esc(keepName)}</b>${tels.map(n => `<small>${esc(n)}</small>`).join("")}${mails.map(m => `<small>${esc(m)}</small>`).join("")}${bdy ? `<small>Geburtstag ${esc(fmtB(bdy))}</small>` : ""}</div>`;
+      const two = o.kind === "c" || (o.kind === "p" && liveAid(o.x) && liveAid(o.x) !== c.appleId);
+      foot = `<p class="hint">${two ? "<b>Im iPhone-Telefonbuch</b> bleibt ein Eintrag mit allen Nummern, der zweite wird dort gelöscht. Das gilt über iCloud auch für deine anderen Geräte." : "<b>Im iPhone-Telefonbuch</b> wird nichts gelöscht. Der Eintrag gehört danach zu dem Kontakt in Mirella."}${N.kBackup ? " Deine Sicherung vom " + esc(new Date(N.kBackup.at).toLocaleDateString("de-DE")) + " liegt in der Dateien-App." : ""}</p>`;
+    }
+    openSheet(`<p class="stitle">${bd ? "Geburtstag übernehmen?" : "Diese beiden verbinden?"}</p>${box(me)}<p class="kmplus">${bd ? "und" : "+"}</p>${box(o)}${mid}${foot}<div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="kmergego">${bd ? "Ja, übernehmen" : "Ja, verbinden"}</button></div>`);
+  }
+  ACT.kmerge = el => {
+    const c = kCard(), o = kEnt(el.dataset.k || ""); if (!c || !o) return;
+    const me = ent(c, "c");
+    // Vorschlag für den Namen: der kürzere (ohne Zusatz wie „Geschäft“); ein Kontakt, der schon in Mirella ist, behält seinen Namen
+    kM = { c: kKey(c), o: o.id, name: c.b || o.kind === "b" ? "c" : o.kind === "p" ? "o" : nameToks(o.name).length < nameToks(me.name).length ? "o" : "c" };
+    kMergeSheet();
+  };
+  ACT.kmname = el => { if (!kM) return; kM.name = el.dataset.n; kMergeSheet(); };
+  ACT.kmergego = async el => {
+    const c = kCard(), o = kM && kEnt(kM.o); if (!c || !o || kBusy || kKey(c) !== kM.c) return;
+    kBusy = true; if (el) { el.disabled = true; el.textContent = "Einen Moment …"; }
+    try { if (await kMerge(c, o, kM.name)) kQ = ""; } catch (e) { alert("Das Verbinden ging nicht, es bleibt alles, wie es war.\n" + (e && e.message || e)); }
+    kBusy = false; kM = null; closeSheet(); kAfter();
+  };
+  ACT.knotsame = el => { const c = kCard(), o = kEnt(el.dataset.k || ""); if (!c || !o) return; nsAdd(ent(c, c.b ? "b" : "c"), o); kAfter(); toast("Gemerkt: gehört nicht zusammen"); };
+  /* Geburtstag, den Mirella selbst aus dem Kalender an die Karte gehängt hat, wieder lösen */
+  ACT.kbundo = () => {
+    const c = kCard(); if (!c || c.b || !c.bsrc) return;
+    if (!ask("Der Geburtstag aus dem Kalender gehört nicht zu " + fullName(c) + "?\n\nDann nimmt Mirella ihn hier wieder weg und fragt nicht mehr danach.")) return;
+    const live = (N.cards || []).find(x => x.appleId === c.appleId) || c, me = ent(live, "c");
+    for (const [k, v] of Object.entries(bPend())) if (v === c.appleId) { const b = (N.bdays || []).find(x => x.key === k); if (b) nsAdd(me, ent(b, "b")); delete bPend()[k]; }
+    live.bday = ""; delete live.bsrc; kAfter();
+  };
+  /* Welche Kalender sind Geburtstags-Kalender? Mirella erkennt sie am Namen, hier lässt es sich festlegen */
+  function kCalSheet() {
+    const on = new Set(N.bcals || []);
+    openSheet(`<p class="stitle">Geburtstags-Kalender</p><p class="hint" style="margin-top:0">Aus den angehakten Kalendern liest Mirella die Geburtstage. Gelesen sind gerade <b>${(N.bdays || []).length}</b> Einträge.</p>${(N.cals || []).map(c => `<button class="drow" data-act="kbcal" data-id="${esc(c.id)}"><span class="dt"><b>${esc(c.title || "(ohne Namen)")}</b></span><span class="chev">${on.has(c.id) ? "●" : "○"}</span></button>`).join("") || '<p class="hint">Ich sehe keinen Kalender. Bitte unter Einstellungen › iPhone die Freigaben prüfen.</p>'}<button class="btn pri" data-act="cancel" style="width:100%;margin-top:10px">Fertig</button>`);
+  }
+  ACT.kcals = () => kCalSheet();
+  ACT.kbcal = async el => { const on = new Set(N.bcals || []); on.has(el.dataset.id) ? on.delete(el.dataset.id) : on.add(el.dataset.id); N.bcalPick = [...on]; nSave(); await calendarBirthdays(); kCalSheet(); kFresh = true; render(true); };
+  ACT.klater = () => { const c = kCard(); if (!c) return; (N.later = N.later || {})[kKey(c)] = Date.now(); kCur = null; kQ = ""; kAfter(); toast("Kommt am Ende nochmal"); };
+  ACT.krein = () => { const c = kCard(); if (!c) return null; if (kCands(c).length) { toast("Erst bitte oben entscheiden: verbinden oder nicht dieselbe Person"); return null; } const p = kTake(c); kPid = p.id; kStep = "pflege"; kCur = null; kQ = ""; kAfter(); return p; };
   ACT.knicht = () => {
     const c = kCard(); if (!c) return;
     if (c.b) bLinks()[c.key] = "x";
@@ -787,31 +876,29 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     if (bd === null) return "Geburtstag bitte als TT.MM.JJJJ, z. B. 07041964";
     if (dd === null) return "Todestag bitte als TT.MM.JJJJ";
     const first = $("#kp-first").value.trim(), last = $("#kp-last").value.trim(); if (!first && !last) return "Bitte einen Namen eintragen";
-    Object.assign(p, { first, last, bday: bd || "", death: dd || "", cyc: dd || !p.tel ? "nie" : $("#kp-cyc").value, lunch: dd ? "" : $("#kp-lunch").value, group: $("#kp-grp").value, gift: !dd && $("#kp-gift").checked });
+    Object.assign(p, { first, last, bday: bd || "", death: dd || "", cyc: dd || !p.tel ? "nie" : $("#kp-cyc").value, lunch: dd ? "" : $("#kp-lunch").value, group: $("#kp-grp").value, gift: !dd && $("#kp-gift").checked, woher: $("#kp-woher").value.trim() });
     const gi = $("#kp-gidea").value.trim(), no = $("#kp-note").value.trim();
     if (gi) (p.gifts = p.gifts || []).push({ id: uid(), t: gi, d: today() });
     if (no) (p.notes = p.notes || []).unshift({ id: uid(), t: no, d: today() });
     nSave(); save(); return "";
   }
   function kPflege(p) {
-    const par = p.parent && S.people.find(x => x.id === p.parent), kids = kidsOf(p), sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
-    return `<div class="block"><h4>${esc(fullName(p))} ist drin</h4><p class="hint" style="margin:4px 0 0">Jetzt kurz pflegen, dann ist der Kontakt fertig und kommt nicht wieder als Karte.${p.local ? " Ohne Nummer, deshalb steht er nur in Mirella." : ""}</p></div>
+    const par = p.parent && S.people.find(x => x.id === p.parent), sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    const nums = [p.tel ? p.tel + (p.telL ? " (" + p.telL + ")" : "") : "", ...(p.tels || []).map(t => t.n + (t.l ? " (" + t.l + ")" : ""))].filter(Boolean);
+    return `<div class="block"><h4>${esc(fullName(p))} ist drin</h4><p class="hint" style="margin:4px 0 0">Jetzt kurz pflegen, dann ist der Kontakt fertig und kommt nicht wieder als Karte.${p.local ? " Ohne Nummer, deshalb steht er nur in Mirella." : ""}</p>${nums.length ? `<p class="hint" style="margin:6px 0 0">${nums.length === 1 ? "Nummer" : "Nummern"}: <b>${esc(nums.join(" · "))}</b></p>` : ""}</div>
     <div class="fgrid"><div class="fld"><label for="kp-first">Vorname</label><input id="kp-first" value="${esc(p.first || "")}" autocomplete="off"></div><div class="fld"><label for="kp-last">Nachname</label><input id="kp-last" value="${esc(p.last || "")}" autocomplete="off"></div></div>
-    <div class="fgrid"><div class="fld"><label for="kp-cyc">Anrufen</label>${p.tel ? sel("kp-cyc", CYCLES.map(c => [c, cycLabel(c)]), noCycle(p.cyc) ? "nie" : p.cyc) : '<select id="kp-cyc" disabled><option value="nie">ohne Nummer nicht</option></select>'}</div><div class="fld"><label for="kp-lunch">Mittagessen</label>${sel("kp-lunch", [["", "nie"], ...Object.keys(LUNCH).map(c => [c, c])], p.lunch || "")}</div></div>
+    <div class="fgrid"><div class="fld"><label for="kp-cyc">Anrufen</label>${p.tel ? sel("kp-cyc", CYCLES.map(c => [c, cycLabel(c)]), noCycle(p.cyc) ? "nie" : p.cyc) : '<select id="kp-cyc" disabled><option value="nie">ohne Nummer nicht</option></select>'}</div><div class="fld"><label for="kp-lunch">Treffen vereinbaren</label>${sel("kp-lunch", [["", "nie"], ...Object.keys(LUNCH).map(c => [c, c])], p.lunch || "")}</div></div>
     <div class="fgrid"><div class="fld"><label for="kp-bday">Geburtstag</label><input id="kp-bday" inputmode="numeric" maxlength="10" placeholder="TT.MM.JJJJ" value="${esc(L.bdayToInput(p.bday || ""))}" autocomplete="off"></div><div class="fld"><label for="kp-death">Verstorben am</label><input id="kp-death" inputmode="numeric" maxlength="10" placeholder="nur falls zutreffend" value="${esc(L.bdayToInput(p.death || ""))}" autocomplete="off"></div></div>
     <div class="fld"><label for="kp-grp">Gruppe</label>${sel("kp-grp", [["", "keine"], ...S.groups.map(g => [g, g])], p.group || "")}</div>
+    <div class="fld"><label for="kp-woher">Woher kenne ich ihn/sie?</label><input id="kp-woher" value="${esc(p.woher || "")}" placeholder="antippen oder selbst schreiben" autocomplete="off">${woherChips("kp-woher", p.woher || "")}</div>
     <label class="tgl big"><input type="checkbox" id="kp-gift"${p.gift ? " checked" : ""}><span><b>An ein Geschenk erinnern</b><small>${S.settings.giftLead} Tage vor dem Geburtstag</small></span></label>
-    <div class="block"><div class="bh"><h4>Familie</h4></div>
-    ${par ? `<div class="listrow"><span class="grow">Kind von ${esc(fullName(par))}</span><button class="rowdel" data-act="kparentoff" aria-label="Verweis entfernen">✕</button></div>` : ""}
-    ${kids.map(k => `<div class="listrow"><span class="grow">${esc(fullName(k))}<small>${k.bday ? "* " + esc(fmtB(k.bday)) : "Geburtstag fehlt noch"}</small></span></div>`).join("")}
-    <div class="row2" style="margin-top:8px"><button class="btn" data-act="kparent">${par ? "Anderes Elternteil" : "Ist Kind von …"}</button><button class="btn" data-act="kkid">+ Kind eintragen</button></div></div>
+    ${par ? `<div class="block"><div class="listrow"><span class="grow">Kind von ${esc(fullName(par))}<small>steht nur in Mirella, ohne Anruf-Erinnerung</small></span><button class="rowdel" data-act="kparentoff" aria-label="Verweis entfernen">✕</button></div></div>` : `<button class="btn" data-act="kparent" style="width:100%;margin:8px 0">Das ist ein Kind von …</button>`}
     <div class="fld"><label for="kp-gidea">Geschenkidee</label><input id="kp-gidea" placeholder="z. B. Kochkurs" autocomplete="off"></div>
     <div class="fld"><label for="kp-note">Notiz</label><textarea id="kp-note" rows="2" placeholder="Was du dir merken willst"></textarea></div>
     <button class="btn pri" data-act="kdone" style="width:100%;margin-top:6px">Fertig, nächste Karte</button>
-    <p class="hint">Per Sprache: „Monatlich anrufen“, „Mittagessen vierteljährlich“, „Kind von Max“, „Fertig“.</p>`;
+    <p class="hint">Per Sprache geht hier: „Monatlich anrufen“, „Treffen vierteljährlich“, „Kind von Max“, „Fertig“.</p>`;
   }
   ACT.kdone = () => { const err = kSave(); if (err) { toast(err); return; } kStep = "karte"; kPid = null; kAfter(); };
-  ACT.kkid = () => { const err = kSave(); if (err) { toast(err); return; } kidForm(kPid); };
   ACT.kparentoff = () => { const p = S.people.find(x => x.id === kPid); if (!p) return; kSave(); delete p.parent; save(); kFresh = true; render(true); };
   const kParentList = ql => S.people.filter(x => x.id !== kPid && !x.arch && (!ql || normName(fullName(x)).includes(ql))).sort((a, b) => fullName(a).localeCompare(fullName(b), "de")).slice(0, 40).map(x => `<button class="drow" data-act="kparentset" data-id="${x.id}"><span class="dt"><b>${esc(fullName(x))}</b></span><span class="chev">›</span></button>`).join("") || '<p class="hint">Niemand gefunden. Das Elternteil muss schon in Mirella sein.</p>';
   ACT.kparent = () => { const err = kSave(); if (err) { toast(err); return; } openSheet(`<p class="stitle">Kind von wem?</p><input class="search" id="kpq" type="search" placeholder="Name suchen" autocomplete="off"><div id="kpl">${kParentList("")}</div>`, () => $("#kpq").focus()); };
@@ -819,38 +906,44 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   document.addEventListener("input", e => {
     const t = e.target; if (!t) return;
     if (t.id === "kpq") { const l = $("#kpl"); if (l) l.innerHTML = kParentList(normName(t.value)); }
-    if (t.id === "kq") { kQ = t.value; const pos = t.selectionStart; render(true); const i = $("#kq"); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (_) { } } }
+    if (t.id === "kq") { kQ = t.value; const l = $("#kql"); if (l) l.innerHTML = kHits(); }
   });
   function kCardHTML(c) {
     const rows = c.b ? [["Geburtstag", fmtMd(c.md) + (c.year || "")], ["Woher", "Nur im Geburtstags-Kalender, kein Eintrag im Telefonbuch"]]
       : [c.org ? ["Firma", c.org] : null, c.tel ? [c.telL || "Nummer", c.tel] : null, ...(c.tels || []).map(t => [t.l || "Nummer", t.n]), ...[...new Set([c.email, ...(c.emails || [])].filter(Boolean))].map(m => ["E-Mail", m]), c.bday ? ["Geburtstag", fmtB(c.bday)] : null, c.addr ? ["Adresse", c.addr] : null].filter(Boolean);
-    return `<div class="block kcard"><h3>${esc(c.b ? bName(c) : fullName(c))}</h3>${rows.length ? rows.map(([l, v]) => `<div class="krow"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") : '<p class="hint" style="margin:0">Ohne Nummer, E-Mail und Geburtstag</p>'}</div>`;
+    const nB = (N.bdays || []).length;
+    const bnote = c.b ? "" : c.bsrc ? `<p class="hint kbsrc">Der Geburtstag kommt aus deinem Geburtstags-Kalender, Eintrag „${esc(c.bsrc)}“. <button class="mini" data-act="kbundo">Stimmt nicht</button></p>`
+      : c.bday ? "" : `<p class="swipehint kbsrc" style="text-align:left">${nB ? `Kein Geburtstag gefunden, auch nicht unter genau diesem Namen im Geburtstags-Kalender (${nB} Einträge gelesen).` : "Ich finde keinen Geburtstags-Kalender auf deinem iPhone."} <button class="mini" data-act="kcals">Kalender wählen</button></p>`;
+    return `<div class="block kcard"><h3>${esc(c.b ? bName(c) : fullName(c))}</h3>${rows.length ? rows.map(([l, v]) => `<div class="krow"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") : '<p class="hint" style="margin:0">Ohne Nummer, E-Mail und Geburtstag</p>'}${bnote}</div>`;
+  }
+  /* Suche zum Verbinden: Kontakte in Mirella, andere Karten aus dem Telefonbuch und Geburtstage aus dem Kalender, nach Name oder Nummer */
+  function kHits() {
+    const c = kCard(); if (!c) return "";
+    const ql = normName(kQ), qd = kQ.replace(/\D/g, ""), me = kKey(c);
+    if (ql.length < 2 && qd.length < 3) return `<p class="hint" style="margin:6px 0 0">Tippe mindestens zwei Buchstaben oder drei Ziffern. Gesucht wird in Mirella, im Telefonbuch und im Geburtstags-Kalender.</p>`;
+    const all = S.people.filter(p => !p.arch).map(p => ent(p, "p")).concat(kQueue().filter(x => kKey(x) !== me && !(c.b && x.b)).map(x => ent(x, x.b ? "b" : "c")));
+    const hits = all.filter(e => (ql.length >= 2 && (normName(e.name).includes(ql) || ql.split(" ").every(w => normName(e.name + " " + (e.x.org || "")).includes(w)))) || (qd.length >= 3 && [e.x.tel, ...((e.x.tels || []).map(t => t.n))].some(n => (n || "").replace(/\D/g, "").includes(qd)))).slice(0, 30);
+    return hits.map(e => `<button class="drow" data-act="kmerge" data-k="${esc(e.id)}"><span class="dt"><b>${esc(e.name)}</b><small>${esc(entSub(e))}</small></span><span class="mini">Verbinden</span></button>`).join("") || `<p class="hint" style="margin:6px 0 0">Niemand gefunden.</p>`;
   }
   R.kdurch = function () {
     const q = kQueue(), head = `<div class="top"><button class="tleft tsetbtn" data-act="kback" aria-label="Zurück"><p class="big">‹ Kontakte</p></button><span class="tright"><span class="label">${q.length} offen</span></span></div>`;
     if (kStep === "pflege") { const p = S.people.find(x => x.id === kPid); if (p) return head + kPflege(p); kStep = "karte"; }
     const c = kCard();
     if (!c) return head + `<div class="block"><h4>Alles durchgegangen</h4><p class="hint" style="margin:4px 0 0">Es wartet keine Karte mehr. Neue Einträge im Telefonbuch meldet Mirella oben im Reiter Kontakte.</p></div><button class="btn pri" data-act="kback" style="width:100%">Zu den Kontakten</button>`;
+    if (kCur !== kKey(c)) kQ = "";
     kCur = kKey(c);
-    const cands = kCands(c), cand = cands[0];
-    let body;
-    if (kFind) {
-      const ql = normName(kQ), me = kKey(c);
-      const all = S.people.filter(p => !p.arch).map(p => ent(p, "p")).concat(q.filter(x => kKey(x) !== me && !(c.b && x.b)).map(x => ent(x, x.b ? "b" : "c")));
-      const hits = ql ? all.filter(e => normName(e.name).includes(ql)).slice(0, 30) : [];
-      body = `<div class="block"><h4>Zu welchem Kontakt gehört das?</h4><input class="search" id="kq" type="search" placeholder="Name tippen" value="${esc(kQ)}" autocomplete="off" style="margin-top:8px">${hits.map(e => `<button class="drow" data-act="kmerge" data-k="${esc(e.id)}"><span class="dt"><b>${esc(e.name)}</b><small>${esc(entSub(e))}</small></span><span class="chev">›</span></button>`).join("") || `<p class="hint">${ql ? "Niemand gefunden." : "Tippe den Namen. Es geht mit Kontakten in Mirella und mit anderen Karten."}</p>`}<button class="btn" data-act="kfind" style="width:100%;margin-top:8px">Abbrechen</button></div>`;
-    } else if (cand) {
-      body = `<div class="block kq"><h4>Gehört das zusammen?</h4><p class="hint" style="margin:4px 0 8px">${esc(cand.w)}${cands.length > 1 ? ". Danach frage ich noch nach " + (cands.length - 1) + (cands.length === 2 ? " weiteren Treffer" : " weiteren Treffern") : ""}.</p>
-      <div class="listrow"><span class="grow"><b>${esc(cand.e.name)}</b><small>${esc(entSub(cand.e))}</small></span></div>
-      <div style="display:grid;gap:8px;margin-top:10px"><button class="btn pri" data-act="kmerge" data-k="${esc(cand.e.id)}">Zusammenführen</button><button class="btn" data-act="knotsame" data-k="${esc(cand.e.id)}">Gehört nicht zusammen</button><button class="btn" data-act="klater">Später nochmal fragen</button></div></div>
-      <button class="btn" data-act="kfind" style="width:100%">Zu einem anderen Kontakt dazufügen</button>`;
-    } else {
-      body = `<div style="display:grid;gap:8px"><button class="btn pri" data-act="krein">Rein in Mirella</button><button class="btn" data-act="knicht">Nicht in Mirella</button>${c.b ? "" : '<button class="btn danger" data-act="kdel">Ganz löschen (auch im Telefonbuch)</button>'}<button class="btn" data-act="klater">Später</button><button class="btn" data-act="kfind">Zu einem Kontakt dazufügen</button></div>
-      <p class="hint">${c.b ? "„Nicht in Mirella“ lässt den Kalender, wie er ist." : "„Nicht in Mirella“ lässt den Eintrag im Telefonbuch und fragt nie wieder."} Per Sprache: Mikrofon antippen und zum Beispiel „Nimm ihn rein“ sagen.</p>`;
-    }
-    return head + kCardHTML(c) + body;
+    const cands = kCands(c);
+    const verb = `<div class="block kq"><h4>1. Gehört das zu einem anderen Eintrag?</h4>
+      ${cands.length ? `<p class="hint" style="margin:4px 0 8px">Mirella hat ${cands.length === 1 ? "einen möglichen Treffer" : cands.length + " mögliche Treffer"} gefunden. Bitte bei jedem entscheiden.</p>${cands.map(x => `<div class="kcand"><b>${esc(x.e.name)}</b><small>${esc(entSub(x.e))}</small><small class="why">Grund: ${esc(x.w)}</small><div class="row2"><button class="btn pri" data-act="kmerge" data-k="${esc(x.e.id)}">${x.e.kind === "b" || c.b ? "Geburtstag übernehmen" : "Verbinden"}</button><button class="btn" data-act="knotsame" data-k="${esc(x.e.id)}">Nicht dieselbe Person</button></div></div>`).join("")}` : `<p class="hint" style="margin:4px 0 8px">Mirella hat keinen passenden Eintrag gefunden.</p>`}
+      <label for="kq" class="label" style="display:block;margin:10px 0 4px">Selbst suchen und verbinden</label><input class="search" id="kq" type="search" placeholder="Name oder Nummer" value="${esc(kQ)}" autocomplete="off" style="margin:0"><div id="kql">${kQ ? kHits() : ""}</div></div>`;
+    const lock = cands.length > 0;
+    const acts = `<div class="block"><h4>2. Was soll mit ${c.b ? "diesem Geburtstag" : "diesem Eintrag"} passieren?</h4>${lock ? '<p class="hint" style="margin:4px 0 8px">„Rein in Mirella“ geht, sobald du oben entschieden hast.</p>' : ""}<div style="display:grid;gap:8px;margin-top:8px"><button class="btn${lock ? "" : " pri"}" data-act="krein"${lock ? " disabled" : ""}>Rein in Mirella${c.b ? " (als Kontakt ohne Nummer)" : ""}</button><button class="btn" data-act="knicht">Nicht in Mirella</button><button class="btn" data-act="klater">Später</button>${c.b ? "" : '<button class="btn danger" data-act="kdel">Ganz löschen (auch im Telefonbuch)</button>'}</div>
+      <p class="hint">${c.b ? "„Nicht in Mirella“ lässt den Kalender, wie er ist." : "„Nicht in Mirella“ lässt den Eintrag im Telefonbuch und fragt nie wieder."} Verbinden und Löschen gehen nur per Tippen.</p></div>`;
+    return head + kCardHTML(c) + verb + acts;
   };
-  /* Sprache im Durchgang: „Nimm ihn rein“, „Ja, zusammen“, „Monatlich anrufen“, „Kind von Max“, „Fertig“ */
+  /* nur für die automatischen Tests (im iPhone gibt es __MTEST nicht) */
+  if (window.__MTEST) window.__MTEST = { queue: () => kQueue(), key: kKey, show: k => { kCur = k; kStep = "karte"; kPid = null; kQ = ""; view = "kdurch"; render(); }, N: () => N };
+  /* Sprache im Durchgang: „Nimm ihn rein“, „Monatlich anrufen“, „Kind von Max“, „Fertig“. Verbinden und Löschen bewusst nur per Tippen (Wunsch Felix). */
   const RHY = [["alle 2 wochen", /alle (2|zwei) wochen|vierzehn/], ["wöchentlich", /wöchentlich|jede woche/], ["alle 2 monate", /alle (2|zwei) monate/], ["vierteljährlich", /viertelj|alle (3|drei) monate|quartal/], ["halbjährlich", /halbj|alle (6|sechs) monate/], ["monatlich", /monatlich|jeden monat/], ["jährlich", /jährlich|jedes jahr|einmal im jahr/], ["nie", /\bnie\b|gar nicht/]];
   function kVoice(txt) {
     const t = txt.toLowerCase(), rh = (RHY.find(([, re]) => re.test(t)) || [])[0];
@@ -861,7 +954,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       const err = kSave(); if (err) { toast(err); return true; }
       let did = false;
       if (kidOf) { setParent(p); did = true; }
-      if (rh && /mittag|essen|lunch/.test(t)) { const lk = rh === "nie" ? "" : Object.keys(LUNCH).find(x => x.toLowerCase() === rh); if (lk !== undefined) { p.lunch = lk; did = true; } }
+      if (rh && /treff|verabred|mittag|essen|lunch/.test(t)) { const lk = rh === "nie" ? "" : Object.keys(LUNCH).find(x => x.toLowerCase() === rh); if (lk !== undefined) { p.lunch = lk; did = true; } }
       else if (rh && p.tel) { const ck = CYCLES.find(x => x.toLowerCase() === rh); if (ck) { p.cyc = ck; did = true; } }
       const no = /^(notiz|merke?)[:,]?\s+(.+)/i.exec(txt), gi = /^(geschenk(idee)?)[:,]?\s+(.+)/i.exec(txt);
       if (no) { (p.notes = p.notes || []).unshift({ id: uid(), t: no[2], d: today() }); did = true; }
@@ -872,15 +965,12 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       kFresh = true; render(true); return true;
     }
     const c = kCard(); if (!c) return false;
-    const cand = kFind ? null : kCands(c)[0];
-    if (/nicht zusammen|gehört nicht/.test(t) && cand) { ACT.knotsame({ dataset: { k: cand.e.id } }); return true; }
-    if (/zusammen/.test(t) && cand) { ACT.kmerge({ dataset: { k: cand.e.id } }); return true; }
+    if (/zusammen|verbind|verknüpf|dazufüg|lösch|\bweg damit\b/.test(t)) { toast("Verbinden und Löschen bitte per Tippen, damit kein Missverständnis passiert"); return true; }
     if (/später|nachher|überspring/.test(t)) { ACT.klater(); return true; }
-    if (cand) { if (/^(ja|genau|richtig|stimmt)\b/.test(t)) { ACT.kmerge({ dataset: { k: cand.e.id } }); return true; } if (/^(nein|nee|falsch)\b/.test(t)) { ACT.knotsame({ dataset: { k: cand.e.id } }); return true; } toast("Erst bitte sagen, ob das zusammengehört"); return true; }
+    if (kCands(c).length) { toast("Erst bitte oben antippen, ob das zusammengehört"); return true; }
     if (/nicht (in mirella|rein|aufnehmen|nehmen)|\braus\b|\bnein\b/.test(t)) { ACT.knicht(); return true; }
-    if (/lösch|\bweg damit\b/.test(t)) { ACT.kdel(); return true; }
     if (/\brein\b|nimm|aufnehmen|\bja\b|behalten/.test(t)) { const p = ACT.krein(); if (p && kidOf) { setParent(p); save(); kFresh = true; render(true); } return true; }
-    toast("Sag zum Beispiel „Nimm ihn rein“, „Nicht in Mirella“, „Löschen“ oder „Später“"); return true;
+    toast("Sag zum Beispiel „Nimm ihn rein“, „Nicht in Mirella“ oder „Später“"); return true;
   }
   const kOrigReview = voiceReview;
   voiceReview = function () {

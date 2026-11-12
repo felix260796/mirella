@@ -315,14 +315,14 @@ input,select,textarea,.set select,.pitem .ph select,.fld input,.fld select{font-
 .mtitle{display:grid;justify-items:center;font-size:22px;line-height:1.15}
 .mtitle small{font-family:var(--f-mono);font-size:11px;color:var(--ink-3);font-weight:400}
 .chev2{font-size:13px;color:var(--ink-3)}
-.dots i.d-geb{background:#eda100}.dots i.d-erin{background:#2a78d6}.dots i.d-todo{background:var(--ink)}.dots i.d-anruf{background:#1baf7a}
+.dots i.d-geb{background:#eda100}.dots i.d-erin{background:#2a78d6}.dots i.d-todo{background:var(--ink)}.dots i.d-anruf{background:#1baf7a}.dots i.d-treff{background:#e0559b}
 .mc.sel .dots i{box-shadow:0 0 0 1.5px #fff}
-.cf-geb i{background:#eda100}.cf-erin i{background:#2a78d6}.cf-todo i{background:var(--ink)}.cf-anruf i{background:#1baf7a}
+.cf-geb i{background:#eda100}.cf-erin i{background:#2a78d6}.cf-todo i{background:var(--ink)}.cf-anruf i{background:#1baf7a}.cf-treff i{background:#e0559b}
 .chip2.cf-todo[aria-pressed="true"] i{background:#fff}
 .chip2[aria-pressed="false"]{color:var(--ink-3)}
 .chip2[aria-pressed="false"] i{opacity:.35}
 .ev{border-left:3px solid var(--line);padding-left:8px;margin:3px 0}
-.ev-geb{border-color:#eda100}.ev-erin{border-color:#2a78d6}.ev-todo{border-color:var(--ink)}.ev-anruf{border-color:#1baf7a}
+.ev-geb{border-color:#eda100}.ev-erin{border-color:#2a78d6}.ev-todo{border-color:var(--ink)}.ev-anruf{border-color:#1baf7a}.ev-treff{border-color:#e0559b}
 .cal-day.is-today .d b{text-decoration:underline}
 /* Plus-Menü */
 .plist{display:grid;gap:6px}
@@ -484,7 +484,9 @@ a.call{display:grid;place-items:center;text-decoration:none}
 .zvbar .iconbtn{font-size:22px}
 .zvs{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .zvc{width:100%;transform-origin:0 0;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 16px)}
+.zvc{position:relative}
 .zvc img,.zvc canvas{display:block;width:100%;height:auto;margin:0 auto 8px;background:#fff}
+.zvp{position:relative}.zvl{position:absolute;display:block;cursor:pointer;-webkit-tap-highlight-color:rgba(42,120,214,.25)}
 .zvload{color:#ddd;text-align:center;padding:30px 16px;font-size:15px}
 /* v0.14 Fenster nur senkrecht scrollen: iPhone-Datumsfelder sind sonst breiter als ihre Spalte */
 .sheet{overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
@@ -641,3 +643,11 @@ a.mini.route{display:inline-flex;align-items:center;gap:6px;text-decoration:none
 .krow{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line);font-size:15px}
 .krow span{color:var(--ink-2);flex:none}.krow b{text-align:right;font-weight:600;overflow-wrap:anywhere}
 .block.kq{background:var(--surface)}
+
+/* Kontakte durchgehen: Treffer und Fenster „Verbinden?“ */
+.kcand{border:1px solid var(--line,#ddd);border-radius:12px;padding:10px 12px;margin:0 0 8px;background:var(--bg,#fff)}
+.kcand b{display:block}.kcand small{display:block;color:var(--ink-3)}.kcand small.why{color:var(--ink-2,inherit);margin-top:2px}.kcand .row2{margin-top:8px}
+.kmbox{border:1px solid var(--line,#ddd);border-radius:12px;padding:10px 12px}.kmbox b{display:block;font-size:17px}.kmbox small{display:block;color:var(--ink-3)}
+.kmbox.res{border:2px solid var(--ink)}.kmplus{text-align:center;margin:4px 0;color:var(--ink-3)}
+.kmname{flex-wrap:wrap}.kmname button{white-space:normal}
+.kbsrc{margin:8px 0 0}

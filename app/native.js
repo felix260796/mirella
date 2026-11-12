@@ -1156,21 +1156,44 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   /* ---------- Nachfrage beim Start: alles, was neu einzugeben ist, einmal gesammelt (Wunsch Felix), danach nie wieder ----------
      Kommt später etwas dazu, das Felix eingeben oder erlauben muss: hier einen Eintrag in NEED ergänzen. */
   const NEED = [
-    { k: "ki", missing: () => typeof kiOn === "function" && !kiOn(), html: () => `<div class="fld"><label for="nf-ki">Claude-Schlüssel (für die Mirella-KI)</label><input id="nf-ki" type="password" autocomplete="off" placeholder="sk-ant-… einfügen"></div>`, save: () => { const v = ($("#nf-ki").value || "").trim(); if (v) { KI.key = v; kiSave(); } } },
-    { k: "gmaps", missing: () => !S.settings.gmapsKey, html: () => `<div class="fld"><label for="nf-gm">Google-Maps-Schlüssel (für den Wecker nach Verkehr)</label><input id="nf-gm" type="password" autocomplete="off" placeholder="AIza… einfügen"></div>`, save: () => { const v = ($("#nf-gm").value || "").trim(); if (v) S.settings.gmapsKey = v; } },
+    { k: "ki", missing: () => typeof kiOn === "function" && !kiOn(), bad: () => typeof KI !== "undefined" && keyIsBad("ki", KI.key), html: b => `<div class="fld"><label for="nf-ki">Claude-Schlüssel (für die Mirella-KI)</label>${b ? '<small class="fwarn">Der eingetragene Schlüssel funktioniert nicht mehr. Bitte neu eintragen.</small>' : ""}<input id="nf-ki" type="password" autocomplete="off" placeholder="sk-ant-… einfügen"></div>`, save: () => { const v = ($("#nf-ki").value || "").trim(); if (v) { KI.key = v; kiSave(); keyBad("ki", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.ki; } } },
+    { k: "gmaps", missing: () => !S.settings.gmapsKey, bad: () => keyIsBad("gmaps", S.settings.gmapsKey), html: b => `<div class="fld"><label for="nf-gm">Google-Maps-Schlüssel (für den Wecker nach Verkehr)</label>${b ? '<small class="fwarn">Der eingetragene Schlüssel funktioniert nicht. Google sagt: ungültig. Bitte neu eintragen.</small>' : ""}<input id="nf-gm" type="password" autocomplete="off" placeholder="AIza… einfügen"></div>`, save: () => { const v = ($("#nf-gm").value || "").trim(); if (v) { S.settings.gmapsKey = v; keyBad("gmaps", v, false); N.keyOk = N.keyOk || {}; delete N.keyOk.gmaps; } } },
     { k: "wecker", missing: () => !!P.MirellaAlarm && !N.alarmState, html: () => `<p class="hint">Dein iPhone fragt gleich einmal, ob Mirella echte Wecker stellen darf. Bitte <b>Erlauben</b> tippen.</p>`, save: async () => { try { const r = await P.MirellaAlarm.request(); N.alarmState = r.state; } catch (_) { } } }
   ];
+  /* Fehlendes nur einmal fragen. Ein Schlüssel, den der Dienst abgelehnt hat, kommt beim nächsten Öffnen wieder,
+     bis ein neuer eingetragen ist oder „Später“ getippt wurde (dann erst wieder, wenn er erneut abgelehnt wird). */
+  const needOpen = () => { N.asked = N.asked || {}; N.badLater = N.badLater || {}; return NEED.filter(x => (!N.asked[x.k] && x.missing()) || (x.bad && x.bad() && N.badLater[x.k] !== keyBadGet()[x.k])); };
   function nachfrage() {
-    N.asked = N.asked || {};
-    const open = NEED.filter(x => !N.asked[x.k] && x.missing()); if (!open.length || document.querySelector("#sheet.open")) return false;
-    openSheet(`<p class="stitle">Neu in Mirella</p><p class="hint" style="margin-top:0">Das fehlt noch. Einmal eintragen, danach fragt Mirella nicht mehr. Du kannst Felder auch leer lassen und später unter Einstellungen nachtragen.</p>${open.map(x => x.html()).join("")}<button class="btn pri" data-act="nfsave" style="width:100%">Speichern</button>`);
+    const open = needOpen(); if (!open.length || document.querySelector("#sheet.open")) return false;
+    const bad = open.filter(x => x.bad && x.bad()), onlyBad = bad.length === open.length;
+    openSheet(`<p class="stitle">${onlyBad ? "Schlüssel funktioniert nicht" : "Neu in Mirella"}</p><p class="hint" style="margin-top:0">${onlyBad ? "Der Dienst lehnt den eingetragenen Schlüssel ab. Bitte den richtigen Schlüssel neu einfügen. Danach prüft Mirella ihn gleich." : "Das fehlt noch. Einmal eintragen, danach fragt Mirella nicht mehr. Du kannst Felder auch leer lassen und später unter Einstellungen nachtragen."}</p>${open.map(x => x.html(bad.includes(x))).join("")}<div class="row2">${bad.length ? '<button class="btn" data-act="nflater">Später</button>' : ""}<button class="btn pri" data-act="nfsave">Speichern</button></div>`);
     return true;
   }
   ACT.nfsave = async el => {
-    el.disabled = true; N.asked = N.asked || {};
-    for (const x of NEED) { if (N.asked[x.k] || !x.missing()) continue; try { await x.save(); } catch (_) { } N.asked[x.k] = 1; }
-    nSave(); save(); closeAll(); render(true); toast("Gespeichert");
+    el.disabled = true;
+    for (const x of needOpen()) { try { await x.save(); } catch (_) { } N.asked[x.k] = 1; }
+    nSave(); save(); closeAll(); render(true); toast("Gespeichert"); setTimeout(keyCheck, 500);
   };
+  ACT.nflater = () => { for (const x of needOpen()) { N.asked[x.k] = 1; if (x.bad && x.bad()) N.badLater[x.k] = keyBadGet()[x.k]; } nSave(); closeAll(); toast("Unter Einstellungen kannst du ihn jederzeit neu eintragen"); };
+  /* Beim Öffnen: jeden neu eingetragenen Schlüssel einmal kurz ausprobieren. Ein funktionierender Schlüssel wird nicht wieder geprüft. */
+  async function keyCheck() {
+    N.keyOk = N.keyOk || {}; let bad = false;
+    try {
+      if (typeof KI !== "undefined" && KI.key && N.keyOk.ki !== keySum(KI.key) && !keyIsBad("ki", KI.key)) {
+        const r = await fetch("https://api.anthropic.com/v1/models?limit=1", { headers: { "x-api-key": KI.key, "anthropic-version": "2026-10-21", "anthropic-dangerous-direct-browser-access": "true" } });
+        if (r.status === 401 || r.status === 403) { keyBad("ki", KI.key, true); bad = true; } else if (r.ok) N.keyOk.ki = keySum(KI.key);
+      }
+    } catch (_) { }
+    try {
+      const g = S.settings.gmapsKey;
+      if (g && N.keyOk.gmaps !== keySum(g) && !keyIsBad("gmaps", g)) {
+        const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", { method: "POST", headers: { "Content-Type": "application/json", "X-Ios-Bundle-Identifier": "de.brenzinger.mirella", "X-Goog-Api-Key": g, "X-Goog-FieldMask": "routes.duration" }, body: JSON.stringify({ origin: { location: { latLng: { latitude: 48.78, longitude: 9.18 } } }, destination: { location: { latLng: { latitude: 48.79, longitude: 9.19 } } }, travelMode: "DRIVE" }) });
+        if (r.ok) N.keyOk.gmaps = keySum(g); else if (r.status === 400 || r.status === 403) { let m = ""; try { m = JSON.stringify(await r.json()); } catch (_) { } if (r.status === 403 || /API key|API_KEY/i.test(m)) { keyBad("gmaps", g, true); bad = true; } }
+      }
+    } catch (_) { }
+    nSave();
+    if (bad) nachfrage();
+  }
   /* ---------- Was das iPhone selbst kann (MirellaSystemPlugin) ---------- */
   const SY = P.MirellaSystem;
   const b64Of = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = rej; r.readAsDataURL(blob); });
@@ -1290,6 +1313,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;
   }
 
-  setTimeout(() => { if (!N.setup) wizard(); else { tick(); setTimeout(nachfrage, 1200); } }, 600);
+  setTimeout(() => { if (!N.setup) wizard(); else { tick(); setTimeout(() => { nachfrage(); keyCheck(); }, 1200); } }, 600);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && N.setup) setTimeout(nachfrage, 1500); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 })();

@@ -778,6 +778,13 @@ function grussForm(p) {
   <p class="hint">Es öffnet sich die App mit dem Text. Abgeschickt wird erst, wenn du dort auf Senden tippst.</p>`);
 }
 /* So wird eine Nummer gespeichert und gezeigt: „0163 123“ wird „+49 163 123“. Kurze Nummern ohne 0 (110, 116117) bleiben, wie sie sind. */
+/* Schlüssel, die ein Dienst abgelehnt hat. Gespeichert wird nur eine Prüfsumme des Schlüssels, damit Mirella erkennt,
+   ob inzwischen ein neuer eingetragen ist. Gefragt wird dann beim nächsten Öffnen der App. */
+const KEYBAD = "mirella.keybad";
+const keySum = k => { let h = 5381; const s = String(k || ""); for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+function keyBadGet() { try { return JSON.parse(localStorage.getItem(KEYBAD) || "{}"); } catch (_) { return {}; } }
+function keyBad(kind, key, bad) { const o = keyBadGet(); if (bad) o[kind] = keySum(key); else delete o[kind]; try { localStorage.setItem(KEYBAD, JSON.stringify(o)); } catch (_) { } }
+const keyIsBad = (kind, key) => !!key && keyBadGet()[kind] === keySum(key);
 function telNice(t) { t = String(t || "").trim(); if (!t || t.startsWith("+")) return t; if (t.startsWith("00")) return "+" + t.slice(2).trim(); if (/^0\d/.test(t)) return "+49 " + t.slice(1).replace(/^[\s\-/()]+/, ""); return t; }
 function intlTel(t) { let n = (t || "").replace(/[^\d+]/g, ""); if (n.startsWith("00")) n = "+" + n.slice(2); else if (n.startsWith("0")) n = "+49" + n.slice(1); return n; }
 /* Kontaktdaten: jede Zeile gleich aufgebaut (Bezeichnung, Wert, Knopf) */

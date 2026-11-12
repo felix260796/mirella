@@ -31,7 +31,10 @@ async function routeGoogle(a, b, when, mode) {
       headers: Object.assign(NATIVE ? { "X-Ios-Bundle-Identifier": "de.brenzinger.mirella" } : {}, { "Content-Type": "application/json", "X-Goog-Api-Key": S.settings.gmapsKey, "X-Goog-FieldMask": "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description" + (bahn ? ",routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.transitDetails" : "") }),
       body: JSON.stringify(body)
     });
-    const j = await r.json(); if (!r.ok || !j.routes || !j.routes[0]) throw new Error((j.error && j.error.message) || (bahn ? "Keine Verbindung gefunden" : "Google Maps antwortet nicht"));
+    const j = await r.json();
+    if (!r.ok && j.error && (/API key|API_KEY/i.test(j.error.message || "") || (j.error.details || []).some(d => /API_KEY/.test(d.reason || "")) || r.status === 403)) keyBad("gmaps", S.settings.gmapsKey, true);
+    else if (r.ok) keyBad("gmaps", S.settings.gmapsKey, false);
+    if (!r.ok || !j.routes || !j.routes[0]) throw new Error((j.error && j.error.message) || (bahn ? "Keine Verbindung gefunden" : "Google Maps antwortet nicht"));
     return j.routes.slice(0, 3).map(x => { const o = { min: parseInt(x.duration) / 60, free: parseInt(x.staticDuration || x.duration) / 60, km: (x.distanceMeters || 0) / 1000, desc: x.description || "" }; if (bahn) Object.assign(o, transitPlan(x, when)); return o; });
   };
   try { return await ask1(true); } catch (e) { if (bahn) throw e; return ask1(false); }

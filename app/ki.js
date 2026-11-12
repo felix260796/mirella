@@ -29,7 +29,7 @@ async function kiCall({ system, user, hard, schema, maxTokens, tier: force, stre
   else try { j = await r.json(); } catch (_) { }
   if (!r.ok) {
     const m = j && j.error && j.error.message || "";
-    if (r.status === 401) throw new Error("Der Claude-Schlüssel ist ungültig");
+    if (r.status === 401) { keyBad("ki", KI.key, true); throw new Error("Der Claude-Schlüssel ist ungültig"); }
     if (r.status === 429) throw new Error("Claude ist gerade ausgelastet, bitte gleich noch einmal");
     if (r.status === 400 && /credit|billing|balance/i.test(m)) throw new Error("Dein Claude-Guthaben ist aufgebraucht");
     if (r.status === 403) throw new Error("Der Claude-Schlüssel darf das nicht (Monatslimit erreicht?)");

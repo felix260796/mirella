@@ -717,3 +717,15 @@ details.how>.hint{margin-top:8px}
 .bzug .bzg.neu{color:#b3261e;font-weight:700}
 .bzug.aus .bzz,.bzug.aus .bzl{text-decoration:line-through;opacity:.6}
 .bsth{font-weight:700;font-size:16px;margin:0 0 6px}.bsth small{font-weight:500;color:var(--ink-2);font-size:13px}
+
+/* Datum eintippen: Zifferntastatur, Punkte setzt Mirella */
+input.dtype{font-variant-numeric:tabular-nums;letter-spacing:.5px}
+input.dtype.bad{border-color:#b3261e;background:#fdf1f0}
+input[type=date][data-dtype]{display:none!important}
+.sheet input.dtype{height:48px;width:100%}
+
+/* Bereiche: spätere Erinnerungen nur klein und zugeklappt */
+details.later{margin:6px 0 10px;font-size:14px;color:var(--ink-2)}
+details.later summary{cursor:pointer;padding:6px 0;list-style:revert}
+.laterrow{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;font:inherit;font-size:14px;color:var(--ink-2);background:none;border:0;border-bottom:1px solid var(--line);padding:8px 2px}
+.laterrow small{flex:none;font-size:13px}

@@ -104,7 +104,25 @@ function warp() {
 }
 async function scanDone(doWarp) {
   if (doWarp) { toast("Wird zugeschnitten …"); await new Promise(r => setTimeout(r, 30)); const b = await warp(); if (b) { URL.revokeObjectURL(photoCtx.url); photoCtx.blob = b; photoCtx.url = URL.createObjectURL(b); await photoPutLocal(TMPID, b); } }
+  if (await photoAttach()) return;
   photoForm(); readText();
+}
+/* Foto aus einem Eintrag heraus (Vertrag, Versicherung, Aufgabe …): ohne Rückfrage direkt an genau diesen Eintrag hängen */
+async function photoAttach() {
+  const ref = photoCtx && photoCtx.ref; if (!ref || !photoCtx.blob) return false;
+  const it = S.items.find(x => x.id === ref), t = !it && S.todos.find(x => x.id === ref);
+  if (!it && !t) return false;
+  const pid = "ph_" + uid();
+  try { await photoPut(pid, photoCtx.blob); } catch (e) { toast("Foto konnte nicht gespeichert werden"); return true; }
+  tmpClear();
+  const title = it ? kindTitle(it.kind, it) : t.t;
+  const folder = it ? (it.kind === "versicherung" ? "Versicherung" : it.kind === "vertrag" ? "Vertrag" : "Sonstiges") : "Sonstiges";
+  S.docs.push({ id: uid(), name: `${title} – Foto vom ${fmtDate(today())}`, area: it ? KINDS[it.kind].area : (t.area || "doku"), folder, until: "", photo: pid, created: today(), text: "", ref });
+  if (photoCtx.url) URL.revokeObjectURL(photoCtx.url);
+  photoCtx = null; save(); closeSheet(); render(true);
+  if (it) itemDetail(it); else todoForm(t);
+  toast("Foto hängt jetzt an „" + title + "“");
+  return true;
 }
 function rotate() {
   const c = document.createElement("canvas"); c.width = scan.h; c.height = scan.w; const g = c.getContext("2d"); g.translate(scan.h, 0); g.rotate(Math.PI / 2); g.drawImage(scan.img, 0, 0);
@@ -250,7 +268,7 @@ Object.assign(ACT, {
   photokind: el => { photoCtx.kind = el.dataset.k; photoForm(); if ((el.dataset.k === "dokument" || el.dataset.k === "beleg") && !photoCtx.guess) readText(); },
   editdoc: el => { const d = S.docs.find(x => x.id === el.dataset.id); if (d) docForm(d); },
   savedoc: el => { const d = S.docs.find(x => x.id === el.dataset.id); if (!d) return; d.name = $("#dd-name").value.trim() || d.name; d.area = $("#dd-area").value; d.folder = $("#dd-folder").value; d.until = $("#dd-until").value; save(); closeSheet(); render(true); toast("Gespeichert"); },
-  resumephoto: async () => { const t = tmpGet(); const b = await photoGet(TMPID).catch(() => null); if (!t || !b) { tmpClear(); render(true); return; } photoCtx = { kind: t.kind, area: t.area, ref: t.ref, blob: b, url: URL.createObjectURL(b), text: "" }; photoForm(); if (photoCtx.kind === "dokument" || photoCtx.kind === "beleg") readText(); }
+  resumephoto: async () => { const t = tmpGet(); const b = await photoGet(TMPID).catch(() => null); if (!t || !b) { tmpClear(); render(true); return; } photoCtx = { kind: t.kind, area: t.area, ref: t.ref, blob: b, url: URL.createObjectURL(b), text: "" }; if (await photoAttach()) return; photoForm(); if (photoCtx.kind === "dokument" || photoCtx.kind === "beleg") readText(); }
 });
 document.addEventListener("change", e => { if (e.target.id === "f-doc" && e.target.files[0]) addDocFile(e.target.files[0]); });
 HOOKS.heuteTop.push(() => tmpGet() ? `<div class="card due" role="button" tabindex="0" data-act="resumephoto"><span class="av">📷</span><span style="min-width:0"><div class="t">Foto noch nicht abgelegt</div><div class="s">Antippen, dann geht es genau da weiter</div></span></div>` : "");

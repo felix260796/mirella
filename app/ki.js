@@ -29,7 +29,7 @@ async function kiCall({ system, user, hard, schema, maxTokens, tier: force, stre
   else try { j = await r.json(); } catch (_) { }
   if (!r.ok) {
     const m = j && j.error && j.error.message || "";
-    if (r.status === 401) throw new Error("Der Claude-Schlüssel ist ungültig");
+    if (r.status === 401) { keyBad("ki", KI.key, true); throw new Error("Der Claude-Schlüssel ist ungültig"); }
     if (r.status === 429) throw new Error("Claude ist gerade ausgelastet, bitte gleich noch einmal");
     if (r.status === 400 && /credit|billing|balance/i.test(m)) throw new Error("Dein Claude-Guthaben ist aufgebraucht");
     if (r.status === 403) throw new Error("Der Claude-Schlüssel darf das nicht (Monatslimit erreicht?)");
@@ -169,7 +169,7 @@ searchShow = function (q) {
 /* ---------- Einstellungen › Mirella-KI ---------- */
 SETNAMES.ki = "Mirella-KI";
 SETS.ki = () => `<p class="hint" style="margin-top:0">Mit deinem Claude-Schlüssel versteht Mirella Gesprochenes genauer, schlägt Folge-Erinnerungen vor und beantwortet freie Fragen (Lupe › „Mirella fragen“). Der Schlüssel bleibt nur auf diesem Gerät. Ohne Schlüssel arbeitet Mirella mit den eingebauten Regeln.</p>
-  <div class="fld"><label for="ki-key">Claude-Schlüssel${kiOn() ? " (eingetragen)" : ""}</label><input id="ki-key" type="password" autocomplete="off" placeholder="${kiOn() ? "•••••••• neu eingeben zum Ändern" : "sk-ant-…"}"></div>
+  ${keyField("ki-key", "Claude-Schlüssel" + (kiOn() ? " (eingetragen)" : ""), { ph: kiOn() ? "Neuen Schlüssel einfügen zum Ändern" : "sk-ant-… einfügen", warn: kiOn() && keyIsBad("ki", KI.key) ? "Dieser Schlüssel funktioniert nicht mehr. Bitte neu einfügen." : "" })}
   <div class="row2"><button class="btn pri" data-act="kisave">Speichern</button>${kiOn() ? '<button class="btn" data-act="kidel">Entfernen</button>' : ""}</div>
   ${setH("Modell")}<div class="seg">${KI_MODES.map(([v, l]) => `<button data-act="kimode" data-m="${v}" aria-pressed="${KI.mode === v}">${l}</button>`).join("")}</div>
   <p class="hint">${KI.mode === "sparsam" ? "Immer das günstigste Modell (Haiku)." : KI.mode === "beste" ? "Immer das stärkste Modell (Opus). Kostet am meisten." : "Einfaches wie Einkaufsliste und Erinnerungen mit Haiku, freie Fragen mit Sonnet."}</p>

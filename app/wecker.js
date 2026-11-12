@@ -31,7 +31,10 @@ async function routeGoogle(a, b, when, mode) {
       headers: Object.assign(NATIVE ? { "X-Ios-Bundle-Identifier": "de.brenzinger.mirella" } : {}, { "Content-Type": "application/json", "X-Goog-Api-Key": S.settings.gmapsKey, "X-Goog-FieldMask": "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description" + (bahn ? ",routes.legs.steps.travelMode,routes.legs.steps.staticDuration,routes.legs.steps.transitDetails" : "") }),
       body: JSON.stringify(body)
     });
-    const j = await r.json(); if (!r.ok || !j.routes || !j.routes[0]) throw new Error((j.error && j.error.message) || (bahn ? "Keine Verbindung gefunden" : "Google Maps antwortet nicht"));
+    const j = await r.json();
+    if (!r.ok && j.error && (/API key|API_KEY/i.test(j.error.message || "") || (j.error.details || []).some(d => /API_KEY/.test(d.reason || "")) || r.status === 403)) keyBad("gmaps", S.settings.gmapsKey, true);
+    else if (r.ok) keyBad("gmaps", S.settings.gmapsKey, false);
+    if (!r.ok || !j.routes || !j.routes[0]) throw new Error((j.error && j.error.message) || (bahn ? "Keine Verbindung gefunden" : "Google Maps antwortet nicht"));
     return j.routes.slice(0, 3).map(x => { const o = { min: parseInt(x.duration) / 60, free: parseInt(x.staticDuration || x.duration) / 60, km: (x.distanceMeters || 0) / 1000, desc: x.description || "" }; if (bahn) Object.assign(o, transitPlan(x, when)); return o; });
   };
   try { return await ask1(true); } catch (e) { if (bahn) throw e; return ask1(false); }
@@ -116,7 +119,54 @@ setInterval(() => { tripCheck().catch(() => { tripBusy = false; }); }, 15000);
 function mapsUrl(w) { const m = MODES[modeOf(w)].maps; return `https://maps.apple.com/?saddr=${w.fromLat},${w.fromLon}&daddr=${w.toLat},${w.toLon}${m ? "&dirflg=" + m : ""}`; }
 const kmTxt = k => String(k).replace(".", ",") + " km";
 /* Name eines Weckers: eigener Name, sonst das Ziel */
+/* Wochentage: 1 = Montag … 7 = Sonntag. Keine Tage = nur einmal. */
+const WTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const wDow = d => { const g = new Date(d + "T12:00:00").getDay(); return g === 0 ? 7 : g; };
+const isFest = w => w.kind === "fest";
+const wDaysTxt = w => { const d = (w.days || []).slice().sort(); if (!d.length) return "einmalig"; if (d.length === 7) return "täglich"; if (d.join() === "1,2,3,4,5") return "Mo–Fr"; if (d.join() === "6,7") return "Sa und So"; return d.map(x => WTAGE[x - 1]).join(", "); };
+/* Feste Uhrzeit: der erste Wecker zur Uhrzeit, weitere im Abstand danach */
+function festPlan(w, date) {
+  const [h, m] = String(w.time || "07:00").split(":").map(Number), base = new Date(date + "T00:00:00"); base.setHours(h, m, 0, 0);
+  const hm = d => L.pad(d.getHours()) + ":" + L.pad(d.getMinutes()), out = [];
+  for (let i = 0; i < Math.max(1, +w.count || 1); i++) out.push(hm(new Date(+base + i * (+w.gap || 5) * 60e3)));
+  return { wake: w.time, wakeDate: date, alarms: out, leave: "", leaveDate: "" };
+}
+/* derselbe Wecker an einem anderen Tag (Fahrzeit vom letzten Rechnen, morgens rechnet Mirella mit dem Verkehr nach) */
+function wPlanFor(w, date) { return isFest(w) ? festPlan(w, date) : L.wakePlan({ date, arrive: w.arrive, travelMin: w.travelMin, prepMin: w.prepMin, bufMin: w.bufMin, count: w.count, gap: w.gap }); }
+function wNextDay(w, after) { for (let i = 1; i <= 7; i++) { const d = addDays(after, i); if ((w.days || []).includes(wDow(d))) return d; } return null; }
+/* aktueller und (bei wiederkehrenden) die kommenden Termine eines Weckers */
+function wOccs(w, n = 7) {
+  const out = [{ date: w.date, wakeDate: w.wakeDate, alarms: w.alarms, leave: w.leave }];
+  if ((w.days || []).length) { let d = w.date; for (let k = 0; k < n; k++) { d = wNextDay(w, d); if (!d) break; out.push(Object.assign({ date: d }, wPlanFor(w, d))); } }
+  return out;
+}
+const awakeKey = (w, wakeDate) => w.id + "@" + (wakeDate || w.wakeDate);
+const isAwake = (w, wakeDate) => !!(S.settings.awake || {})[awakeKey(w, wakeDate)];
+/* Vorbei: nach dem Losgehen bzw. 15 Minuten nach dem letzten Wecker */
+function wPast(w) { const t = alarmTimes(w); if (!t.length) return false; const last = +t[t.length - 1] + 15 * 60e3, lv = w.leave ? +new Date((w.leaveDate || w.date) + "T" + w.leave + ":00") : 0; return Date.now() > Math.max(last, lv); }
+/* Einmalige Wecker gehen danach von selbst aus, wiederkehrende springen auf den nächsten Tag */
+function weckerRoll() {
+  let ch = false;
+  for (const w of S.alarms || []) {
+    if (!w.wake || w.off || !w.alarms) continue;
+    let g = 0;
+    while (wPast(w) && g++ < 14) { if (!(w.days || []).length) { w.off = true; w.autoOff = 1; ch = true; break; } const d = wNextDay(w, w.date); if (!d) break; w.date = d; Object.assign(w, wPlanFor(w, d)); w.checked = 0; ch = true; }
+  }
+  const aw = S.settings.awake || {}, lim = addDays(today(), -3);
+  for (const k of Object.keys(aw)) if ((k.split("@")[1] || "") < lim) { delete aw[k]; ch = true; }
+  if (ch) save();
+  return ch;
+}
+/* „Ich bin wach“: alle weiteren Wecker zu diesem Termin aus, der Countdown fürs Losgehen startet (iPhone-App) */
+function weckerAwake(w) {
+  (S.settings.awake = S.settings.awake || {})[awakeKey(w)] = 1; save();
+  if (typeof window.mirellaAwake === "function") window.mirellaAwake(w);
+  toast(w.leave ? "Guten Morgen! Losgehen um " + w.leave + ". Die weiteren Wecker sind aus." : "Guten Morgen! Die weiteren Wecker sind aus.");
+}
 const weckerName = w => (w.name || "").trim() || String(w.to || "").split(",")[0].trim() || "Wecker";
+const weckerSub = w => isFest(w) ? wDaysTxt(w) + ((w.days || []).length ? "" : ", " + relDate(w.date)) : `${(w.days || []).length ? wDaysTxt(w) : relDate(w.date)}: um ${w.arrive} in ${w.to} · los ${w.leave}`;
+const wdayChips = days => `<div class="chips wdays">${WTAGE.map((l, i) => `<button type="button" class="chip2" data-act="wday" data-d="${i + 1}" aria-pressed="${(days || []).includes(i + 1)}">${l}</button>`).join("")}</div><input type="hidden" id="w-days" value="${(days || []).join(",")}"><small class="fhint" id="w-dayshint">${(days || []).length ? "Jede Woche an diesen Tagen" : "Kein Tag gewählt: nur einmal, danach geht er von selbst aus"}</small>`;
+const readDays = () => ($("#w-days") ? $("#w-days").value : "").split(",").map(Number).filter(Boolean);
 
 function weckerForm(w, preset = {}) {
   const s = S.settings; wDraft = null; wHere = null;
@@ -124,7 +174,8 @@ function weckerForm(w, preset = {}) {
   openSheet(`<div data-draft="wecker:${w ? w.id : "new"}"><p class="stitle">⏰ ${w ? "Wecker ändern" : "Neuer Wecker"}</p>
   <div class="fld" style="position:relative"><label for="w-to">Wo musst du hin?</label><input id="w-to" value="${esc(v.to)}" placeholder="Ort oder Adresse, z. B. Alte Wache" autocomplete="off"><div id="w-to-sug" class="sug" hidden></div></div>
   <div class="fld"><label for="w-mode">Wie kommst du hin?</label><select id="w-mode">${Object.keys(MODES).map(k => `<option value="${k}"${modeOf(v) === k ? " selected" : ""}>${MODES[k].l}</option>`).join("")}</select></div>
-  <div class="fgrid"><div class="fld"><label for="w-date">Wann?</label><input id="w-date" type="date" value="${esc(v.date)}"></div><div class="fld"><label for="w-arr">Ankommen um</label><input id="w-arr" type="time" value="${esc(v.arrive)}"></div></div>
+  <div class="fgrid"><div class="fld"><label for="w-date">${(v.days || []).length ? "Ab" : "Wann?"}</label><input id="w-date" type="date" value="${esc(v.date)}"></div><div class="fld"><label for="w-arr">Ankommen um</label><input id="w-arr" type="time" value="${esc(v.arrive)}"></div></div>
+  <div class="fld"><label>Wann aktiv?</label>${wdayChips(v.days)}</div>
   <div class="fld" style="position:relative"><label for="w-from">Start</label><input id="w-from" value="${esc(v.from)}" placeholder="${esc(s.homeAddr ? "Zuhause: " + s.homeAddr : "Zuhause (in Einstellungen eintragen)")}" autocomplete="off"><div id="w-from-sug" class="sug" hidden></div><button type="button" class="mini" data-act="whier" style="margin-top:6px">📍 Mein Standort als Start</button></div>
   <div class="fgrid"><div class="fld"><label for="w-prep">Zeit daheim (Duschen …)</label><select id="w-prep">${[0, 5, 10, 15, 20, 30, 45, 60, 75, 90].map(m => `<option value="${m}"${+v.prepMin === m ? " selected" : ""}>${m ? m + " Min." : "keine (0 Min.)"}</option>`).join("")}</select></div><div class="fld"><label for="w-buf">Puffer unterwegs</label><select id="w-buf">${[0, 5, 10, 15, 20, 30].map(m => `<option value="${m}"${+v.bufMin === m ? " selected" : ""}>${m} Min.</option>`).join("")}</select></div></div>
   <button class="btn pri" data-act="calcwecker" data-id="${w ? w.id : ""}" style="width:100%;margin:4px 0 8px">Berechnen</button>
@@ -135,6 +186,16 @@ function weckerForm(w, preset = {}) {
     addrSuggest($("#w-to"), $("#w-to-sug"), true); addrSuggest($("#w-from"), $("#w-from-sug"), true);
     if (w && w.wake) $("#w-res").innerHTML = resHTML(w);
   });
+}
+function festForm(w) {
+  const s = S.settings, v = w || { kind: "fest", time: "07:00", date: addDays(today(), 1), days: [], count: s.alarmCount, gap: s.alarmGap, name: "" };
+  openSheet(`<div data-draft="festwecker:${w ? w.id : "new"}"><p class="stitle">⏰ ${w ? "Wecker ändern" : "Neuer Wecker"}</p>
+  <div class="fld"><label for="f-time">Uhrzeit</label><input id="f-time" type="time" value="${esc(v.time)}" style="font-size:28px!important;font-weight:700;text-align:center"></div>
+  <div class="fld"><label>Wann aktiv?</label>${wdayChips(v.days)}</div>
+  <div class="fld" id="f-datebox"${(v.days || []).length ? " hidden" : ""}><label for="f-date">An welchem Tag?</label><input id="f-date" type="date" value="${esc(v.date)}"></div>
+  <div class="fld"><label for="w-nm">Name (freiwillig)</label><input id="w-nm" value="${esc(v.name || "")}" placeholder="z. B. Sport, Wochenende" autocomplete="off"></div>
+  <div class="fgrid"><div class="fld"><label for="w-cnt">Anzahl Wecker</label><select id="w-cnt">${[1, 2, 3, 4, 5].map(m => `<option value="${m}"${+v.count === m ? " selected" : ""}>${m}</option>`).join("")}</select></div><div class="fld"><label for="w-gap">Abstand</label><select id="w-gap">${[3, 5, 10].map(m => `<option value="${m}"${+v.gap === m ? " selected" : ""}>${m} Min.</option>`).join("")}</select></div></div>
+  <div class="row2">${w ? `<button class="btn danger" data-act="delwecker" data-id="${w.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savefest" data-id="${w ? w.id : ""}">Speichern</button></div></div>`);
 }
 function resHTML(w) {
   const mode = modeOf(w), others = (w.routes || []).map((r, i) => ({ r, i })).filter(x => !x.r.on);
@@ -158,7 +219,7 @@ function resHTML(w) {
 let wDraft = null;
 function readWecker(id) {
   const saved = id && S.alarms.find(x => x.id === id), old = wDraft && (wDraft.id || "") === (id || "") ? wDraft : saved;
-  const w = Object.assign({}, old || {}, { to: $("#w-to").value.trim(), from: $("#w-from").value.trim(), name: $("#w-nm").value.trim(), mode: $("#w-mode").value, date: $("#w-date").value, arrive: $("#w-arr").value, prepMin: +$("#w-prep").value, bufMin: +$("#w-buf").value, count: +$("#w-cnt").value, gap: +$("#w-gap").value });
+  const w = Object.assign({}, old || {}, { to: $("#w-to").value.trim(), from: $("#w-from").value.trim(), name: $("#w-nm").value.trim(), mode: $("#w-mode").value, date: $("#w-date").value, arrive: $("#w-arr").value, prepMin: +$("#w-prep").value, bufMin: +$("#w-buf").value, count: +$("#w-cnt").value, gap: +$("#w-gap").value, days: readDays() });
   if (old && (old.to !== w.to)) { delete w.toLat; delete w.toLon; delete w.toName; }
   if (old && (old.from !== w.from)) { delete w.fromLat; delete w.fromLon; }
   if (old && (old.to !== w.to || old.from !== w.from || modeOf(old) !== w.mode)) { delete w.routeDesc; delete w.routeIx; }
@@ -176,9 +237,9 @@ function weckerICS(w) {
 }
 
 AREA_VIEW.wecker = () => {
-  const t = today(), list = S.alarms.filter(w => w.date >= t).sort((a, b) => (a.wakeDate + a.wake) < (b.wakeDate + b.wake) ? -1 : 1), old = S.alarms.filter(w => w.date < t);
-  return `<button class="btn pri" data-act="newwecker" style="width:100%;margin-bottom:10px">⏰ Neuer Wecker nach Ankunftszeit</button>
-  ${list.length ? list.map(w => `<div class="card${w.off ? "" : (w.date === addDays(t, 1) || w.date === t ? " due" : "")}" role="button" tabindex="0" data-act="openwecker" data-id="${w.id}" data-swipe="delwecker"${w.off ? ' style="opacity:.55"' : ""}><span class="av">⏰</span><span style="min-width:0"><div class="t">${esc(w.alarms.join(" · "))}</div><div class="s">${w.name ? "<b>" + esc(w.name) + "</b> · " : ""}${esc(relDate(w.date))}: um ${esc(w.arrive)} in ${esc(w.to)} · los ${esc(w.leave)}${w.km ? " · " + kmTxt(w.km) : ""}<br>${w.off ? "Aus" : "Aktiv"}</div></span><button class="tgl${w.off ? "" : " on"}" data-act="togwecker" data-id="${w.id}" role="switch" aria-checked="${!w.off}" aria-label="Wecker ${w.off ? "einschalten" : "ausschalten"}"><i></i></button></div>`).join("") : empty("Kein Wecker geplant. Sag abends einfach: „Ich muss morgen um 6 in Remseck sein.“")}
+  weckerRoll(); const t = today(), list = S.alarms.filter(w => w.date >= t || (w.days || []).length).sort((a, b) => (a.wakeDate + a.wake) < (b.wakeDate + b.wake) ? -1 : 1), old = S.alarms.filter(w => w.date < t && !(w.days || []).length);
+  return `<div class="row2" style="margin-bottom:10px"><button class="btn pri" data-act="newfest">⏰ Neuer Wecker</button><button class="btn pri" data-act="newwecker">🚗 Nach Ankunftszeit</button></div>
+  ${list.length ? list.map(w => `<div class="card${w.off ? "" : (w.date === addDays(t, 1) || w.date === t ? " due" : "")}" role="button" tabindex="0" data-act="openwecker" data-id="${w.id}" data-swipe="delwecker"${w.off ? ' style="opacity:.55"' : ""}><span class="av">⏰</span><span style="min-width:0"><div class="t">${esc(w.alarms.join(" · "))}</div><div class="s">${w.name ? "<b>" + esc(w.name) + "</b> · " : ""}${esc(weckerSub(w))}${w.km ? " · " + kmTxt(w.km) : ""}<br>${w.off ? (w.autoOff ? "Aus (war einmalig)" : "Aus") : "Aktiv"}</div></span><button class="tgl${w.off ? "" : " on"}" data-act="togwecker" data-id="${w.id}" role="switch" aria-checked="${!w.off}" aria-label="Wecker ${w.off ? "einschalten" : "ausschalten"}"><i></i></button></div>`).join("") : empty("Kein Wecker geplant. Sag abends einfach: „Ich muss morgen um 6 in Remseck sein.“")}
   <div class="hint"><b>So funktioniert’s:</b> Ziel und Ankunft eintragen. Mirella rechnet die Fahrzeit${S.settings.gmapsKey ? " mit Google Maps und Verkehrsvorhersage" : " (ohne Google-Schlüssel mit Zuschlag für Berufsverkehr)"}, zieht Puffer und deine Zeit zu Hause ab und schlägt ${S.settings.alarmCount} Wecker im ${S.settings.alarmGap}-Minuten-Abstand vor. Ist Mirella morgens offen, rechnet sie mit dem aktuellen Verkehr nach und meldet sich, wenn du früher los musst.${NATIVE ? "" : "<br><br>Ein echter Wecker, der auch bei geschlossener App und Stummschaltung klingelt, kommt mit der iPhone-App. Bis dahin: „In den iPhone-Wecker“ (einmal einen Kurzbefehl anlegen, Anleitung unter Einstellungen › Wecker) oder „Als Kalender-Alarm“."}</div>
   ${old.length ? `<button class="mini" data-act="clearwecker">${old.length} alte Wecker löschen</button>` : ""}`;
 };
@@ -186,7 +247,7 @@ function weckerSettings() {
   const s = S.settings;
   return `${setH("Zuhause")}<form class="shoprow" data-form="home" style="margin:0 0 6px"><input class="search" style="margin:0" value="${esc(s.homeAddr || "")}" placeholder="Deine Adresse, z. B. Musterstraße 1, Stuttgart" aria-label="Zuhause-Adresse"><button class="btn pri" style="flex:none">OK</button></form><p class="hint" style="margin-top:0">Startpunkt für den Wecker. ${s.homeLat != null ? "Gespeichert." : "Noch nicht festgelegt."}</p>
   ${setH("Standard")}${setSel("prepMin", "Zeit zu Hause", "Duschen, Frühstücken", [[0, "keine (0 Min.)"], [5, "5 Min."], [10, "10 Min."], [15, "15 Min."], [20, "20 Min."], [30, "30 Min."], [45, "45 Min."], [60, "60 Min."], [90, "90 Min."]])}${setSel("bufMin", "Puffer unterwegs", "Parkplatz, Stau", [[0, "keiner"], [5, "5 Min."], [10, "10 Min."], [15, "15 Min."], [20, "20 Min."]])}${setSel("alarmCount", "Anzahl Wecker", "", [[1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"]])}${setSel("alarmGap", "Abstand", "zwischen den Weckern", [[3, "3 Min."], [5, "5 Min."], [10, "10 Min."]])}
-  ${setH("Verkehr live (Google Maps)")}${setTxt("gmapsKey", "Google-Maps-Schlüssel", s.gmapsKey ? "eingetragen" : "freiwillig, für echte Verkehrslage", "AIza…")}
+  ${setH("Verkehr live (Google Maps)")}${keyField("set-gm", "Google-Maps-Schlüssel", { set: "gmapsKey", value: s.gmapsKey || "", ph: "AIza… einfügen", warn: keyIsBad("gmaps", s.gmapsKey) ? "Dieser Schlüssel funktioniert nicht. Google sagt: ungültig. Bitte neu einfügen." : "", note: s.gmapsKey ? "Eingetragen. Ändern: auf Einfügen tippen, der alte Schlüssel wird ganz ersetzt." : "Freiwillig, für die echte Verkehrslage." })}
   <p class="hint">Für die echte Verkehrslage braucht Mirella einen eigenen Schlüssel für die Google „Routes API“ (in der Google Cloud Console anlegen, Abrechnungskonto nötig, für den privaten Gebrauch im kostenlosen Rahmen). Den Schlüssel in der Google Cloud Console auf die „Routes API“ beschränken (API-Einschränkung). Für die iPhone-App keine Website-Einschränkung setzen, sonst lehnt Google die Anfrage ab. Ohne Schlüssel rechnet Mirella mit der freien Route und einem Zuschlag für den Berufsverkehr.</p>
   ${NATIVE ? "" : `${setH("Kurzbefehl „Mirella Wecker“ (einmalig)")}<p class="hint" style="margin-top:0">Damit „In den iPhone-Wecker“ echte Wecker stellt, einmal in der Kurzbefehle-App einen Kurzbefehl anlegen: Name „Mirella Wecker“. Aktion 1: „Text aufteilen“ (Text: Kurzbefehleingabe, bei: Neue Zeilen). Aktion 2: „Wiederholen mit jedem Objekt“, darin „Wecker erstellen“ mit Uhrzeit = Wiederholungsobjekt und Bezeichnung „Mirella“. Fertig: Mirella übergibt dann alle Weckzeiten auf einmal.</p>`}`;
 }
@@ -246,8 +307,27 @@ function nervCheck(force) {
 }
 /* Wecker klingeln lassen, solange Mirella offen ist */
 function ringCheck() {
+  weckerRoll();
   const now = Date.now(), done = S.settings.ringDone || {};
-  for (const w of S.alarms) { if (!w.wake || w.off) continue; for (const d of alarmTimes(w)) { const k = w.id + "@" + +d; if (now >= +d && now - d < 10 * 60e3 && !done[k] && !document.querySelector(".nerv")) { done[k] = 1; S.settings.ringDone = done; save(); beep(8); const o = document.createElement("div"); o.className = "nerv"; o.innerHTML = `<div class="nbox" style="text-align:center"><div style="font-size:54px">⏰</div><p class="stitle" style="margin:6px 0">Aufstehen, ${esc(S.settings.name || "")}!</p><p class="hint">Um ${esc(w.arrive)} in ${esc(w.to)}. Losfahren um ${esc(w.leave)}.</p><button class="btn pri" style="width:100%">Ich bin wach</button></div>`; o.querySelector("button").onclick = () => o.remove(); document.body.appendChild(o); } } }
+  for (const w of S.alarms) {
+    if (!w.wake || w.off || isAwake(w)) continue;
+    for (const d of alarmTimes(w)) {
+      const k = w.id + "@" + +d;
+      if (now >= +d && now - d < 10 * 60e3 && !done[k] && !document.querySelector(".nerv")) { done[k] = 1; S.settings.ringDone = done; save(); if (!NATIVE) beep(8); wachShow(w); return; }
+    }
+  }
+}
+/* „Ich bin wach“ als kleine Aufgabe: den Knopf ganz nach rechts schieben */
+function wachShow(w) {
+  const o = document.createElement("div"); o.className = "nerv";
+  o.innerHTML = `<div class="nbox" style="text-align:center"><div style="font-size:54px">⏰</div><p class="stitle" style="margin:6px 0">Aufstehen${S.settings.name ? ", " + esc(S.settings.name) : ""}!</p><p class="hint">${isFest(w) ? esc(weckerName(w)) : `Um ${esc(w.arrive)} in ${esc(String(w.to || "").split(",")[0])}. Losfahren um ${esc(w.leave)}.`}</p>
+  <div class="wach"><input type="range" min="0" max="100" value="0" aria-label="Zum Aufwachen ganz nach rechts schieben"><span>Ganz nach rechts schieben: Ich bin wach</span></div>
+  <button class="btn" data-x style="width:100%;margin-top:10px">Noch 5 Minuten</button></div>`;
+  const r = o.querySelector("input"), back = () => { if (+r.value < 97) r.value = 0; };
+  r.addEventListener("input", () => { if (+r.value >= 97) { o.remove(); weckerAwake(w); } });
+  r.addEventListener("change", back); r.addEventListener("pointerup", back); r.addEventListener("touchend", back);
+  o.querySelector("[data-x]").onclick = () => { o.remove(); toast("Mirella weckt dich gleich wieder"); };
+  document.body.appendChild(o);
 }
 
 /* ---------- Sprache: „Wecker morgen um 6 in Remseck“ ---------- */
@@ -271,7 +351,7 @@ voiceReview = function () {
 
 Object.assign(ACT, {
   newwecker: () => weckerForm(null),
-  openwecker: el => weckerForm(S.alarms.find(x => x.id === el.dataset.id)),
+  openwecker: el => { const w = S.alarms.find(x => x.id === el.dataset.id); if (w && isFest(w)) festForm(w); else weckerForm(w); },
   calcwecker: async el => {
     const w = readWecker(el.dataset.id); if (!w.to) { toast("Bitte eintragen, wo du hinmusst"); return; } if (!w.date || !w.arrive) { toast("Bitte Datum und Ankunft eintragen"); return; }
     const res = $("#w-res"); res.innerHTML = '<div class="hint">Mirella rechnet die Route …</div>';
@@ -288,11 +368,25 @@ Object.assign(ACT, {
     try { await planAlarm(w); wDraft = w; res.innerHTML = resHTML(w); toast("Andere Route gewählt. Mit „Wecker speichern“ übernehmen."); } catch (e) { res.innerHTML = resHTML(base); toast("Die andere Route ließ sich gerade nicht berechnen"); }
   },
   togwecker: el => { const w = S.alarms.find(x => x.id === el.dataset.id); if (!w) return; w.off = !w.off; save(); render(true); toast(w.off ? "Wecker ist aus" : "Wecker ist an: " + w.alarms.join(", ")); },
-  savewecker: el => { const w = wDraft || readWecker(el.dataset.id); if (!w.wake) return; if (!w.id) { w.id = uid(); S.alarms.push(w); } else { const i = S.alarms.findIndex(x => x.id === w.id); if (i >= 0) S.alarms[i] = w; else S.alarms.push(w); } wDraft = null; draftClear(); save(); closeSheet(); area = "wecker"; view = "bereich"; render(); toast(`Wecker gespeichert: ${w.alarms.join(", ")}`); },
+  savewecker: el => { const w = wDraft || readWecker(el.dataset.id); if (!w.wake) return; if ($("#w-days")) w.days = readDays(); w.off = false; delete w.autoOff; if (!w.id) { w.id = uid(); S.alarms.push(w); } else { const i = S.alarms.findIndex(x => x.id === w.id); if (i >= 0) S.alarms[i] = w; else S.alarms.push(w); } wDraft = null; draftClear(); save(); closeSheet(); area = "wecker"; view = "bereich"; render(); toast(`Wecker gespeichert: ${w.alarms.join(", ")}`); },
   shortcut: el => { const w = wDraft || S.alarms.find(x => x.id === el.dataset.id); if (!w || !w.alarms) return; location.href = "shortcuts://run-shortcut?name=" + encodeURIComponent("Mirella Wecker") + "&input=text&text=" + encodeURIComponent(w.alarms.join("\n")); },
   wics: el => { const w = wDraft || S.alarms.find(x => x.id === el.dataset.id); if (!w || !w.alarms) return; location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(weckerICS(w)); },
-  delwecker: el => { const w = S.alarms.find(x => x.id === el.dataset.id); if (!w || !ask(`Wecker für ${w.to} löschen?`)) return; S.alarms = S.alarms.filter(x => x !== w); draftClear(); save(); closeSheet(); render(true); },
-  clearwecker: () => { if (!ask("Alle vergangenen Wecker löschen?")) return; S.alarms = S.alarms.filter(w => w.date >= today()); save(); render(true); }
+  delwecker: el => { const w = S.alarms.find(x => x.id === el.dataset.id); if (!w || !ask(`Wecker „${weckerName(w)}“ löschen?`)) return; S.alarms = S.alarms.filter(x => x !== w); draftClear(); save(); closeSheet(); render(true); },
+  clearwecker: () => { if (!ask("Alle vergangenen Wecker löschen?")) return; S.alarms = S.alarms.filter(w => w.date >= today() || (w.days || []).length); save(); render(true); },
+  newfest: () => festForm(null),
+  wday: el => { const h = $("#w-days"); if (!h) return; const on = el.getAttribute("aria-pressed") !== "true"; el.setAttribute("aria-pressed", on); const d = [...el.parentNode.querySelectorAll("[aria-pressed=true]")].map(b => +b.dataset.d); h.value = d.join(","); const hi = $("#w-dayshint"); if (hi) hi.textContent = d.length ? "Jede Woche an diesen Tagen" : "Kein Tag gewählt: nur einmal, danach geht er von selbst aus"; const db = $("#f-datebox"); if (db) db.hidden = !!d.length; },
+  savefest: el => {
+    const old = el.dataset.id && S.alarms.find(x => x.id === el.dataset.id), days = readDays(), time = $("#f-time").value;
+    if (!time) { toast("Bitte eine Uhrzeit eintragen"); return; }
+    const w = Object.assign({}, old || {}, { kind: "fest", time, days, name: $("#w-nm").value.trim(), count: +$("#w-cnt").value, gap: +$("#w-gap").value, off: false });
+    delete w.autoOff;
+    const t = today(), nowHm = new Date().toTimeString().slice(0, 5);
+    if (days.length) { w.date = days.includes(wDow(t)) && time > nowHm ? t : wNextDay(w, t); }
+    else { w.date = $("#f-date").value || t; if (w.date === t && time <= nowHm) { toast("Die Uhrzeit ist heute schon vorbei. Bitte einen anderen Tag wählen."); return; } }
+    Object.assign(w, festPlan(w, w.date));
+    if (!w.id) { w.id = uid(); S.alarms.push(w); } else { const i = S.alarms.findIndex(x => x.id === w.id); if (i >= 0) S.alarms[i] = w; else S.alarms.push(w); }
+    draftClear(); save(); closeSheet(); area = "wecker"; view = "bereich"; render(); toast(`Wecker gespeichert: ${w.alarms.join(", ")} (${wDaysTxt(w)})`);
+  }
 });
 document.addEventListener("submit", e => {
   const f = e.target; if (f.dataset.form !== "home") return; e.preventDefault(); e.stopImmediatePropagation();
@@ -301,9 +395,9 @@ document.addEventListener("submit", e => {
 }, true);
 
 HOOKS.heuteTop.push(() => {
-  const t = today(), w = S.alarms.filter(x => x.wake && (x.wakeDate === t || x.wakeDate === addDays(t, 1)) && new Date(x.date + "T" + x.arrive) > new Date()).sort((a, b) => (a.wakeDate + a.wake) < (b.wakeDate + b.wake) ? -1 : 1)[0];
-  return w ? `<div class="card" role="button" tabindex="0" data-act="openwecker" data-id="${w.id}"><span class="av">⏰</span><span style="min-width:0"><div class="t">Wecker ${w.wakeDate === t ? "heute" : "morgen"} ${esc(w.alarms[0])}</div><div class="s">um ${esc(w.arrive)} in ${esc(w.to)} · losfahren ${esc(w.leave)}</div></span></div>` : "";
+  const t = today(), w = S.alarms.filter(x => x.wake && !x.off && (x.wakeDate === t || x.wakeDate === addDays(t, 1)) && !wPast(x)).sort((a, b) => (a.wakeDate + a.wake) < (b.wakeDate + b.wake) ? -1 : 1)[0];
+  return w ? `<div class="card" role="button" tabindex="0" data-act="openwecker" data-id="${w.id}"><span class="av">⏰</span><span style="min-width:0"><div class="t">Wecker ${w.wakeDate === t ? "heute" : "morgen"} ${esc(w.alarms[0])}</div><div class="s">${isFest(w) ? esc(weckerName(w)) : `um ${esc(w.arrive)} in ${esc(w.to)} · losfahren ${esc(w.leave)}`}</div></span></div>` : "";
 });
-HOOKS.events.push((from, to) => S.alarms.filter(w => w.wake && w.wakeDate >= from && w.wakeDate <= to).map(w => ({ d: w.wakeDate, c: "erin", k: "Wecker", t: `${w.alarms[0]} · ${w.to} um ${w.arrive}`, act: "openwecker", id: w.id, time: w.wake })));
+HOOKS.events.push((from, to) => S.alarms.filter(w => w.wake && !w.off).flatMap(w => wOccs(w, 31).filter(o => o.wakeDate >= from && o.wakeDate <= to).map(o => ({ d: o.wakeDate, c: "erin", k: "Wecker", t: isFest(w) ? `${o.alarms[0]} · ${weckerName(w)}` : `${o.alarms[0]} · ${w.to} um ${w.arrive}`, act: "openwecker", id: w.id, time: o.alarms[0] }))));
 HOOKS.start.push(() => { setTimeout(() => nervCheck(true), 1500); recheck(); setInterval(() => { ringCheck(); nervCheck(); }, 20e3); setInterval(recheck, 5 * 60e3); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(() => { ringCheck(); nervCheck(true); recheck(); }, 800); });

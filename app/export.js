@@ -94,10 +94,10 @@ if (typeof window !== "undefined") {
     // Belege zu Ausgaben
     for (const e of S.expenses) if (e.photo) { const b = await photoGet(e.photo).catch(() => null); if (b) { const p = uniq(`Belege/${e.d} ${ZX.fname(e.shop || "Beleg")} ${String(e.amount).replace(".", ",")} EUR.${extOf(b, {})}`); files.push({ name: p, data: new Uint8Array(await b.arrayBuffer()) }); e._file = p; } }
     progress && progress("Excel wird erstellt …");
-    const kontakte = [["Vorname", "Nachname", "Spitzname", "Gruppe", "Telefon", "E-Mail", "Adresse", "Geburtstag", "Alter", "Anrufen", "zuletzt erreicht", "nächster Anruf", "Anrufe gesamt", "Anrufverlauf", "Offene Nachfragen", "Geschenk-Erinnerung", "Archiv"]]
+    const kontakte = [["Vorname", "Nachname", "Spitzname", "Gruppe", "Woher bekannt", "Beruf", "Telefon", "weitere Nummern", "E-Mail", "weitere E-Mails", "Adresse", "Geburtstag", "Alter", "Anrufen", "zuletzt erreicht", "nächster Anruf", "Anrufe gesamt", "Anrufverlauf", "Offene Nachfragen", "Geschenk-Erinnerung", "Archiv"]]
       .concat(S.people.slice().sort((a, b) => fullName(a).localeCompare(fullName(b), "de")).map(p => {
         const nb = nextBirthday(p), age = nb ? ageAt(p, nb) : null;
-        return [p.first || "", p.last || "", p.nick || "", p.group || "", p.tel || "", p.email || "", p.addr || "", de(p.bday), age ? (nb === today() ? age : age - 1) : "", cycLabel(p.cyc), de(lastCall(p)), de(nextDue(p)), (p.calls || []).length,
+        return [p.first || "", p.last || "", p.nick || "", p.group || "", p.woher || "", p.job || "", p.tel || "", (p.tels || []).map(x => x.n + (x.l ? " (" + x.l + ")" : "")).join("\n"), p.email || "", (p.emails || []).join("\n"), p.addr || "", de(p.bday), age ? (nb === today() ? age : age - 1) : "", cycLabel(p.cyc), de(lastCall(p)), de(nextDue(p)), (p.calls || []).length,
           (p.calls || []).slice().sort((a, b) => a.d < b.d ? 1 : -1).map(c => de(c.d) + (c.ok ? " erreicht" : " nicht erreicht")).join("\n"), (p.ask || []).filter(a => !a.done).map(a => a.t).join("\n"), p.gift ? "ja" : "", p.arch ? "archiviert" : ""];
       }));
     const prio = t => (PRIOS.find(p => p[0] === +t.prio) || [0, ""])[1];

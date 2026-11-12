@@ -27,6 +27,7 @@ Fertig. Ab dann läuft es jede Nacht. War der PC nachts aus, holt Windows es bei
 - **Hat etwas nicht geklappt,** liegt im Sicherungsordner eine Datei `SICHERUNG FEHLGESCHLAGEN.txt` mit dem Grund. Nach der nächsten erfolgreichen Sicherung verschwindet sie wieder.
 - **Passwort geändert?** EINRICHTEN.cmd einfach nochmal doppelklicken.
 - **Sofort sichern:** JETZT-SICHERN.cmd doppelklicken.
+- **Neue Version übernehmen:** AKTUALISIEREN.cmd doppelklicken. Passwort und Zielordner bleiben.
 - **Ausschalten:** AUSSCHALTEN.cmd doppelklicken. Die bisherigen Sicherungen bleiben liegen.
 - Programm, Zugang und Protokoll liegen unter `%LOCALAPPDATA%\Mirella`. Uhrzeit und Anzahl der behaltenen Tage stehen in `einstellungen.json` (`uhrzeit`, `behalten`; 0 = nichts löschen).
 - Braucht nichts zu installieren: Windows PowerShell ist in Windows 10 und 11 eingebaut.

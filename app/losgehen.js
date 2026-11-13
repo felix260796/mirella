@@ -58,3 +58,24 @@ R.einstellungen = function () {
   const row = `<button class="drow" data-act="setsec" data-k="losgehen"><span class="setic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h5v16h-5"/><path d="M4 12h10"/><path d="m10 8 4 4-4 4"/></svg></span><span class="dt"><b>Ich gehe los</b><small>Hinweise an der Tür, NFC-Aufkleber</small></span><span class="chev">›</span></button>`;
   const mark = '<div class="sethead2">Mirella</div>', i = h.indexOf(mark); return i < 0 ? h + row : h.slice(0, i) + row + h.slice(i);
 };
+
+/* Einstellungen › Sprachbefehle: welche Sätze Mirella versteht und der sichere Weg über einen eigenen Kurzbefehl */
+SETNAMES.sprache = "Sprachbefehle";
+SETS.sprache = () => `${setH("Sprachbefehle")}
+  <p class="hint" style="margin-top:0">Wichtig: Wörter wie „sag“, „schreib“, „schick“ oder „notier“ hält dein iPhone für Nachrichten, Notizen oder Erinnerungen. Darum benutzt Mirella eigene Sätze. Den Inhalt sagst du erst, wenn nachgefragt wird.</p>
+  <div class="spr"><b>„Mirella Diktat“</b><small>Fragt „Was soll ich aufschreiben?“. Du sagst zum Beispiel „Spaghetti einkaufen“. Mirella bleibt zu und zeigt es beim nächsten Öffnen zum Bestätigen.</small></div>
+  <div class="spr"><b>„Mirella zuhören“</b><small>Öffnet Mirella und füllt das Gesagte direkt vor.</small></div>
+  <div class="spr"><b>„Ich gehe los, Mirella“</b><small>Hinweise vor dem Rausgehen.</small></div>
+  ${setH("Der sichere Weg: eigener Kurzbefehl")}
+  <ol class="losguide">
+    <li>App <b>Kurzbefehle</b> öffnen, unten <b>Kurzbefehle</b>, oben rechts <b>+</b>.</li>
+    <li><b>Aktion hinzufügen</b>, nach <b>Mirella</b> suchen und <b>Mirella Diktat</b> antippen.</li>
+    <li>Oben auf den Namen tippen und einen eigenen Namen geben, zum Beispiel <b>Mirella aufschreiben</b>. Fertig.</li>
+  </ol>
+  <p class="hint">Diesen Namen sagst du dann genau so nach „Hey …“. Eigene Kurzbefehle erkennt das iPhone am zuverlässigsten.</p>`;
+const sprOrigEinst = R.einstellungen;
+R.einstellungen = function () {
+  const h = sprOrigEinst.call(this); if (setSec) return h;
+  const row = `<button class="drow" data-act="setsec" data-k="sprache"><span class="setic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span class="dt"><b>Sprachbefehle</b><small>Welche Sätze Mirella versteht</small></span><span class="chev">›</span></button>`;
+  const mark = '<div class="sethead2">Mirella</div>', i = h.indexOf(mark); return i < 0 ? h + row : h.slice(0, i) + row + h.slice(i);
+};

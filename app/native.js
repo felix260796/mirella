@@ -1324,7 +1324,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       <button class="btn" data-act="nlivetest" style="width:100%;margin-bottom:8px">Countdown jetzt testen (10 Minuten)</button>
       <button class="drow" data-act="nfiles"><span class="dt"><b>Dokumente auch in der Dateien-App</b><small>${N.files === false ? "aus" : "an: Auf meinem iPhone › Mirella, nach Ordnern (" + Object.keys(N.filed || {}).length + " abgelegt)"}</small></span><span class="chev">›</span></button>
       <button class="drow" data-act="nfaceid"><span class="dt"><b>Mirella nur mit Face ID öffnen</b><small>${N.faceId ? "an" : "aus"}</small></span><span class="chev">›</span></button>
-      <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Sag Mirella“ findest du in der Kurzbefehle-App und kannst es auf die Action-Taste legen.</p>`;
+      <p class="hint">Apple-KI auf diesem iPhone: ${N.appleKi === "available" ? "vorhanden. Mirella nutzt sie kostenlos für Glückwünsche und die Auswertung, wenn kein Claude-Schlüssel da ist." : N.appleKi === "off" ? "vorhanden, aber ausgeschaltet (Einstellungen › Apple Intelligence)." : "auf diesem Gerät nicht verfügbar."} „Mirella Diktat“ und „Sag Mirella“ findest du in der Kurzbefehle-App und kannst sie auf die Action-Taste legen. Welche Sätze Mirella versteht: Einstellungen › Sprachbefehle.</p>`;
   }
 
   /* ---------- Apple-Erinnerungen: beim Öffnen abholen und zum Übernehmen anbieten ----------

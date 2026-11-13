@@ -750,3 +750,4 @@ details.later summary{cursor:pointer;padding:6px 0;list-style:revert}
 /* Bahn im Wecker */
 .bweg .ok{color:#1f8a4c}
 .bweg .late{color:var(--late)}.bweg .warn{color:#b26a00}
+.spr{padding:10px 0;border-bottom:1px solid var(--line)}.spr b{display:block;font-size:17px}.spr small{display:block;font-size:14px;color:var(--ink-2);margin-top:2px}

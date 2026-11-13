@@ -4,6 +4,15 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>de</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Mirela</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>Mi Rella</string>
+		</dict>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Mirella</string>
 	<key>CFBundleExecutable</key>

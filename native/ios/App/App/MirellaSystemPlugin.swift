@@ -340,11 +340,11 @@ struct SagMirellaIntent: AppIntent {
 /// Beim nächsten Öffnen zeigt Mirella alles Notierte zum Bestätigen.
 @available(iOS 16.0, *)
 struct NotierMirellaIntent: AppIntent {
-    static let title: LocalizedStringResource = "Für Mirella notieren"
+    static let title: LocalizedStringResource = "Mirella Diktat"
     static let description = IntentDescription("Notiert es, ohne Mirella zu öffnen. Beim nächsten Öffnen zeigt Mirella alles zum Bestätigen.")
     static let openAppWhenRun: Bool = false
 
-    @Parameter(title: "Was soll Mirella sich merken?", requestValueDialog: "Was soll ich Mirella sagen?")
+    @Parameter(title: "Was soll Mirella sich merken?", requestValueDialog: "Was soll ich aufschreiben?")
     var text: String
 
     @MainActor
@@ -374,14 +374,14 @@ struct MirellaShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: SagMirellaIntent(),
-            phrases: ["Sag \(.applicationName) etwas", "Neue Aufgabe in \(.applicationName)", "Öffne \(.applicationName) zum Sprechen"],
+            phrases: ["\(.applicationName) zuhören", "Öffne \(.applicationName) zum Sprechen"],
             shortTitle: "Sag Mirella",
             systemImageName: "mic.fill"
         )
         AppShortcut(
             intent: NotierMirellaIntent(),
-            phrases: ["Sag \(.applicationName) Bescheid", "Gib \(.applicationName) Bescheid", "Notier für \(.applicationName)", "Notier für die App \(.applicationName)", "Notiz für \(.applicationName)", "Merk dir etwas in \(.applicationName)"],
-            shortTitle: "Für Mirella notieren",
+            phrases: ["\(.applicationName) Diktat", "Diktat für \(.applicationName)", "\(.applicationName) neuer Eintrag", "Neuer Eintrag für \(.applicationName)", "Eintrag in \(.applicationName)"],
+            shortTitle: "Mirella Diktat",
             systemImageName: "text.badge.plus"
         )
         AppShortcut(

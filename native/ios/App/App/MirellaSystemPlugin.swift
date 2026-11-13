@@ -374,7 +374,7 @@ struct MirellaShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: SagMirellaIntent(),
-            phrases: ["\(.applicationName) zuhören", "Öffne \(.applicationName) zum Sprechen", "\(.applicationName) Sprachnotiz"],
+            phrases: ["\(.applicationName) zuhören", "Öffne \(.applicationName) zum Sprechen"],
             shortTitle: "Sag Mirella",
             systemImageName: "mic.fill"
         )

@@ -112,6 +112,16 @@ def einrichten():
     key, csr, cer = f"{TMP}/dist.key", f"{TMP}/dist.csr", f"{TMP}/dist.cer"
     sh("/usr/bin/openssl", "genrsa", "-out", key, "2048")
     sh("/usr/bin/openssl", "req", "-new", "-key", key, "-out", csr, "-subj", "/CN=Mirella CI/C=DE")
+    # Apple erlaubt nur wenige Vertriebszertifikate je Konto. Belegt gerade ein anderes Projekt im selben
+    # Konto die Plätze, warten wir bis zu 40 Minuten, statt fremde Zertifikate anzufassen.
+    for runde in range(21):
+        belegt = api("GET", "/certificates?limit=200&filter[certificateType]=DISTRIBUTION")["data"]
+        if len(belegt) < 2:
+            break
+        print(f"::warning::Schon {len(belegt)} Vertriebszertifikate im Apple-Konto (anderes Projekt?). Warte 2 Minuten ({runde + 1}/20).")
+        if runde == 20:
+            break
+        time.sleep(120)
     cert = api("POST", "/certificates", {"data": {"type": "certificates", "attributes": {
         "certificateType": "DISTRIBUTION", "csrContent": open(csr).read()}}})["data"]
     json.dump({"cert": cert["id"]}, open(STATE, "w"))

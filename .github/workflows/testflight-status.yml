@@ -48,4 +48,10 @@ jobs:
                           for e in st.get(k) or []:
                               print('   ', k, e.get('code'), e.get('description') or e.get('message') or e)
               break
+          # Vertriebszertifikate im Konto (nur Name, Art, Ablauf; keine Inhalte)
+          c = requests.get('https://api.appstoreconnect.apple.com/v1/certificates', params={'limit': 50, 'fields[certificates]': 'name,displayName,certificateType,expirationDate,platform'}, headers=H)
+          print('Abfrage Zertifikate:', c.status_code)
+          for x in c.json().get('data', []):
+              a = x['attributes']
+              print(f"Zertifikat {x['id']}: {a.get('certificateType')} {a.get('displayName') or a.get('name')} gueltig bis {a.get('expirationDate')}")
           PY

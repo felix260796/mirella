@@ -1551,6 +1551,12 @@ function understand(text) {
   const sentences = text.replace(/\s+/g, " ").split(/(?<=[^\d.][.!?;]|[!?;])\s+|\s+und dann\s+|\n+/i).map(s => s.trim()).filter(Boolean);
   for (let s of sentences) {
     const low = s.toLowerCase().replace(/[.!?]+$/, "");
+    // Neuer Kontakt: „Kontakt Max Müller anlegen“, „Lege Anna Schmidt als Kontakt an, 0171 …“
+    if (/\bkontakt\b/.test(low) && /\b(anlegen|lege|leg|speichern|speicher|hinzufügen|eintragen|neuer|neu)\b/.test(low)) {
+      const tel = (s.match(/(\+?\d[\d\s\/-]{5,}\d)/) || [])[1] || "";
+      const nm = s.replace(tel, " ").replace(/[.!?,:]+/g, " ").replace(/\b(bitte|einen|einem|neuen|neuer|neu|kontakt|als|anlegen|lege|leg|an|speichern|speicher|hinzufügen|eintragen|wir|müssen|muss|nachher|noch|den|die|das|mit|nummer|telefonnummer|handy|und|für|mir|mal)\b/gi, " ").replace(/\s+/g, " ").trim();
+      if (nm) { const w = nm.split(" ").map(cap); items.push({ type: "person", t: w.join(" "), first: w[0] || "", last: w.slice(1).join(" "), tel: tel.trim() }); continue; }
+    }
     const persons = findPersonsIn(low);
     const p = persons[0] ? persons[0].p : null;
     if (p) lastP = p;
@@ -1561,7 +1567,9 @@ function understand(text) {
       const pats = [/(?:auf|in|zu)\s+(?:die|der|den|meine|meiner|meinen|unsere|unserer)?\s*einkauf(?:sliste|szettel)\s*[:,]?\s*(.+)$/i, /^(.+?)\s+(?:auf|in|zu)\s+(?:die|der|den|meine|meiner|meinen|unsere|unserer)?\s*einkauf(?:sliste|szettel)\b/i, /einkauf(?:sliste|szettel)\s*[:,]?\s+(.+)$/i, /^(?:wir brauchen|ich brauche|einkaufen|kaufen|besorgen)[:,]?\s+(.+)$/i];
       let list = [];
       for (const re of pats) { const mm = low.match(re); if (!mm) continue; list = splitItems(mm[1].replace(VERB, " ").replace(/\b(setzen|schreiben|packen|hinzufügen)\s*$/i, " ").replace(/\s+/g, " ").trim()); if (list.length) break; }
-      if (list.length) { list.forEach(t => items.push({ type: "shop", t })); continue; }
+      // Schreibweise aus dem Gesagten übernehmen („3 Masken“ statt „3 masken“)
+      const orig = t => { const i = s.toLowerCase().indexOf(t.toLowerCase()); return i >= 0 ? cap(s.substr(i, t.length)) : t; };
+      if (list.length) { list.forEach(t => items.push({ type: "shop", t: orig(t) })); continue; }
     }
     // Ausgabe
     if ((m = low.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:euro|eur|€)/i)) && /(ausgegeben|bezahlt|gezahlt|gekostet|getankt|gekauft|eingekauft|für)/.test(low)) {
@@ -1621,13 +1629,14 @@ function voiceReview() {
   if (!pending.length) pending = [{ type: "todo", t: cap(txt), date: "", time: "", trig: "" }];
   reviewRender(txt);
 }
-const TYPES = [["todo", "Aufgabe"], ["shop", "Einkauf"], ["note", "Notiz zu Person"], ["call", "Anruf"], ["expense", "Ausgabe"]];
+const TYPES = [["todo", "Aufgabe"], ["shop", "Einkauf"], ["person", "Neuer Kontakt"], ["note", "Notiz zu Person"], ["call", "Anruf"], ["expense", "Ausgabe"]];
 function reviewRender(txt) {
   const pOpts = pid => `<option value="">Person wählen …</option>` + S.people.slice().sort((a, b) => fullName(a).localeCompare(fullName(b), "de")).map(p => `<option value="${p.id}"${p.id === pid ? " selected" : ""}>${esc(fullName(p))}</option>`).join("");
   openSheet(`<p class="stitle">Das habe ich verstanden</p><p class="quote" style="font-size:15px">„${esc(txt)}“</p>
   <div id="pitems">${pending.map((it, i) => `<div class="pitem" data-i="${i}"><div class="ph"><select data-pf="type" aria-label="Art">${TYPES.map(([v, l]) => `<option value="${v}"${v === it.type ? " selected" : ""}>${l}</option>`).join("")}</select><button class="rowdel" data-act="pdel" data-i="${i}" aria-label="Weglassen" style="margin-left:auto">✕</button></div>
     ${it.type === "note" || it.type === "call" ? `<select data-pf="pid" style="width:100%;margin-bottom:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px">${pOpts(it.pid)}</select>` : ""}
     ${it.type === "call" ? `<select data-pf="ok" style="width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:16px"><option value="1"${it.ok !== false ? " selected" : ""}>erreicht</option><option value="0"${it.ok === false ? " selected" : ""}>nicht erreicht</option></select>` : `<input data-pf="t" value="${esc(it.t || "")}" aria-label="Text">`}
+    ${it.type === "person" ? `<input data-pf="tel" inputmode="tel" value="${esc(it.tel || "")}" placeholder="Telefon (freiwillig)" aria-label="Telefon">` : ""}
     ${it.type === "todo" ? `<div class="pg"><input type="date" data-pf="date" value="${esc(it.date || "")}" aria-label="Datum"><input type="time" data-pf="time" value="${esc(it.time || "")}" aria-label="Uhrzeit"></div>${it.trig === "verlassen" ? '<div class="swipehint" style="text-align:left;margin:0">bevor du losgehst</div>' : ""}${it.ort ? `<div class="swipehint" style="text-align:left;margin:0">📍 ${esc(it.ort)} (Adresse sucht Mirella beim Speichern)</div>` : ""}` : ""}
     ${it.type === "expense" ? `<div class="pg"><input data-pf="amount" inputmode="decimal" value="${it.amount != null ? String(it.amount).replace(".", ",") : ""}" placeholder="Betrag €" aria-label="Betrag"><select data-pf="cat" style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:14px;margin-bottom:6px">${catList().map(c => `<option${c === it.cat ? " selected" : ""}>${c}</option>`).join("")}</select></div>` : ""}
   </div>`).join("") || empty("Alles weggelassen.")}</div>
@@ -1653,6 +1662,12 @@ function voiceSave() {
       if (it.type === "call") { logCall(p, it.ok !== false, true); n++; }
     }
     else if (it.type === "expense") { if (it.amount == null) { miss.push(it); continue; } S.expenses.push({ id: uid(), d: today(), amount: it.amount, shop: it.shop || it.t || "", cat: it.cat || "Sonstiges", photo: null }); n++; }
+    else if (it.type === "person" && it.t) {
+      // als neuer Kontakt anlegen; ohne „rev“ steht er bei den neuen Kontakten zum kurzen Pflegen
+      const w = it.t.trim().split(/\s+/), first = w[0], last = w.slice(1).join(" ");
+      if (S.people.some(p => normName(fullName(p)) === normName(it.t))) { toast(it.t + " gibt es schon"); continue; }
+      S.people.push({ id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [], cyc: "nie", group: "", gift: false, addr: "", first, last, tel: (it.tel || "").trim(), email: "", bday: "" }); n++;
+    }
   }
   if (miss.length) { toast("Bitte bei " + miss.length + " Eintrag" + (miss.length > 1 ? "en" : "") + " noch Person bzw. Betrag wählen"); return; }
   save(); closeSheet(); render(true); toast(n === 1 ? "1 Eintrag gespeichert" : n + " Einträge gespeichert");

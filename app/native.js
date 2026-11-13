@@ -1229,6 +1229,8 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       } catch (_) { }
     };
     SY.addListener("intent", () => setTimeout(intentIn, 300)); setTimeout(intentIn, 1500);
+    // Diktate, die gesammelt wurden, während Mirella im Hintergrund lag: beim Zurückholen abholen
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(intentIn, 900); });
     // Anruf zu Ende: kurzer Anruf ohne Gespräch zählt als nicht erreicht, sonst fragt Mirella nach
     SY.addListener("callEnded", d => {
       const p = pendingCall && S.people.find(x => x.id === pendingCall); if (!p || !d || d.outgoing === false) return; pendingCall = null;

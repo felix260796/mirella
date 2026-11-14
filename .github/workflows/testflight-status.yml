@@ -54,4 +54,8 @@ jobs:
           for x in c.json().get('data', []):
               a = x['attributes']
               print(f"Zertifikat {x['id']}: {a.get('certificateType')} {a.get('displayName') or a.get('name')} gueltig bis {a.get('expirationDate')}")
+          # Einmalig, von Felix am 14.11. erlaubt: die zwei liegengebliebenen Vertriebszertifikate löschen
+          for cid in ('4BB35HC8VY', '6TZ9SQD53J'):
+              d = requests.delete('https://api.appstoreconnect.apple.com/v1/certificates/' + cid, headers=H)
+              print('Loeschen', cid, d.status_code)
           PY

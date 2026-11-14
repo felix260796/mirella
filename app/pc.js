@@ -31,7 +31,7 @@
     let nav = document.getElementById("pcnav");
     if (!nav) { nav = document.createElement("aside"); nav.id = "pcnav"; nav.className = "pcnav"; nav.setAttribute("aria-label", "Navigation"); $("#phone").insertBefore(nav, $("#phone").firstChild); }
     const st = (nav.querySelector(".pcareas") || {}).scrollTop || 0;
-    const mic = $("#mic"); if (mic && nav.contains(mic)) $(".tabbar").appendChild(mic); // Mikrofon nicht mitlöschen
+    const mic = $("#mic"); if (mic && nav.contains(mic)) $(".tabbar").insertBefore(mic, $(".tabbar").children[2]); // Mikrofon nicht mitlöschen
     nav.innerHTML = navHTML();
     nav.querySelector(".pcmicslot").appendChild($("#mic"));
     const ar = nav.querySelector(".pcareas"); if (ar) ar.scrollTop = st;

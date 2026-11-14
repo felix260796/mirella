@@ -1,0 +1,20 @@
+/* Mirella – Sperre und Einrichtung im Browser (zugang.js). In der iPhone-App nicht aktiv. */
+html.zlocked body>*:not(#zgate){display:none!important}
+#zgate{position:fixed;inset:0;z-index:100;overflow-y:auto;background:var(--page);display:flex;justify-content:center;align-items:flex-start;padding:max(24px,6vh) 16px 40px}
+.zbox{width:min(520px,100%);background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:28px 28px 22px;box-shadow:0 24px 60px rgba(20,20,22,.12)}
+.zlogo{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.zlogo img{width:40px;height:auto}
+.zlogo b{font-size:26px;font-weight:700}
+.zbox h1{font-size:26px;margin:0 0 6px}
+.zsub{color:var(--ink-2);margin:0 0 16px;font-size:14.5px}
+.zsec{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:18px 0 8px;padding-top:12px;border-top:1px solid var(--line)}
+.zfld{display:block;margin:0 0 10px}
+.zfld>span{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+.zfld input,.zfld select{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:11px 12px;font:inherit;font-size:16px;color:var(--ink);box-sizing:border-box}
+.zfld input:focus,.zfld select:focus{outline:2px solid var(--ink);outline-offset:1px}
+.zhint{display:block;color:var(--ink-3);font-size:12.5px;margin:-2px 0 10px}
+.zchk{display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer}
+.zchk input{width:18px;height:18px;margin-top:2px;flex:none}
+.zerr{color:var(--late);font-size:14px;font-weight:600;min-height:20px;margin:10px 0 4px}
+.zbtn{width:100%;padding:13px;font-size:16px;margin:0}
+.zlink{display:block;margin:14px auto 0;border:0;background:none;color:var(--ink-3);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}

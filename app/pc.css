@@ -1,0 +1,136 @@
+/* Mirella – PC-Ansicht. Gilt nur, wenn pc.js die Klasse „pc“ setzt (breiter Bildschirm mit Maus).
+   Auf dem iPhone und in der iPhone-App ändert diese Datei nichts. */
+html.pc body{background:var(--page)}
+html.pc .phone{display:grid;grid-template-columns:268px minmax(0,1fr);grid-template-rows:minmax(0,1fr);max-width:none;margin:0;border:0;height:100vh;height:100dvh}
+html.pc .tabbar,html.pc .fab,html.pc .brandbtn,html.pc .azbar{display:none!important}
+
+/* Seitenleiste */
+.pcnav{grid-column:1;grid-row:1;display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:1px solid var(--line);padding:18px 14px 12px;gap:10px}
+.pcbrand{display:flex;align-items:center;gap:10px;padding:2px 8px 6px}
+.pcbrand img{width:34px;height:auto}
+.pcbrand b{font-size:24px;font-weight:700;letter-spacing:-.01em}
+.pcquick{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pcquick .btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 10px;font-size:14px;margin:0}
+.pcquick svg{width:16px;height:16px}
+.pcmicslot{display:flex}
+html.pc .pcmicslot #mic{position:static;transform:none;margin:0;width:100%;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;font:inherit;font-size:14px;font-weight:600;box-shadow:none}
+html.pc .pcmicslot #mic::after{content:"Sprechen"}
+html.pc .pcmicslot #mic svg{width:20px;height:20px}
+.pcmain{display:grid;gap:2px;margin-top:4px}
+.pcitem{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;border-radius:10px;padding:9px 10px;font:inherit;font-size:15px;font-weight:500;color:var(--ink);cursor:pointer;text-align:left}
+.pcitem:hover{background:var(--surface-2)}
+.pcitem[aria-current]{background:var(--ink);color:#fff}
+.pcitem[aria-current] kbd{color:#fff;border-color:rgba(255,255,255,.4)}
+.pcic{display:grid;place-items:center;width:22px;height:22px;flex:none}
+.pcic svg{width:21px;height:21px}
+.pcitem kbd{margin-left:auto}
+kbd{font:inherit;font-size:11px;font-weight:600;color:var(--ink-3);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 6px;background:var(--surface)}
+.pcitem[aria-current] kbd{background:transparent}
+.pclabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);padding:8px 10px 0}
+.pcareas{flex:1;min-height:0;overflow-y:auto;margin:0 -6px;padding:0 6px}
+.pcareas .drow{padding:7px 8px;border-radius:10px;border:0;margin:0;gap:10px;min-height:0}
+.pcareas .drow:hover{background:var(--surface-2)}
+.pcareas .drow .dt b{font-size:14px}
+.pcareas .drow .dt small{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.pcareas .aic,.pcareas .drow>svg{width:30px;height:30px;flex:none}
+.pcareas .chev{display:none}
+.pcfoot{display:grid;gap:2px;border-top:1px solid var(--line);padding-top:8px}
+.pcfoot .btn{margin:0 0 6px;font-size:14px}
+
+/* Inhalt rechts: lesbare Breite je Ansicht, Kopfleiste über die ganze Breite */
+html.pc .screen{grid-column:2;grid-row:1;--pcw:860px;padding:0 max(32px,calc((100% - var(--pcw)) / 2)) 64px;overflow-y:auto}
+html.pc #screen[data-view="menschen"],html.pc #screen[data-view="akte"]{--pcw:1560px}
+html.pc #screen[data-view="todos"],html.pc #screen[data-view="kalender"]{--pcw:1240px}
+html.pc #screen[data-view="einstellungen"]{--pcw:920px}
+html.pc #screen>.top:first-child,html.pc #screen>.pcwide>.top:first-child,html.pc .pcsplit>.pcwide>.top:first-child{position:sticky;top:0;z-index:6;margin:0 0 18px;padding:14px 0 12px;background:var(--surface);border-bottom:1px solid var(--line);box-shadow:0 0 0 100vmax var(--surface);clip-path:inset(0 -100vmax 0 -100vmax)}
+html.pc .big{font-size:26px}
+
+/* Fenster (Formulare) als Dialog in der Mitte statt von unten */
+html.pc .sheet{position:fixed;inset:auto;left:50%;top:50%;width:min(720px,calc(100vw - 64px));max-height:min(88vh,980px);border-radius:20px;border:1px solid var(--line);padding:26px 28px 24px;transform:translate(-50%,-47%) scale(.98);opacity:0;pointer-events:none;transition:transform .18s ease,opacity .18s ease;box-shadow:0 30px 80px rgba(20,20,22,.25)}
+html.pc .sheet.open{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}
+html.pc .scrim.open{background:rgba(20,20,22,.32)}
+html.pc .drawer{width:400px}
+html.pc .toast{left:calc(50% + 134px)}
+
+/* Kontakte: Werkzeuge, Mehrfachauswahl, Tabelle */
+.pctools{display:flex;gap:10px;align-items:center;margin:0 0 10px}
+.pctools .search{flex:1;margin:0;min-width:180px}
+.pctools .btn{margin:0;padding:10px 16px;font-size:14px;white-space:nowrap}
+.pctools select.pcin,.pcbulk select,html.pc .pctools select.pcin,html.pc .pcbulk select{font-size:14px!important;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer}
+.pctools .mini[aria-pressed="true"]{background:var(--ink);color:#fff}
+.pcbulk{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--ink);color:#fff;border-radius:12px;padding:8px 12px;margin:0 0 10px}
+.pcbulk b{font-weight:600;margin-right:4px}
+.pcbulk select{padding:7px 10px;border-color:transparent}
+.pcbulk .mini{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
+.pccount{font-size:13px;color:var(--ink-3);margin:0 0 10px}
+.pctablewrap{border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:auto}
+.pctable{width:100%;border-collapse:collapse;font-size:14px}
+.pctable th{position:sticky;top:0;z-index:1;background:var(--surface-2);text-align:left;border-bottom:1px solid var(--line);padding:0;white-space:nowrap}
+.pctable th button{border:0;background:none;font:inherit;font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-2);padding:10px 12px;cursor:pointer;width:100%;text-align:left}
+.pctable th button[aria-sort="ascending"],.pctable th button[aria-sort="descending"]{color:var(--ink)}
+.pctable td{padding:7px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pctable td small{display:block;font-size:12px;color:var(--ink-3)}
+.pctable tbody tr{cursor:pointer;outline:none}
+.pctable tbody tr:hover{background:#F7F7F4}
+.pctable tbody tr:focus-visible{box-shadow:inset 3px 0 0 var(--ink);background:#F2F2EE}
+.pctable tbody tr.sel{background:#EEF3F9}
+.pctable tbody tr.on{background:#E6EFF8;box-shadow:inset 3px 0 0 var(--c-kontakte,var(--ink))}
+.pctable tbody tr:last-child td{border-bottom:0}
+.pctable .cb{width:40px;text-align:center;padding-inline:8px}
+.pctable .cb input{width:17px;height:17px;cursor:pointer}
+.pctable .nm{min-width:200px}
+.pctable .nmi{display:flex;align-items:center;gap:10px}
+.pctable .nmi>span:last-child{min-width:0}
+.pctable .nm b{font-weight:600}
+.pctable .av{width:34px;height:34px;font-size:12px;flex:none}
+.pctable .tel{white-space:nowrap;font-variant-numeric:tabular-nums}
+.pctable .wo{color:var(--ink-2);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pctable .bd{white-space:nowrap;font-variant-numeric:tabular-nums}
+@media (max-width:1600px){.pctable :is(th,td):nth-child(9){display:none}}
+.pctable .mut{color:var(--ink-3)}
+.pctable select.pcin,html.pc .pctable select.pcin{font-size:14px!important;border:1px solid transparent;background:transparent;border-radius:8px;padding:5px 6px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;max-width:170px}
+.pctable select.pcin:hover,.pctable select.pcin:focus{border-color:var(--line);background:var(--surface)}
+.pctable .pill{white-space:nowrap}
+
+/* Kontakt-Akte rechts neben der Tabelle */
+.pcsplit{display:grid;grid-template-columns:minmax(0,1fr) 460px;gap:24px;align-items:start}
+.pcakte{position:sticky;top:76px;max-height:calc(100dvh - 92px);overflow-y:auto;background:var(--phone);border:1px solid var(--line);border-radius:18px;padding:0 18px 24px;margin-top:0}
+.pcakte>.top:first-child{position:sticky;top:0;z-index:2;background:var(--phone);margin:0 -18px 8px;padding:12px 18px 10px;border-bottom:1px solid var(--line)}
+/* Neben der Akte ist weniger Platz: zuerst Woher, dann Telefon, Geburtstag und „zuletzt“ ausblenden */
+.pcsplit .pctable :is(th,td):nth-child(4),.pcsplit .pctable :is(th,td):nth-child(9){display:none}
+@media (max-width:1760px){.pcsplit .pctable :is(th,td):nth-child(8){display:none}}
+@media (max-width:1620px){.pcsplit{grid-template-columns:minmax(0,1fr) 420px}}
+@media (max-width:1480px){.pcsplit .pctable :is(th,td):nth-child(6){display:none}}
+@media (max-width:1260px){.pcsplit{grid-template-columns:minmax(0,1fr) 380px}}
+
+/* To-dos und Einkaufsliste nebeneinander */
+.pccols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;align-items:start}
+.pccols>section{min-width:0}
+.pch{font-size:18px;font-weight:700;margin:0 0 10px;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+
+/* Tastenkürzel-Übersicht */
+.pckeys{display:grid;gap:8px;margin:6px 0 12px}
+.pckey{display:flex;gap:14px;align-items:center}
+.pckey kbd{min-width:150px;text-align:center;font-size:13px;padding:4px 8px}
+
+/* Hover-Rückmeldung für alles Anklickbare (nur mit Maus) */
+html.pc .card[role=button]:hover,html.pc .todo [role=button]:hover,html.pc .drow:hover,html.pc .listrow [role=button]:hover{background-color:#F7F7F4}
+html.pc .btn:hover,html.pc .mini:hover{filter:brightness(.97)}
+
+/* Monatskalender am PC: flache Tage mit Einträgen statt Quadrate mit Punkten */
+html.pc .mg{gap:6px}
+html.pc .mg.kw{grid-template-columns:32px repeat(7,minmax(0,1fr))}
+html.pc .mc{aspect-ratio:auto;min-height:104px;align-items:stretch;justify-content:flex-start;padding:6px 7px;gap:4px;text-align:left}
+html.pc .mc>span:first-child{font-weight:600;font-size:13px}
+html.pc .mc .dots{display:none}
+html.pc .mc:hover{border-color:var(--ink-3)}
+.mcev{display:grid;gap:2px;min-width:0}
+.mcev i{font-style:normal;font-size:11.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--ink);padding-left:5px;color:var(--ink-2)}
+.mcev i.more{border:0;padding-left:0;color:var(--ink-3)}
+html.pc .mc.sel .mcev i{color:#fff}
+.mcev i.ev-geb{border-left-color:#eda100}.mcev i.ev-erin{border-left-color:#2a78d6}.mcev i.ev-anruf{border-left-color:#1baf7a}.mcev i.ev-treff{border-left-color:#e0559b}.mcev i.ev-termin{border-left-color:#8a5cf5}
+html.pc .mc.sel .mcev i{border-left-color:#fff}
+/* Spaltenköpfe der Tabelle bleiben beim Blättern stehen (unter der Kopfleiste) */
+html.pc .pctablewrap{overflow:clip}
+html.pc .pctable th{top:67px;z-index:3}
+html.pc .drawer:not(.open){box-shadow:none}

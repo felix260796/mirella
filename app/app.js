@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.37.0";
+const VERSION = "0.38.0";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -1552,9 +1552,9 @@ function understand(text) {
   for (let s of sentences) {
     const low = s.toLowerCase().replace(/[.!?]+$/, "");
     // Neuer Kontakt: „Kontakt Max Müller anlegen“, „Lege Anna Schmidt als Kontakt an, 0171 …“
-    if (/\bkontakt\b/.test(low) && /\b(anlegen|lege|leg|speichern|speicher|hinzufügen|eintragen|neuer|neu)\b/.test(low)) {
+    if (/\bkontakt\b/.test(low) && /\b(anlegen|anzulegen|lege|leg|speichern|speicher|hinzufügen|eintragen|neuer|neu)\b/.test(low)) {
       const tel = (s.match(/(\+?\d[\d\s\/-]{5,}\d)/) || [])[1] || "";
-      const nm = s.replace(tel, " ").replace(/[.!?,:]+/g, " ").replace(/\b(bitte|einen|einem|neuen|neuer|neu|kontakt|als|anlegen|lege|leg|an|speichern|speicher|hinzufügen|eintragen|wir|müssen|muss|nachher|noch|den|die|das|mit|nummer|telefonnummer|handy|und|für|mir|mal)\b/gi, " ").replace(/\s+/g, " ").trim();
+      const nm = s.replace(tel, " ").replace(/[.!?,:]+/g, " ").replace(/\b(bitte|einen|einem|neuen|neuer|neu|kontakt|als|anlegen|anzulegen|lege|leg|an|speichern|speicher|hinzufügen|eintragen|wir|müssen|muss|nachher|noch|den|die|das|mit|nummer|telefonnummer|handy|und|für|mir|mal)\b/gi, " ").replace(/\s+/g, " ").trim();
       if (nm) { const w = nm.split(" ").map(cap); items.push({ type: "person", t: w.join(" "), first: w[0] || "", last: w.slice(1).join(" "), tel: tel.trim() }); continue; }
     }
     const persons = findPersonsIn(low);
@@ -1562,6 +1562,11 @@ function understand(text) {
     if (p) lastP = p;
     let m;
     // Einkauf
+    // kurz „Spaghetti einkaufen“ / „Milch kaufen“ (so legt Apple-Erinnerungen es oft ab): Einkauf, wenn keine Person und kein Termin drinsteckt
+    if (!p && (m = low.match(/^([^,]{2,40}?)\s+(?:einkaufen|kaufen|besorgen|einzukaufen|zu kaufen|zu besorgen)$/)) && m[1].split(" ").length <= 4 && !/\b(geschenk|termin|ticket|karte|versicherung|auto|wagen|wohnung|haus)\b/.test(m[1]) && !parseWhen(s).date) {
+      const list = splitItems(m[1]); const orig = t => { const i = s.toLowerCase().indexOf(t.toLowerCase()); return i >= 0 ? cap(s.substr(i, t.length)) : cap(t); };
+      if (list.length) { list.forEach(t => items.push({ type: "shop", t: orig(t) })); continue; }
+    }
     if (/einkaufsliste|einkaufszettel|^(wir brauchen|ich brauche|einkaufen|kaufen|besorgen)\b/.test(low)) {
       const VERB = /\b(setz(e|en)?|schreib(e|en)?|pack(e|en)?|tu|füg(e|en)?|hinzu|drauf|darauf|bitte|noch|mir|mal|auch|kannst du|könntest du|würdest du)\b/gi;
       const pats = [/(?:auf|in|zu)\s+(?:die|der|den|meine|meiner|meinen|unsere|unserer)?\s*einkauf(?:sliste|szettel)\s*[:,]?\s*(.+)$/i, /^(.+?)\s+(?:auf|in|zu)\s+(?:die|der|den|meine|meiner|meinen|unsere|unserer)?\s*einkauf(?:sliste|szettel)\b/i, /einkauf(?:sliste|szettel)\s*[:,]?\s+(.+)$/i, /^(?:wir brauchen|ich brauche|einkaufen|kaufen|besorgen)[:,]?\s+(.+)$/i];
@@ -1604,6 +1609,8 @@ function understand(text) {
   return items;
 }
 let pending = [];
+// für native.js (dort heißt eine eigene Funktion ebenfalls „pending“)
+window.mirellaPending = { get: () => pending, set: v => { pending = v; } };
 /* Weiterreden nach „Das habe ich verstanden“: „mach die Uhrzeit auf 18 Uhr“ ändert den letzten Eintrag, alles andere kommt dazu */
 let vMore = null;
 function amendLocal(items, corr) {

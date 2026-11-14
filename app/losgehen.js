@@ -61,7 +61,12 @@ R.einstellungen = function () {
 
 /* Einstellungen › Sprachbefehle: welche Sätze Mirella versteht und der sichere Weg über einen eigenen Kurzbefehl */
 SETNAMES.sprache = "Sprachbefehle";
-SETS.sprache = () => `${setH("Sprachbefehle")}
+SETS.sprache = () => `${setH("Am sichersten: Apples eigene Befehle")}
+  <p class="hint" style="margin-top:0">Diese Sätze versteht dein iPhone immer. Sie landen zuerst in Apples Erinnerungen. Beim nächsten Öffnen holt Mirella sie ab, schlägt vor, was es ist (Aufgabe, Einkauf, neuer Kontakt), und du bestätigst mit „Speichern“. Danach hakt Mirella sie bei Apple ab.</p>
+  <div class="spr"><b>„Hey …, erinnere mich morgen um 10 an den Zahnarzt“</b><small>wird eine Aufgabe mit Datum und Uhrzeit</small></div>
+  <div class="spr"><b>„Hey …, setz Spaghetti auf die Einkaufsliste“</b><small>wird ein Einkauf</small></div>
+  <div class="spr"><b>„Hey …, erinnere mich, Kontakt Max Müller anzulegen“</b><small>wird ein neuer Kontakt</small></div>
+  ${setH("Mirellas eigene Sätze")}
   <p class="hint" style="margin-top:0">Wichtig: Wörter wie „sag“, „schreib“, „schick“ oder „notier“ hält dein iPhone für Nachrichten, Notizen oder Erinnerungen. Darum benutzt Mirella eigene Sätze. Den Inhalt sagst du erst, wenn nachgefragt wird.</p>
   <div class="spr"><b>„Mirella Diktat“</b><small>Fragt „Was soll ich aufschreiben?“. Du sagst zum Beispiel „Spaghetti einkaufen“. Mirella bleibt zu und zeigt es beim nächsten Öffnen zum Bestätigen.</small></div>
   <div class="spr"><b>„Mirella zuhören“</b><small>Öffnet Mirella und füllt das Gesagte direkt vor.</small></div>

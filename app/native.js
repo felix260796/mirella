@@ -1332,26 +1332,67 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   /* ---------- Apple-Erinnerungen: beim Öffnen abholen und zum Übernehmen anbieten ----------
      Was Felix Apple mit „Erinnere mich …“ sagt, landet in Apples Erinnerungen. Mirella zeigt neue Einträge an;
      „Übernehmen“ legt eine Aufgabe an und hakt den Eintrag bei Apple ab, „Lassen“ blendet ihn nur in Mirella aus. */
-  let remBusy = false, remList = [];
+  let remBusy = false, remList = [], remShopLists = [], remShown = new Set();
   async function remindersIn() {
     if (remBusy || !N.setup || N.remState !== "granted" || !P.CapacitorCalendar || document.querySelector("#sheet.open")) return;
     remBusy = true;
     try {
-      const lists = ((await P.CapacitorCalendar.getRemindersLists()).result || []).map(l => l.id).filter(Boolean);
-      if (!lists.length) return;
+      const ls = ((await P.CapacitorCalendar.getRemindersLists()).result || []).filter(l => l && l.id);
+      const lists = ls.map(l => l.id); if (!lists.length) return;
+      remShopLists = ls.filter(l => /einkauf|einkäufe|shopping|supermarkt/i.test(l.title || "")).map(l => l.id);
       const all = (await P.CapacitorCalendar.getRemindersFromLists({ listIds: lists })).result || [];
       N.remSeen = N.remSeen || {};
       remList = all.filter(r => r && r.id && !r.isCompleted && !N.remSeen[r.id] && (r.title || "").trim());
-      if (remList.length) remSheet();
+      // nach „Abbrechen“ erst beim nächsten Start von Mirella wieder fragen, nicht bei jedem Zurückholen
+      if (remList.length && remList.some(r => !remShown.has(r.id))) { remList.forEach(r => remShown.add(r.id)); remSheet(); }
     } catch (e) { console.warn("Erinnerungen", e); } finally { remBusy = false; }
   }
   const remWhen = r => { const ms = r.dueDate || r.startDate; if (!ms) return { date: "", time: "" }; const d = new Date(ms); return { date: isoOf(ms), time: d.getHours() || d.getMinutes() ? pad2(d.getHours()) + ":" + pad2(d.getMinutes()) : "" }; };
+  /* Neue Apple-Erinnerungen kommen ins gleiche Fenster wie ein Diktat: Mirella schlägt die Art vor
+     (Aufgabe, Einkauf, neuer Kontakt …), Felix bestätigt mit „Speichern“ oder ändert vorher.
+     Gespeicherte Einträge hakt Mirella bei Apple ab, weggeklickte (✕) blendet sie nur in Mirella aus. */
   function remSheet() {
     if (!remList.length) { closeSheet(); render(true); return; }
-    openSheet(`<p class="stitle">Aus Apple-Erinnerungen</p><p class="hint" style="margin-top:0">${remList.length === 1 ? "Ein neuer Eintrag" : remList.length + " neue Einträge"}. Übernehmen legt eine Aufgabe in Mirella an und hakt ihn bei Apple ab.</p>
-    ${remList.map(r => { const w = remWhen(r); return `<div class="remrow"><div><b>${esc(r.title)}</b>${w.date ? `<small>${esc(fmtDate(w.date))}${w.time ? " · " + esc(w.time) : ""}</small>` : ""}${r.notes ? `<small>${esc(r.notes.slice(0, 120))}</small>` : ""}</div><div class="row2"><button class="btn" data-act="remskip" data-id="${esc(r.id)}">Lassen</button><button class="btn pri" data-act="remtake" data-id="${esc(r.id)}">Übernehmen</button></div></div>`; }).join("")}
-    ${remList.length > 1 ? `<button class="btn pri" data-act="remall" style="width:100%;margin-top:8px">Alle übernehmen</button>` : ""}`);
+    const items = [];
+    for (const r of remList) {
+      const w = remWhen(r), title = r.title.trim();
+      let its = remShopLists.includes(r.listId) ? [{ type: "shop", t: title }] : understand(title);
+      if (!its.length) its = [{ type: "todo", t: cap(title), date: "", time: "", trig: "" }];
+      its.forEach(it => { it.remId = r.id; if (it.type === "todo") { if (w.date && !it.date) it.date = w.date; if (w.time && !it.time) it.time = w.time; } });
+      items.push(...its);
+    }
+    window.mirellaPending.set(items);
+    reviewRender(remList.map(r => r.title.trim()).join(". "));
   }
+  // Prüffenster mit Einträgen aus Apple bekommt eigene Überschrift und „Alle nur bei Apple lassen“ (auch nach ✕ oder Art-Wechsel)
+  const remOrigRender = reviewRender;
+  reviewRender = function () {
+    const res = remOrigRender.apply(this, arguments);
+    const n = new Set(window.mirellaPending.get().map(it => it.remId).filter(Boolean)).size;
+    if (n) {
+      const q = $("#sheetbody .quote"); if (q && n > 3) q.remove();
+      const st = $("#sheetbody .stitle"); if (st) st.textContent = n === 1 ? "Neu aus Apple-Erinnerungen" : n + " neue aus Apple-Erinnerungen";
+      const row = $("#sheetbody .row2:last-child"); if (row) row.insertAdjacentHTML("beforebegin", '<button class="btn" data-act="remallskip" style="width:100%;margin-bottom:8px">Alle nur bei Apple lassen</button>');
+    }
+    return res;
+  };
+  // Speichern im Prüffenster: was aus Apple-Erinnerungen kam, bei Apple abhaken
+  const remOrigSave = voiceSave;
+  voiceSave = function () {
+    const ids = [...new Set(window.mirellaPending.get().map(it => it.remId).filter(Boolean))];
+    const res = remOrigSave.apply(this, arguments);
+    if (ids.length) { N.remSeen = N.remSeen || {}; ids.forEach(id => { N.remSeen[id] = 1; P.CapacitorCalendar.modifyReminder({ id, isCompleted: true, completionDate: Date.now() }).catch(() => { }); }); remList = []; nSave(); }
+    return res;
+  };
+  // ✕ an einem Eintrag aus Apple: nur in Mirella ausblenden
+  const remOrigPdel = ACT.pdel;
+  ACT.pdel = el => {
+    $$("#pitems .pitem").forEach(b => readPItem(b, window.mirellaPending.get()[+b.dataset.i]));
+    const it = window.mirellaPending.get()[+el.dataset.i], id = it && it.remId;
+    remOrigPdel(el);
+    if (id && !window.mirellaPending.get().some(x => x.remId === id)) { N.remSeen = N.remSeen || {}; N.remSeen[id] = 1; remList = remList.filter(r => r.id !== id); nSave(); }
+  };
+  ACT.remallskip = () => { N.remSeen = N.remSeen || {}; remList.forEach(r => N.remSeen[r.id] = 1); remList = []; window.mirellaPending.set([]); nSave(); closeSheet(); render(true); toast("Bleibt nur in Apple-Erinnerungen"); };
   async function remTake(r) {
     const w = remWhen(r);
     S.todos.push({ id: uid(), t: r.title.trim(), list: "todo", done: false, created: today(), date: w.date, time: w.time, trig: "zeit", rep: "nie", note: r.notes || "", from: "apple" });

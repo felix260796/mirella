@@ -4,8 +4,11 @@
    Diese Datei liest und schreibt nur über die bestehenden Funktionen (save, render, savePerson …). */
 "use strict";
 (function () {
-  if (NATIVE) return;
-  const MQ = window.matchMedia ? window.matchMedia("(min-width: 1100px) and (pointer: fine)") : null;
+  /* iPad (Mirella als App, breiter als ein iPhone): gleiche breite Ansicht, nur für Finger statt Maus
+     (Wunsch Felix 14.11.). Hochkant zeigt die Akte den Kontakt allein, quer steht sie neben der Tabelle. */
+  const TAB = !!NATIVE;
+  const MQ = window.matchMedia ? window.matchMedia(TAB ? "(min-width: 700px)" : "(min-width: 1100px) and (pointer: fine)") : null;
+  if (TAB) document.documentElement.classList.add("tablet");
   const root = document.documentElement;
   let on = false, sortK = "name", sortDir = 1, showArchRows = false;
   const sel = new Set();
@@ -22,9 +25,9 @@
     <div class="pclabel">Alle Bereiche</div>
     <div class="pcareas">${drawerHTML()}</div>
     <div class="pcfoot">
-      ${installEvt ? `<button class="btn pri" data-act="pcinstall">Als Windows-App installieren</button>` : ""}
+      ${installEvt && !TAB ? `<button class="btn pri" data-act="pcinstall">Als Windows-App installieren</button>` : ""}
       <button class="pcitem" data-act="go" data-v="einstellungen"${view === "einstellungen" ? ' aria-current="page"' : ""}><span class="pcic">${IC.gear}</span><span>Einstellungen</span></button>
-      <button class="pcitem" data-act="pckeys"><span class="pcic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></span><span>Tastenkürzel</span><kbd>?</kbd></button>
+      ${TAB ? "" : `<button class="pcitem" data-act="pckeys"><span class="pcic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></span><span>Tastenkürzel</span><kbd>?</kbd></button>`}
     </div>`;
   }
   function navUpdate() {
@@ -80,13 +83,13 @@
     };
     return `${topbar("Kontakte")}${HOOKS.menschenTop.map(f => f()).join("")}
     <div class="pctools">
-      <input class="search" id="q" type="search" placeholder="Suchen: Name, Nummer, E-Mail, Gruppe, Beruf, Adresse  (Strg+K)" aria-label="Suchen" value="${esc(q)}" autocomplete="off">
+      <input class="search" id="q" type="search" placeholder="Suchen: Name, Nummer, E-Mail, Gruppe, Beruf, Adresse${TAB ? "" : "  (Strg+K)"}" aria-label="Suchen" value="${esc(q)}" autocomplete="off">
       <select class="pcin" data-pc="grpf" aria-label="Nach Gruppe filtern"><option value="">Alle Gruppen</option>${grps.map(g => `<option${grpFilter === g ? " selected" : ""}>${esc(g)}</option>`).join("")}</select>
       ${nArch ? `<button class="mini" data-act="pcarch" aria-pressed="${showArchRows}">${showArchRows ? "Zurück zu den aktiven" : "Archiv (" + nArch + ")"}</button>` : ""}
       <button class="btn pri" data-act="pcnew" style="flex:none">＋ Neuer Kontakt</button>
     </div>
     <div class="pcbulk"${sel.size ? "" : " hidden"}><b>${sel.size} ausgewählt</b>${grpSel(null, "bulk")}${cycSel(null, "bulk")}<button class="mini" data-act="pcselnone">Auswahl aufheben</button></div>
-    <div class="pccount">${pl(list.length, showArchRows ? "Kontakt im Archiv" : "Kontakt", showArchRows ? "Kontakte im Archiv" : "Kontakte")}${grpFilter ? " in „" + esc(grpFilter) + "“" : ""}${q ? " gefunden" : ""} · Gruppe und Rhythmus direkt in der Tabelle ändern, Zeile anklicken öffnet die Akte</div>
+    <div class="pccount">${pl(list.length, showArchRows ? "Kontakt im Archiv" : "Kontakt", showArchRows ? "Kontakte im Archiv" : "Kontakte")}${grpFilter ? " in „" + esc(grpFilter) + "“" : ""}${q ? " gefunden" : ""} · Gruppe und Rhythmus direkt in der Tabelle ändern, ${TAB ? "Zeile antippen" : "Zeile anklicken"} öffnet die Akte</div>
     ${list.length ? `<div class="pctablewrap"><table class="pctable"><thead><tr><th class="cb"><input type="checkbox" class="pcin" data-pc="selall" aria-label="Alle auswählen"${allOn ? " checked" : ""}></th>${COLS.map(([k, l]) => `<th><button data-act="pcsort" data-k="${k}" aria-sort="${sortK === k ? (sortDir > 0 ? "ascending" : "descending") : "none"}">${l}${sortK === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</button></th>`).join("")}</tr></thead><tbody>${list.map(row).join("")}</tbody></table></div>` : empty(S.people.length ? "Niemand gefunden." : "Noch keine Kontakte. Oben auf „Neuer Kontakt“, oder importiere sie in den Einstellungen (vCard).")}`;
   }
 

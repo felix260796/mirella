@@ -1,6 +1,6 @@
 /* Mirella Service Worker: erst Netz, sonst Zwischenspeicher (Updates kommen sofort an, App startet auch offline) */
-const C = "mirella-v41";
-const FILES = ["./", "./index.html", "./style.css?v=41", "./farbe.css?v=41", "./datum.js?v=41", "./logik.js?v=41", "./app.js?v=41", "./bereiche.js?v=41", "./scan.js?v=41", "./wecker.js?v=41", "./suche.js?v=41", "./ki.js?v=41", "./auswertung.js?v=41", "./export.js?v=41", "./wetter.js?v=41", "./bahn.js?v=41", "./losgehen.js?v=41", "./viewer.js?v=41", "./sync.js?v=41", "./native.js?v=41", "./pc.js?v=41", "./pc.css?v=41", "./zugang.js?v=41", "./zugang.css?v=41", "./logo-final.svg", "./manifest.webmanifest", "./app-icon-180.png", "./app-icon-192.png"];
+const C = "mirella-v42";
+const FILES = ["./", "./index.html", "./style.css?v=42", "./farbe.css?v=42", "./datum.js?v=42", "./logik.js?v=42", "./app.js?v=42", "./bereiche.js?v=42", "./scan.js?v=42", "./wecker.js?v=42", "./suche.js?v=42", "./ki.js?v=42", "./auswertung.js?v=42", "./export.js?v=42", "./wetter.js?v=42", "./bahn.js?v=42", "./losgehen.js?v=42", "./viewer.js?v=42", "./sync.js?v=42", "./native.js?v=42", "./pc.js?v=42", "./pc.css?v=42", "./zugang.js?v=42", "./zugang.css?v=42", "./logo-final.svg", "./manifest.webmanifest", "./app-icon-180.png", "./app-icon-192.png"];
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(FILES)).catch(() => {})); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== C).map(x => caches.delete(x)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {

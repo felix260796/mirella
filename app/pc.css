@@ -134,3 +134,33 @@ html.pc .mc.sel .mcev i{border-left-color:#fff}
 html.pc .pctablewrap{overflow:clip}
 html.pc .pctable th{top:67px;z-index:3}
 html.pc .drawer:not(.open){box-shadow:none}
+
+/* ---------- iPad (Mirella-App, html.tablet): gleiche Aufteilung, für Finger und mit Rand fürs iPad ---------- */
+html.pc.tablet .pcnav{padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:max(12px,env(safe-area-inset-bottom,0px));padding-left:max(14px,env(safe-area-inset-left,0px))}
+html.pc.tablet #screen>.top:first-child,html.pc.tablet #screen>.pcwide>.top:first-child,html.pc.tablet .pcsplit>.pcwide>.top:first-child{padding-top:calc(env(safe-area-inset-top,0px) + 12px)}
+html.pc.tablet .screen{padding-bottom:max(64px,calc(env(safe-area-inset-bottom,0px) + 40px));padding-right:max(28px,calc((100% - var(--pcw)) / 2),env(safe-area-inset-right,0px))}
+html.pc.tablet kbd{display:none}
+html.pc.tablet .pcitem{padding:12px 12px;font-size:16px}
+html.pc.tablet .pcareas .drow{padding:10px 8px}
+html.pc.tablet .pcquick .btn{padding:12px 10px;font-size:15px}
+html.pc.tablet .pctable :is(th,td){padding-top:12px;padding-bottom:12px}
+html.pc.tablet .toast{left:50%}
+/* iPad hochkant (schmaler): Seitenleiste schmaler, Akte allein statt neben der Tabelle, Spalten untereinander */
+@media (max-width:1099px){
+  html.pc.tablet .phone{grid-template-columns:224px minmax(0,1fr)}
+  html.pc.tablet .screen{padding-left:22px;padding-right:max(22px,env(safe-area-inset-right,0px))}
+  html.pc.tablet .pcsplit{grid-template-columns:minmax(0,1fr)}
+  html.pc.tablet .pcsplit>.pcwide{display:none}
+  html.pc.tablet .pcakte{position:static;max-height:none;overflow:visible;border:0;background:none;padding:0}
+  html.pc.tablet .pcakte>.top:first-child{position:sticky;top:0;margin:0 -22px 8px;padding:calc(env(safe-area-inset-top,0px) + 12px) 22px 10px;background:var(--surface)}
+  html.pc.tablet .pctable :is(th,td):nth-child(n+6){display:none}
+  html.pc.tablet .pccols{grid-template-columns:minmax(0,1fr);gap:18px}
+}
+/* iPad quer: Seitenleiste etwas schmaler, in der Tabelle neben der Akte nur die wichtigsten Spalten */
+@media (min-width:1100px) and (max-width:1399px){
+  html.pc.tablet .phone{grid-template-columns:236px minmax(0,1fr)}
+  html.pc.tablet .screen{padding-left:24px;padding-right:max(24px,env(safe-area-inset-right,0px))}
+  html.pc.tablet .pcsplit{grid-template-columns:minmax(0,1fr) 380px;gap:18px}
+  html.pc.tablet .pcsplit .pctable :is(th,td):nth-child(n+5){display:none}
+  html.pc.tablet .pctable :is(th,td):nth-child(n+7){display:none}
+}

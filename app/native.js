@@ -1223,12 +1223,23 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
     const intentIn = async () => {
       try {
         const r = await SY.takeIntent(); let t = (r && r.text || "").trim(); if (!t || !N.setup) return;
+        // NFC-Aufkleber (nfc.js): Marken §NFC:art§ bzw. §NFC:wasch:Sekunden§ herausnehmen
+        const nfc = []; t = t.replace(/§NFC:([a-z]+)(?::(\d+))?§/g, (_, k, ts) => { nfc.push([k, ts]); return ""; });
         const go = t.includes("§LOS§"); t = t.split("§LOS§").join("").replace(/^[\s.]+|[\s.]+$/g, "").replace(/\.\s*\./g, ".");
+        if (nfc.length && typeof mirellaNfc === "function") {
+          const still = nfc.filter(([k]) => k === "wasch" || k === "sport" || k === "supp"), open = nfc.filter(x => !still.includes(x)).pop();
+          still.forEach(([k, ts]) => mirellaNfc(k, ts));
+          if (go || open) { if (t) N.losRest = t; nSave(); if (go) { closeAll(); losHinweise(); } else { closeAll(); mirellaNfc(open[0], open[1]); } return; }
+          if (!t) return;
+        }
         if (go) { closeAll(); losHinweise(); if (t) toast("Notiertes zeige ich dir danach"); if (t) N.losRest = t; return; }
         closeAll(); voiceStart(); recStop(); $("#v-text").value = t; voiceReview();
       } catch (_) { }
     };
     SY.addListener("intent", () => setTimeout(intentIn, 300)); setTimeout(intentIn, 1500);
+    // Waschmaschinen-Dauer für die Hintergrund-Aktion bereitlegen
+    setTimeout(() => { if (typeof mirellaNfcPrefs === "function") mirellaNfcPrefs(); }, 2000);
+    document.addEventListener("visibilitychange", () => { if (document.hidden && typeof mirellaNfcPrefs === "function") mirellaNfcPrefs(); });
     // Diktate, die gesammelt wurden, während Mirella im Hintergrund lag: beim Zurückholen abholen
     document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(intentIn, 900); });
     // Anruf zu Ende: kurzer Anruf ohne Gespräch zählt als nicht erreicht, sonst fragt Mirella nach

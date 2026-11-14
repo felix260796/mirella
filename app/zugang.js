@@ -18,7 +18,7 @@
   /* ---------- Solange nicht angemeldet: nichts anzeigen ---------- */
   const origRender = render;
   render = function () {
-    if (locked) { const s = $("#screen"); if (s) s.innerHTML = ""; const n = document.getElementById("pcnav"); if (n) { const mic = $("#mic"), bar = $(".tabbar"); if (mic && bar && n.contains(mic)) bar.insertBefore(mic, bar.children[2]); n.innerHTML = ""; } return; }
+    if (locked) { const s = $("#screen"); if (s) s.innerHTML = ""; ["pcnav", "dtnav", "dtstatus"].forEach(id => { const n = document.getElementById(id); if (n) { const mic = $("#mic"), bar = $(".tabbar"); if (mic && bar && n.contains(mic)) bar.insertBefore(mic, bar.children[2]); n.innerHTML = ""; } }); return; }
     return origRender.apply(this, arguments);
   };
 

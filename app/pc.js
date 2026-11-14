@@ -7,6 +7,7 @@
   /* iPad (Mirella als App, breiter als ein iPhone): gleiche breite Ansicht, nur für Finger statt Maus
      (Wunsch Felix 14.11.). Hochkant zeigt die Akte den Kontakt allein, quer steht sie neben der Tabelle. */
   const TAB = !!NATIVE;
+  if (!TAB) return; /* Am Windows-Computer übernimmt desktop.js (Programm-Ansicht, seit v0.39) */
   const MQ = window.matchMedia ? window.matchMedia(TAB ? "(min-width: 700px)" : "(min-width: 1100px) and (pointer: fine)") : null;
   if (TAB) document.documentElement.classList.add("tablet");
   const root = document.documentElement;

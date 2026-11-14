@@ -333,6 +333,7 @@ R.bereich = function () {
   if (A.id === "geld") h += financeHTML();
   if (A.id === "doku") h += docsHTML();
   if (A.id === "gesund") h += suppToday(true);
+  if (A.id === "sport" && typeof sportStats === "function") h += sportStats();
   /* Nur was in den nächsten 14 Tagen fällig ist, steht groß da. Alles Spätere nur klein und zugeklappt;
      sobald es ansteht, kommt es ohnehin auf „Heute“. */
   const soonEnd = addDays(today(), 14), soon = todos.filter(t => !t.date || t.date <= soonEnd), later = todos.filter(t => t.date && t.date > soonEnd).sort((a, b) => a.date < b.date ? -1 : 1);

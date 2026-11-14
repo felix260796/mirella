@@ -36,7 +36,8 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
         CAPPluginMethod(name: "losStart", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "losEnd", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "audioRelease", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setPrefs", returnType: CAPPluginReturnPromise)
     ]
 
     private let calls = CXCallObserver()
@@ -272,7 +273,16 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
     // MARK: Siri / Kurzbefehle
 
     @objc func takeIntent(_ call: CAPPluginCall) {
-        call.resolve(["text": MirellaIntentBox.take()])
+        let t = MirellaIntentBox.take()
+        // Mirella legt die Waschmaschinen-Aufgabe jetzt selbst an (mit Nerv-Modus): die Hintergrund-Mitteilung braucht es nicht mehr
+        if t.contains("§NFC:wasch") { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [MirellaNfc.waschId]) }
+        call.resolve(["text": t])
+    }
+
+    /// Einstellungen, die Kurzbefehl-Aktionen ohne geöffnete App brauchen (z. B. Waschmaschinen-Dauer in Minuten)
+    @objc func setPrefs(_ call: CAPPluginCall) {
+        if let m = call.getInt("washMin"), m > 0 { UserDefaults.standard.set(m, forKey: MirellaNfc.waschKey) }
+        call.resolve()
     }
 }
 
@@ -426,4 +436,95 @@ final class MirellaLiveScan: NSObject, DataScannerViewControllerDelegate {
     func dataScanner(_ dataScanner: DataScannerViewController, didTapOn item: RecognizedItem) {
         if case .text(let t) = item { finish(t.transcript) }
     }
+}
+
+// MARK: NFC-Aufkleber (Kurzbefehle > Automation > NFC > Aktion von Mirella)
+
+enum MirellaNfc {
+    static let waschId = "mirella.wasch"
+    static let waschKey = "mirella.washMin"
+}
+
+/// Waschmaschine läuft: Mirella bleibt zu. Das iPhone erinnert nach der eingestellten Zeit ans Ausräumen,
+/// beim nächsten Öffnen legt Mirella die Aufgabe dazu an.
+@available(iOS 16.0, *)
+struct WaschmaschineIntent: AppIntent {
+    static let title: LocalizedStringResource = "Waschmaschine läuft"
+    static let description = IntentDescription("Erinnert dich ans Ausräumen, ohne Mirella zu öffnen. Die Dauer stellst du in Mirella unter Zuhause ein.")
+    static let openAppWhenRun: Bool = false
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let stored = UserDefaults.standard.integer(forKey: MirellaNfc.waschKey)
+        let min = stored > 0 ? stored : 120
+        let content = UNMutableNotificationContent()
+        content.title = "Waschmaschine ist fertig"
+        content.body = "Bitte ausräumen."
+        content.sound = .default
+        let trig = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(min * 60), repeats: false)
+        try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: MirellaNfc.waschId, content: content, trigger: trig))
+        MirellaIntentBox.put("§NFC:wasch:\(Int(Date().timeIntervalSince1970))§")
+        let h = min % 60 == 0 ? (min == 60 ? "einer Stunde" : "\(min / 60) Stunden") : "\(min) Minuten"
+        return .result(dialog: "Alles klar. Ich erinnere dich in \(h) ans Ausräumen.")
+    }
+}
+
+/// Gemeinsamer Aufbau der Aktionen, die Mirella an der passenden Stelle öffnen
+@available(iOS 16.0, *)
+private func mirellaOpen(_ kind: String) { MirellaIntentBox.put("§NFC:\(kind)§") }
+
+@available(iOS 16.0, *)
+struct SupplementIntent: AppIntent {
+    static let title: LocalizedStringResource = "Supplements genommen"
+    static let description = IntentDescription("Hakt die gerade fälligen Supplements in Mirella ab. Damit hört auch das Erinnern auf.")
+    static let openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult { mirellaOpen("supp"); return .result() }
+}
+
+@available(iOS 16.0, *)
+struct GuteNachtIntent: AppIntent {
+    static let title: LocalizedStringResource = "Gute Nacht"
+    static let description = IntentDescription("Zeigt den Wecker für morgen, den ersten Termin und was morgen ansteht.")
+    static let openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult { mirellaOpen("nacht"); return .result() }
+}
+
+@available(iOS 16.0, *)
+struct BriefingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Tages-Briefing öffnen"
+    static let description = IntentDescription("Öffnet direkt das neueste Tages-Briefing.")
+    static let openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult { mirellaOpen("brief"); return .result() }
+}
+
+@available(iOS 16.0, *)
+struct AutoIntent: AppIntent {
+    static let title: LocalizedStringResource = "Ich fahre los"
+    static let description = IntentDescription("Mirella sagt kurz an, was heute ansteht, und bietet die Route zum ersten Termin an.")
+    static let openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult { mirellaOpen("auto"); return .result() }
+}
+
+@available(iOS 16.0, *)
+struct AnrufeIntent: AppIntent {
+    static let title: LocalizedStringResource = "Anrufe von heute"
+    static let description = IntentDescription("Zeigt die Anrufe, die heute fällig sind, mit Knopf zum Anrufen.")
+    static let openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult { mirellaOpen("anrufe"); return .result() }
+}
+
+@available(iOS 16.0, *)
+struct SportIntent: AppIntent {
+    static let title: LocalizedStringResource = "Training zählen"
+    static let description = IntentDescription("Trägt ein Training in Sport und Hobby ein.")
+    static let openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult { mirellaOpen("sport"); return .result() }
+}
+
+@available(iOS 16.0, *)
+struct PostIntent: AppIntent {
+    static let title: LocalizedStringResource = "Post scannen"
+    static let description = IntentDescription("Öffnet direkt die Kamera, um einen Brief einzuscannen.")
+    static let openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult { mirellaOpen("post"); return .result() }
 }

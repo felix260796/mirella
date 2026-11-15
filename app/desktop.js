@@ -1662,7 +1662,7 @@
     const inp = f.querySelector("input"), v = inp ? inp.value.trim() : ""; if (!v) return;
     if (k === "dtquick") {
       const w = parseWhen(v) || {}, t = cap((w.rest || v).trim()) || v;
-      const x = { id: uid(), t, list: "todo", done: false, created: today(), date: w.trig === "verlassen" ? "" : (w.date || ""), time: w.trig === "verlassen" ? "" : (w.time || ""), trig: w.trig || "zeit", rep: "nie", area: tf ? tf.slice(2) : "", nerv: false, prio: "", ort: "", note: "" };
+      const x = { id: uid(), t, list: "todo", done: false, created: today(), date: w.date || "", time: w.trig === "verlassen" ? "" : (w.time || ""), trig: w.trig || "zeit", rep: "nie", area: tf ? tf.slice(2) : "", nerv: false, prio: "", ort: "", note: "" };
       S.todos.push(x); SEL.t.clear(); SEL.t.add(x.id); CUR.t = x.id; lastMsg = "Neue Aufgabe: " + t; save(); render(true);
       origToast(`Eingetragen: ${t}${x.date ? " · " + relDate(x.date) : ""}${x.time ? " " + x.time : ""}`); const i = $("#dtquick"); if (i) i.focus(); return;
     }

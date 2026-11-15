@@ -370,7 +370,7 @@
       for (const a of alarmList()) add(a.at, "Wecker", a.title, { wecker: 1 });
       for (const w of S.alarms || []) { if (!w.wake || w.off || !w.leave) continue; const at = +new Date((w.leaveDate || w.date) + "T" + w.leave + ":00"); add(at, "Jetzt musst du los", "Damit du um " + w.arrive + " in " + weckerName(w) + " bist" + (w.travelMin ? " (" + w.travelMin + " Min. unterwegs)" : "") + ".", { wecker: 1 }); }
       for (const t of S.todos) {
-        if (t.done || !t.date) continue;
+        if (t.done || !t.date || t.trig === "verlassen") continue; // Mitnehmen: nur an der Haustür („Ich gehe los“)
         const at = new Date(t.date + "T" + (t.time || "09:00") + ":00").getTime();
         add(at, t.list === "shop" ? "Einkaufen" : "Mirella", t.t, { todo: t.id });
         if (t.los && t.ort && t.time) { const la = +new Date((t.losDate || t.date) + "T" + t.los + ":00"), wo = String(t.ort).split(",")[0]; add(la - 15 * 60e3, "In 15 Minuten losfahren", t.t + ": " + t.fahrt + " Min. bis " + wo + "."); add(la, "Jetzt musst du los", "Damit du um " + t.time + " bei „" + t.t + "“ in " + wo + " bist (" + t.fahrt + " Min. mit dem Auto)."); }

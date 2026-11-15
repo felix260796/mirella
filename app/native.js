@@ -1175,6 +1175,16 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
           if (c && !c.bsrc) { bApply(j.b, c); c.bsrc = j.b.title; bPend()[j.key] = a; }
           fin(j); continue;
         }
+        if (j.op === "bdel") {
+          /* Geburtstag komplett löschen: den Termin im Kalender (alle Jahre). Geburtstage aus Kontakten selbst lassen sich hier nicht löschen. */
+          bLinks()[j.key] = "x";
+          if (await calOk()) {
+            const from = Date.now() - 864e5, to = from + 367 * 864e5, evs = (await P.CapacitorCalendar.listEventsInRange({ from, to })).result || [];
+            const e = evs.find(e => !e.birthdayContactIdentifier && e.id && btokens(e.title).join(" ") + "|" + isoOf(e.startDate).slice(5) === j.key);
+            if (e) { await P.CapacitorCalendar.deleteEvent({ id: e.id, span: 1 }); phone++; }
+          }
+          fin(j); continue;
+        }
         if (!MC) { fin(j); continue; }
         if (j.op === "link") {
           const p = S.people.find(x => x.id === j.pid), a = kjAid(j.aid, j.ck);

@@ -436,3 +436,44 @@ html.dtboot:not(.dtready) body{background:#f3f3f3}
 html.dtboot:not(.dtready) body::after{content:"Mirella wird geladen …";position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);font:13px "Segoe UI",system-ui,sans-serif;color:#555}
 html.dtboot:not(.dtready) body::before{content:"";position:fixed;left:50%;top:45%;width:96px;height:96px;transform:translate(-50%,-115%);background:url(logo-final.svg) center/contain no-repeat}
 html.dtboot:not(.dtready) body::after{top:calc(45% + 18px)}
+/* Kontakte abgleichen (v0.40.4) */
+.dtdetail.kdwide{width:min(60%,860px)}
+.kdsrc{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;border-radius:3px;white-space:nowrap;border:1px solid;vertical-align:1px}
+.kdsrc.kd-c{color:#0b5cad;border-color:#9cc3ea;background:#eef5fc}
+.kdsrc.kd-p{color:#1d6b35;border-color:#9fd1ac;background:#eef8f0}
+.kdsrc.kd-b{color:#8a4b00;border-color:#e6c08f;background:#fdf4e7}
+.dtg tr.cur td .kdsrc{background:#fff}
+.kdok{color:#1d6b35}
+.dtg tr.cur td .kdok{color:#fff}
+.kdbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 4px}
+.kdbar .pb kbd,.kdcmp~.dtbtnrow .pb kbd{font:10px "Segoe UI",system-ui,sans-serif;color:inherit;opacity:.65;border:1px solid currentColor;border-radius:3px;padding:0 3px;margin-left:4px}
+.kdbar .pb.kddel{color:#a4262c}
+.kdlegend{font-size:11px;color:var(--dtink3);margin:0 0 10px}
+.kdrec{padding:7px 10px;border-radius:3px;margin:0 0 8px;font-weight:600;font-size:12.5px;border-left:4px solid}
+.kdrec-ok{background:#eef8f0;border-color:#2e8b47;color:#1d5a2d}
+.kdrec-maybe{background:#fdf6e3;border-color:#d39b16;color:#6b4b00}
+.kdrec-warn{background:#fdeeee;border-color:#c4313a;color:#8a1f25}
+.kdmore{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px;font-size:12px}
+.kdmore .pb.on{border-color:var(--dtacc,#0b5cad);box-shadow:inset 0 0 0 1px var(--dtacc,#0b5cad)}
+.kdmore .pb small{color:var(--dtink3);margin-left:3px}
+.kdcmp{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+.kdcmp th,.kdcmp td{border:1px solid var(--dtline2,#e1e1e1);padding:5px 7px;vertical-align:top;text-align:left;word-break:break-word}
+.kdcmp thead th{background:#f6f6f6;font-weight:600;font-size:12px}
+.kdcmp tbody th{width:92px;font-weight:400;color:var(--dtink2);background:#fafafa}
+.kdcmp thead th:first-child{width:92px}
+.kdcmp td.kdres{background:#f7fbff}
+.kdcmp.solo td{background:#fff}
+.kdcmp div+div{margin-top:2px}
+.kdcmp .kdsame{color:#1d5a2d}
+.kdcmp .kdsame::before{content:"= ";color:#2e8b47;font-weight:700}
+.kdcmp .kddiff{background:#fff3cd;margin:0 -3px;padding:0 3px;border-radius:2px}
+.kdcmp .kdonly::before{content:"+ ";color:#0b5cad;font-weight:700}
+.kdnone{color:#bbb}
+.kdleg{font-size:11px;color:var(--dtink3);margin:4px 0 6px;display:flex;gap:12px}
+.kdleg .kdsame::before{content:"= ";color:#2e8b47;font-weight:700}
+.kdleg .kddiff{background:#fff3cd;padding:0 4px}
+.kdleg .kdonly::before{content:"+ ";color:#0b5cad;font-weight:700}
+.kdsearch{margin-top:14px;font-size:12.5px}
+.kdsearch summary{cursor:pointer;color:var(--dtink2);padding:2px 0}
+.kddups{display:flex;flex-direction:column;gap:18px;max-width:980px}
+.kddup{border:1px solid var(--dtline2,#e1e1e1);padding:10px;background:#fff}

@@ -434,3 +434,5 @@ html.dt .dtaw td:last-child{max-width:55%}
 html.dtboot:not(.dtready) #phone,html.dtboot:not(.dtready) .fab,html.dtboot:not(.dtready) .tabbar{visibility:hidden}
 html.dtboot:not(.dtready) body{background:#f3f3f3}
 html.dtboot:not(.dtready) body::after{content:"Mirella wird geladen …";position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);font:13px "Segoe UI",system-ui,sans-serif;color:#555}
+html.dtboot:not(.dtready) body::before{content:"";position:fixed;left:50%;top:45%;width:96px;height:96px;transform:translate(-50%,-115%);background:url(logo-final.svg) center/contain no-repeat}
+html.dtboot:not(.dtready) body::after{top:calc(45% + 18px)}

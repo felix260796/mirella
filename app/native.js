@@ -1333,7 +1333,7 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
         const nfc = []; t = t.replace(/§NFC:([a-z]+)(?::(\d+))?§/g, (_, k, ts) => { nfc.push([k, ts]); return ""; });
         const go = t.includes("§LOS§"); t = t.split("§LOS§").join("").replace(/^[\s.]+|[\s.]+$/g, "").replace(/\.\s*\./g, ".");
         if (nfc.length && typeof mirellaNfc === "function") {
-          const still = nfc.filter(([k]) => k === "wasch" || k === "sport" || k === "supp"), open = nfc.filter(x => !still.includes(x)).pop();
+          const still = nfc.filter(([k]) => k === "wasch" || k === "spuel" || k === "sport" || k === "supp"), open = nfc.filter(x => !still.includes(x)).pop();
           still.forEach(([k, ts]) => mirellaNfc(k, ts));
           if (go || open) { if (t) N.losRest = t; nSave(); if (go) { closeAll(); losHinweise(); } else { closeAll(); mirellaNfc(open[0], open[1]); } return; }
           if (!t) return;

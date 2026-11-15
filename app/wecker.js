@@ -362,7 +362,8 @@ voiceReview = function () {
   const wk = txt && weckerFromText(txt);
   if (wk) { recStop(); weckerForm(null, wk); if (wk.to) setTimeout(() => ACT.calcwecker({ dataset: { id: "" } }), 50); return; }
   if (txt && /^(wie|wo|was|warum|kann ich|hilfe)\b/i.test(txt) && typeof askMirella === "function") { recStop(); askMirella(txt); return; }
-  if (txt && /waschmaschine\s+(läuft|ist an|gestartet|angemacht|an\b)/i.test(txt)) { recStop(); const d = new Date(Date.now() + (+S.settings.washMin || 120) * 60e3); S.todos.push({ id: uid(), t: "Waschmaschine ausräumen", list: "todo", done: false, created: today(), date: iso(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, trig: "zeit", rep: "nie", area: "haus", nerv: true, prio: 2 }); save(); closeSheet(); render(true); toast(`Ich erinnere dich um ${pad(d.getHours())}:${pad(d.getMinutes())} ans Ausräumen`); return; }
+  const gm = txt && txt.match(/(wasch|spül)maschine\s+(läuft|ist an|gestartet|angemacht|an\b)/i);
+  if (gm && typeof mirellaGeraet === "function") { recStop(); closeSheet(); mirellaGeraet(/^w/i.test(gm[1]) ? "wasch" : "spuel"); render(true); return; }
   origVoiceReview();
 };
 

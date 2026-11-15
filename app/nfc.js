@@ -10,7 +10,7 @@
   const row = (ic, html) => `<div class="losrow"><span class="losic">${ic}</span><div>${html}</div></div>`;
   const evOn = d => (typeof mirellaEventsOn === "function" ? mirellaEventsOn(d) : []);
 
-  const ROUTINE = /supplement|kreatin|vitamin|omega|magnesium|waschmaschine ausräumen/i;
+  const ROUTINE = /supplement|kreatin|vitamin|omega|magnesium|(wasch|spül)maschine ausräumen/i;
   /* Termine eines Tages: iPhone-Kalender und Aufgaben mit Uhrzeit, nach Zeit sortiert */
   function termine(d, ab) {
     const ev = evOn(d).map(e => ({ time: e.time || "", t: e.t, ort: e.loc || "" }));
@@ -36,17 +36,33 @@
     return out.sort((a, b) => a.wake < b.wake ? -1 : 1);
   }
 
-  /* Waschmaschine: Aufgabe zur Zeit, zu der auch die iPhone-Mitteilung kam */
-  function wasch(ts) {
+  /* Waschmaschine/Spülmaschine: Aufgabe zur Zeit, zu der auch die iPhone-Mitteilung kam.
+     Wäre das Gerät nachts fertig (22 bis 7 Uhr, z. B. Startzeitvorwahl), erinnert Mirella morgens um 7 (wie native/…/MirellaSystemPlugin.swift). */
+  const GERAET = { wasch: ["Waschmaschine", "washMin", 90], spuel: ["Spülmaschine", "dishMin", 150] };
+  function fertig(start, min) {
+    const d = new Date(start.getTime() + min * 60e3), h = d.getHours();
+    if (h >= 7 && h < 22) return d;
+    if (h >= 22) d.setDate(d.getDate() + 1);
+    d.setHours(7, 0, 0, 0); return d;
+  }
+  /* Einmalig (Wunsch Felix 15.11.): Waschmaschine 1,5 Stunden, Spülmaschine 2,5 Stunden */
+  function dauerEinmal() {
+    if (!S.settings || +S.settings.geraetDauer >= 1) return;
+    S.settings.washMin = 90; S.settings.dishMin = 150; S.settings.geraetDauer = 1; save();
+  }
+  function geraet(k, ts) {
+    dauerEinmal();
+    const [name, key, std] = GERAET[k];
     const start = ts ? new Date(+ts * 1000) : new Date();
-    const d = new Date(start.getTime() + (+S.settings.washMin || 120) * 60e3);
-    const date = iso(d), time = hm(d);
-    if (!S.todos.some(x => !x.done && x.t === "Waschmaschine ausräumen" && x.date === date && x.time === time)) {
-      S.todos.push({ id: uid(), t: "Waschmaschine ausräumen", list: "todo", done: false, created: today(), date, time, trig: "zeit", rep: "nie", area: "haus", nerv: true, prio: 2 });
+    const d = fertig(start, +S.settings[key] || std);
+    const date = iso(d), time = hm(d), t = name + " ausräumen";
+    if (!S.todos.some(x => !x.done && x.t === t && x.date === date && x.time === time)) {
+      S.todos.push({ id: uid(), t, list: "todo", done: false, created: today(), date, time, trig: "zeit", rep: "nie", area: "haus", nerv: true, prio: 2 });
       save();
     }
-    toast(`Waschmaschine: Ich erinnere dich um ${time}`);
+    toast(`${name}: Ich erinnere dich ${date !== iso(start) ? "morgen " : ""}um ${time}`);
   }
+  window.mirellaGeraet = geraet;
 
   /* Supplements: alles abhaken, was jetzt fällig ist (bis 90 Minuten im Voraus) */
   function supp() {
@@ -135,14 +151,15 @@
 
   function post() { closeAll(); photoStart(null, null); if (ACT.scanmulti) ACT.scanmulti(); }
 
-  const RUN = { wasch, supp, nacht, brief, auto, anrufe, sport, post };
+  const RUN = { wasch: ts => geraet("wasch", ts), spuel: ts => geraet("spuel", ts), supp, nacht, brief, auto, anrufe, sport, post };
   window.mirellaNfc = (k, ts) => { const f = RUN[k]; if (f) try { f(ts); } catch (e) { console.warn("NFC", k, e); } };
-  window.mirellaNfcPrefs = () => { try { const SY = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MirellaSystem; if (SY && SY.setPrefs) SY.setPrefs({ washMin: +S.settings.washMin || 120 }).catch(() => { }); } catch (_) { } };
+  window.mirellaNfcPrefs = () => { try { dauerEinmal(); const SY = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MirellaSystem; if (SY && SY.setPrefs) SY.setPrefs({ washMin: +S.settings.washMin || 90, dishMin: +S.settings.dishMin || 150 }).catch(() => { }); } catch (_) { } };
 
   /* ---------- Einstellungen: Anleitung für alle Aufkleber ---------- */
   const AUF = [
     ["Haustür", "Ich gehe los", "Wetter, Termine, Einkaufsliste und offene Aufgaben, bevor du gehst"],
-    ["Waschmaschine", "Waschmaschine läuft", "Mirella bleibt zu, das iPhone erinnert dich ans Ausräumen (Dauer unter Zuhause)"],
+    ["Waschmaschine", "Waschmaschine läuft", "Mirella bleibt zu, das iPhone erinnert dich ans Ausräumen (Dauer unter Zuhause). Wäre sie nachts fertig, erinnert Mirella morgens um 7"],
+    ["Spülmaschine", "Spülmaschine läuft", "wie die Waschmaschine, eigene Dauer unter Zuhause"],
     ["Supplement-Dose", "Supplements genommen", "hakt die gerade fälligen Supplements ab, damit hört das Erinnern auf"],
     ["Nachttisch", "Gute Nacht", "Wecker für morgen, erster Termin, Aufgaben für morgen"],
     ["Kaffeemaschine", "Tages-Briefing öffnen", "öffnet direkt das neueste Briefing"],

@@ -4,6 +4,9 @@
 function losHinweise() {
   const nowM = new Date(), hmNow = L.pad(nowM.getHours()) + ":" + L.pad(nowM.getMinutes()), t = today(), items = [];
   const add = (ic, html) => items.push(`<div class="losrow"><span class="losic">${ic}</span><div>${html}</div></div>`);
+  // Nicht vergessen: Aufgaben „Beim Losgehen“ ohne Tag oder für heute (bzw. verpasst), mit Abhaken
+  const mit = S.todos.filter(x => x.list === "todo" && !x.done && x.trig === "verlassen" && (!x.date || x.date <= t));
+  if (mit.length) add("🎒", `<b>Nicht vergessen</b>${mit.map(x => `<button class="losmit" data-act="losmitok" data-id="${x.id}"><span class="smbox"></span>${esc(x.t)}${x.date && x.date < t ? " <small>(seit " + esc(fmtDate(x.date)) + ")</small>" : ""}</button>`).join("")}`);
   // Noch erledigen: Aufgaben mit Uhrzeit, deren Zeit schon vorbei ist (z. B. Waschmaschine/Spülmaschine ausräumen), ganz oben
   const ueber = S.todos.filter(x => x.list === "todo" && !x.done && x.date && x.time && (x.date < t || (x.date === t && x.time < hmNow)))
     .sort((a, b) => (/ ausräumen$/i.test(b.t) ? 1 : 0) - (/ ausräumen$/i.test(a.t) ? 1 : 0) || ((a.date + a.time) < (b.date + b.time) ? -1 : 1));
@@ -27,13 +30,14 @@ function losHinweise() {
   const shop = S.todos.filter(x => x.list === "einkauf" && !x.done);
   if (shop.length) add("🛒", `<b>Einkaufsliste: ${shop.length === 1 ? "1 Artikel" : shop.length + " Artikel"}</b><small>${esc(shop.slice(0, 6).map(x => x.t).join(", "))}${shop.length > 6 ? " …" : ""}</small><button class="mini" data-act="losshop" style="margin-top:6px">Einkaufsliste öffnen</button>`);
   // Was heute noch zu tun ist (ohne Uhrzeit)
-  const due = S.todos.filter(x => x.list === "todo" && !x.done && x.date && x.date <= t && !x.time && !x.ort);
+  const due = S.todos.filter(x => x.list === "todo" && !x.done && x.trig !== "verlassen" && x.date && x.date <= t && !x.time && !x.ort);
   if (due.length) add("✓", `<b>${due.length === 1 ? "1 Aufgabe" : due.length + " Aufgaben"} für heute</b><small>${esc(due.slice(0, 4).map(x => x.t).join(", "))}${due.length > 4 ? " …" : ""}</small>`);
   if (!items.length) add("👋", "<b>Alles gut, nichts Besonderes.</b><small>Schönen Weg!</small>");
   openSheet(`<p class="stitle">Bevor du gehst</p>${items.join("")}<button class="btn pri" data-act="losok" style="width:100%;margin-top:12px">Alles klar, tschüss</button>`);
 }
 Object.assign(ACT, {
   losgo: () => { closeAll(); losHinweise(); },
+  losmitok: el => { const x = S.todos.find(y => y.id === el.dataset.id); if (!x) return; if (!x.done) toggleTodo(x.id); el.classList.add("done"); el.querySelector(".smbox").textContent = "✓"; el.disabled = true; },
   losshop: () => { closeAll(); view = "todos"; todoList = "einkauf"; render(); },
   losok: () => {
     closeSheet();

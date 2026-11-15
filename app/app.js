@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.40.5";
+const VERSION = "0.40.6";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -398,7 +398,7 @@ const R = {
     const greet = h < 11 ? "Guten Morgen" : h < 17 ? "Hallo" : "Guten Abend";
     const dueCalls = callsForToday();
     const shownCalls = dueCalls, doneCalls = callsToday(), pool = pullPool();
-    const leave = S.todos.filter(x => x.list === "todo" && !x.done && x.trig === "verlassen");
+    const leave = S.todos.filter(x => x.list === "todo" && !x.done && x.trig === "verlassen" && (!x.date || x.date <= t));
     const lunches = S.people.filter(p => { const d = lunchDue(p); return d && d <= t; });
     const dueTodos = S.todos.filter(x => x.list === "todo" && !x.done && x.trig !== "verlassen" && ((x.date && x.date <= t) || (+x.prio === 1 && !x.date))).sort((a, b) => (a.date + (a.time || "")) < (b.date + (b.time || "")) ? -1 : 1);
     const bdays = S.people.filter(p => !heuteSkip(p)).map(p => [p, nextBirthday(p)]).filter(([, b]) => b && diffDays(t, b) <= S.settings.giftLead).sort((a, b) => a[1] < b[1] ? -1 : 1);
@@ -1000,8 +1000,8 @@ function todoForm(t, preset = {}) {
   openSheet(`<div data-draft="todo:${t ? t.id : "new"}"><p class="stitle">${t ? "Aufgabe bearbeiten" : preset.area ? "Neue Erinnerung" : "Neue Aufgabe"}</p>
   <div class="fld"><label for="a-what">Was?</label><input id="a-what" value="${esc(v.t)}" placeholder="z. B. Waschmaschine ausräumen"></div>
   <div class="fld"><label>Priorität</label><div class="pick3" id="a-prio-pick">${[["", "Keine", ""], ...PRIOS].map(([k, n, c]) => `<button type="button" data-act="pickprio" data-p="${k}" aria-pressed="${String(v.prio || "") === String(k)}"${c ? ` style="--pc:${c}"` : ""}>${c ? '<i class="pdot"></i>' : ""}${n}</button>`).join("")}</div><input type="hidden" id="a-prio" value="${esc(v.prio || "")}"></div>
-  <div class="fld"><label for="a-trig">Wann erinnern?</label><select id="a-trig"><option value="zeit"${v.trig !== "verlassen" ? " selected" : ""}>An einem Tag</option><option value="verlassen"${v.trig === "verlassen" ? " selected" : ""}>Bevor ich losgehe (auf „Heute“ oben)</option></select></div>
-  <div class="fgrid" id="f-time"${v.trig === "verlassen" ? " hidden" : ""}><div class="fld"><label for="a-date">Datum (leer = ohne Termin)</label><input type="date" id="a-date" value="${esc(v.date || "")}"></div><div class="fld"><label for="a-time">Uhrzeit</label><input type="time" id="a-time" value="${esc(v.time || "")}"></div></div>
+  <div class="fld"><label for="a-trig">Wann erinnern?</label><select id="a-trig"><option value="zeit"${v.trig !== "verlassen" ? " selected" : ""}>An einem Tag</option><option value="verlassen"${v.trig === "verlassen" ? " selected" : ""}>Beim Losgehen an der Haustür</option></select></div>
+  <div class="fgrid" id="f-time"><div class="fld"><label for="a-date" id="a-date-l">${v.trig === "verlassen" ? "An welchem Tag? (leer = jedes Mal)" : "Datum (leer = ohne Termin)"}</label><input type="date" id="a-date" value="${esc(v.date || "")}"></div><div class="fld" id="a-time-f"${v.trig === "verlassen" ? " hidden" : ""}><label for="a-time">Uhrzeit</label><input type="time" id="a-time" value="${esc(v.time || "")}"></div></div>
   <div class="fld" style="position:relative"><label for="a-ort">Wo? (leer lassen, wenn egal)</label><input id="a-ort" value="${esc(v.ort || "")}" placeholder="z. B. Tati-Café Stuttgart" autocomplete="off"><div id="a-ort-sug" class="sug" hidden></div>${v.ort ? `<div style="margin-top:6px">${routeBtn(v.ort, "Route dorthin")}</div>` : ""}</div>
   <div class="fgrid"><div class="fld"><label for="a-rep">Wiederholen</label><select id="a-rep">${REPS.map(r => `<option${r === (v.rep || "nie") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
   <div class="fld"><label for="a-area">Bereich</label><select id="a-area"><option value="">kein Bereich</option>${AREAS.map(a => `<option value="${a.id}"${a.id === v.area ? " selected" : ""}>${esc(a.n)}</option>`).join("")}</select></div></div>
@@ -1010,7 +1010,7 @@ function todoForm(t, preset = {}) {
   ${t ? todoDocs(t) : ""}
   ${t && t.date ? `<button class="btn" data-act="ics" data-id="${t.id}" style="width:100%;margin-top:8px">⏰ Zusätzlich als Wecker in den iPhone-Kalender</button>` : ""}
   <div class="row2">${t ? `<button class="btn danger" data-act="deltodo" data-id="${t.id}" style="flex:none">Löschen</button>` : ""}<button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="savetodo" data-id="${t ? t.id : ""}">Speichern</button></div></div>`,
-    () => { $("#a-trig").onchange = e => { $("#f-time").hidden = e.target.value === "verlassen"; }; addrSuggest($("#a-ort"), $("#a-ort-sug"), true); });
+    () => { $("#a-trig").onchange = e => { const lv = e.target.value === "verlassen"; $("#a-time-f").hidden = lv; $("#a-date-l").textContent = lv ? "An welchem Tag? (leer = jedes Mal)" : "Datum (leer = ohne Termin)"; }; addrSuggest($("#a-ort"), $("#a-ort-sug"), true); });
 }
 function todoDocs(t) {
   const docs = S.docs.filter(d => d.ref === t.id);
@@ -1019,7 +1019,7 @@ function todoDocs(t) {
 function saveTodo(id) {
   const w = $("#a-what").value.trim(); if (!w) { toast("Bitte eintragen, was zu tun ist"); return; }
   const trig = $("#a-trig").value;
-  const data = { t: w, trig, date: trig === "verlassen" ? "" : $("#a-date").value, time: trig === "verlassen" ? "" : $("#a-time").value, rep: $("#a-rep").value, area: $("#a-area").value, nerv: $("#a-nerv").checked, prio: $("#a-prio").value ? +$("#a-prio").value : "", ort: $("#a-ort") ? ($("#a-ort").dataset.label || $("#a-ort").value.trim()) : "", note: $("#a-note") ? $("#a-note").value.trim() : "" };
+  const data = { t: w, trig, date: $("#a-date").value, time: trig === "verlassen" ? "" : $("#a-time").value, rep: $("#a-rep").value, area: $("#a-area").value, nerv: $("#a-nerv").checked, prio: $("#a-prio").value ? +$("#a-prio").value : "", ort: $("#a-ort") ? ($("#a-ort").dataset.label || $("#a-ort").value.trim()) : "", note: $("#a-note") ? $("#a-note").value.trim() : "" };
   if (data.rep !== "nie" && !data.date && trig !== "verlassen") data.date = today();
   if (id) Object.assign(S.todos.find(x => x.id === id), data);
   else S.todos.push(Object.assign({ id: uid(), list: "todo", done: false, created: today() }, data));
@@ -1490,6 +1490,7 @@ function parseWhen(s) {
   const cut = re => { const m = rest.match(re); if (m) rest = (rest.slice(0, m.index) + " " + rest.slice(m.index + m[0].length)).replace(/\s+/g, " "); return m; };
   let m;
   if ((m = cut(/\b(bevor ich (los|aus dem haus|raus)ge?he?|wenn ich (los|aus dem haus|raus)gehe|beim (losgehen|rausgehen))\b/i))) trig = "verlassen";
+  if (!trig && /\bmit(zu)?nehmen\b/i.test(rest)) trig = "verlassen";
   if ((m = cut(/\bum (\d{1,2})(?:[:.](\d{2}))?\s*(uhr)?(\s*(\d{1,2}))?\b/i))) { let h = +m[1], mi = m[2] ? +m[2] : (m[5] && m[3] ? +m[5] : 0); if (h <= 23 && mi < 60) time = `${pad(h)}:${pad(mi)}`; }
   const rel = mins => { const n = new Date(Date.now() + mins * 60000); n.setMinutes(Math.ceil(n.getMinutes() / 15) * 15, 0, 0); return n; };
   if (!time && (m = cut(/\b(nachher|später|spaeter|in ein paar stunden)\b/i))) { let n = rel(120); if (n.getHours() >= 21 || n.getDate() !== new Date().getDate()) { n = new Date(); n.setDate(n.getDate() + 1); n.setHours(9, 0, 0, 0); } date = iso(n); time = `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
@@ -1662,7 +1663,7 @@ function voiceSave() {
   let n = 0; const miss = [];
   for (const it of pending) {
     if (it.type === "shop" && it.t) { if (addShop(it.t)) n++; }
-    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, pid: it.pid || "", list: "todo", done: false, created: today(), date: it.trig === "verlassen" ? "" : it.date || "", time: it.time || "", trig: it.trig || "zeit", rep: "nie", area: "", nerv: true, ort: it.ort || "" }); if (it.ort) { const nt = S.todos[S.todos.length - 1]; placeFind(it.ort).then(full => { if (full) { nt.ort = full; save(); render(true); } }); } n++; }
+    else if (it.type === "todo" && it.t) { S.todos.push({ id: uid(), t: it.t, pid: it.pid || "", list: "todo", done: false, created: today(), date: it.date || "", time: it.trig === "verlassen" ? "" : it.time || "", trig: it.trig || (/\bmit(zu)?nehmen\b/i.test(it.t) ? "verlassen" : "zeit"), rep: "nie", area: "", nerv: true, ort: it.ort || "" }); if (it.ort) { const nt = S.todos[S.todos.length - 1]; placeFind(it.ort).then(full => { if (full) { nt.ort = full; save(); render(true); } }); } n++; }
     else if (it.type === "note" || it.type === "call") {
       const p = S.people.find(x => x.id === it.pid); if (!p) { miss.push(it); continue; }
       if (it.type === "note" && it.t) { p.notes = p.notes || []; p.notes.unshift({ id: uid(), t: it.t, d: today() }); n++; }

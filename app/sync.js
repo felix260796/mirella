@@ -55,16 +55,63 @@ function syApply(data) {
   S = Object.assign(blank(), data); S.settings = Object.assign(blank().settings, data.settings || {}, keep);
   if ((S.goneP || []).length) { const g = new Set(S.goneP); S.people = S.people.filter(p => !g.has(p.id)); if (S.goneP.length > 3000) S.goneP = S.goneP.slice(-3000); }
 }
-/* Zusammenführen, wenn zwei Geräte gleichzeitig geändert haben: alle Einträge beider Seiten, bei gleicher ID gewinnt dieses Gerät */
-function syMerge(server, local) {
+/* Zusammenführen, wenn zwei Geräte gleichzeitig geändert haben (Drei-Wege-Abgleich).
+   Mirella merkt sich je Eintrag einen Fingerabdruck vom letzten gemeinsamen Stand (BASE_KEY).
+   Pro Eintrag gilt: nur eine Seite hat ihn geändert -> diese Änderung gewinnt (z. B. am PC abgehakt, iPhone hat ihn nicht angefasst).
+   Beide haben ihn geändert -> dieses Gerät gewinnt. Gelöschtes bleibt gelöscht, solange die andere Seite es nicht geändert hat.
+   Ohne gemerkten Stand (erster Abgleich nach dem Update) wie früher: alles von beiden Seiten, bei gleicher ID gewinnt dieses Gerät. */
+const BASE_KEY = "mirella.sybase";
+function syH(v) { const t = JSON.stringify(v === undefined ? null : v); let h = 0x811c9dc5; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36) + t.length.toString(36); }
+const syIdArr = v => Array.isArray(v) && v.length > 0 && v.every(x => x && typeof x === "object" && x.id != null);
+function syBaseOf(d) {
+  const b = { k: {}, ids: {}, set: {} };
+  for (const k of Object.keys(d || {})) {
+    if (k === "settings") { for (const sk of Object.keys(d.settings || {})) b.set[sk] = syH(d.settings[sk]); continue; }
+    if (syIdArr(d[k])) { const m = {}; d[k].forEach(x => { m[x.id] = syH(x); }); b.ids[k] = m; }
+    b.k[k] = syH(d[k]);
+  }
+  return b;
+}
+function syBaseLoad() { try { return JSON.parse(localStorage.getItem(BASE_KEY) || "null"); } catch (_) { return null; } }
+function syBaseSave(d) { try { localStorage.setItem(BASE_KEY, JSON.stringify(syBaseOf(d))); } catch (_) { } }
+function syMergeVal(a, b, bh) { // a = Server, b = dieses Gerät, bh = Fingerabdruck vom letzten gemeinsamen Stand
+  if (bh === undefined) return b !== undefined ? b : a;
+  if (syH(b) === bh) return a !== undefined ? a : b; // hier unverändert -> Stand vom Server
+  return b !== undefined ? b : a;                     // hier geändert -> dieses Gerät
+}
+function syMerge(server, local, base) {
   const out = Object.assign({}, server, local);
   for (const k of Object.keys(out)) {
+    if (k === "settings") continue;
     const a = server[k], b = local[k];
-    if (Array.isArray(a) && Array.isArray(b) && (a.concat(b)).every(x => x && typeof x === "object" && x.id)) {
-      const m = new Map(); a.forEach(x => m.set(x.id, x)); b.forEach(x => m.set(x.id, x)); out[k] = [...m.values()];
-    } else if (Array.isArray(a) && Array.isArray(b)) out[k] = [...new Set(a.concat(b))];
+    const both = Array.isArray(a) && Array.isArray(b);
+    if (both && (a.concat(b)).every(x => x && typeof x === "object" && x.id != null)) {
+      if (!base || !base.ids) {
+        // ohne Fingerabdrücke: alte Regel
+        const m = new Map(); a.forEach(x => m.set(x.id, x)); b.forEach(x => m.set(x.id, x)); out[k] = [...m.values()];
+        continue;
+      }
+      const B = base.ids[k] || {}, sm = new Map(a.map(x => [x.id, x])), lm = new Map(b.map(x => [x.id, x]));
+      const order = a.map(x => x.id).concat(b.map(x => x.id).filter(id => !sm.has(id)));
+      const res = [];
+      for (const id of order) {
+        const sv = sm.get(id), lv = lm.get(id), bh = B[id];
+        if (sv && lv) res.push(syH(lv) === bh ? sv : lv);
+        else if (sv) { if (bh === undefined || syH(sv) !== bh) res.push(sv); }   // hier gelöscht und drüben unverändert -> weg
+        else if (lv) { if (bh === undefined || syH(lv) !== bh) res.push(lv); }   // drüben gelöscht und hier unverändert -> weg
+      }
+      out[k] = res;
+    } else if (both) {
+      const bh = base && base.k ? base.k[k] : undefined;
+      if (bh !== undefined && syH(b) === bh) out[k] = a;
+      else if (bh !== undefined && syH(a) === bh) out[k] = b;
+      else out[k] = [...new Set(a.concat(b))];
+    } else out[k] = syMergeVal(a, b, base && base.k ? base.k[k] : undefined);
   }
-  out.settings = Object.assign({}, server.settings || {}, local.settings || {});
+  const ss = server.settings || {}, ls = local.settings || {}, st = {};
+  for (const sk of new Set(Object.keys(ss).concat(Object.keys(ls)))) st[sk] = syMergeVal(ss[sk], ls[sk], base && base.set ? base.set[sk] : undefined);
+  for (const sk of Object.keys(st)) if (st[sk] === undefined) delete st[sk];
+  out.settings = st;
   return out;
 }
 
@@ -73,7 +120,8 @@ async function syPull() {
   const rows = await r.json(); return rows[0] || null;
 }
 async function syPush(row) {
-  const body = JSON.stringify({ data: syPack(), version: SY.meta.ver + 1, updated_at: new Date().toISOString() });
+  const pack = syPack(); SY.pushed = pack;
+  const body = JSON.stringify({ data: pack, version: SY.meta.ver + 1, updated_at: new Date().toISOString() });
   if (!row) {
     const r = await sb("/rest/v1/mirella_state", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(Object.assign(JSON.parse(body), { user_id: SY.auth.user.id })) });
     if (r.status === 409) return false;
@@ -93,13 +141,14 @@ async function sync(manual) {
       if (row && row.version < SY.meta.ver) SY.meta.ver = row.version; // Server wurde zurückgesetzt
       if (row && row.version > SY.meta.ver) {
         const merge = SY.meta.dirty || !SY.meta.ver;
-        const data = merge ? syMerge(row.data, syPack()) : row.data;
+        const data = merge ? syMerge(row.data, syPack(), SY.meta.ver ? syBaseLoad() : null) : row.data;
         syApply(data); SY.meta.ver = row.version; origSave(); changed = true;
+        syBaseSave(row.data); // jetzt gemeinsamer Stand mit dem Server
         SY.meta.dirty = merge && JSON.stringify(syPack()) !== JSON.stringify(row.data);
       }
       if (!row || SY.meta.dirty) {
-        if (await syPush(row)) { SY.meta.ver += 1; SY.meta.dirty = false; } else continue; // anderes Gerät war schneller: neu holen
-      }
+        if (await syPush(row)) { SY.meta.ver += 1; SY.meta.dirty = false; syBaseSave(SY.pushed); } else continue; // anderes Gerät war schneller: neu holen
+      } else if (row && row.version === SY.meta.ver && !syBaseLoad()) syBaseSave(row.data);
       break;
     }
     if (changed) { const sh = document.getElementById("sheet"); if (!(sh && sh.classList.contains("open"))) render(true); }

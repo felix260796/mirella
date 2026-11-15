@@ -2,7 +2,7 @@
    Daten: localStorage "mirella.v1", Fotos/PDFs: IndexedDB "mirella" / "photos".
    Weitere Teile: logik.js (Rechnen), bereiche.js (Rubriken), scan.js (Briefe), wecker.js, suche.js. */
 "use strict";
-const VERSION = "0.40.3";
+const VERSION = "0.40.4";
 const KEY = "mirella.v1";
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -640,7 +640,7 @@ const SETS = {
     ${setH("Prioritäten")}<p class="hint" style="margin-top:0">Jede Aufgabe kann eine Stufe bekommen. Hoch steht immer oben und erscheint auf „Heute“, auch ohne Datum.</p>
     ${PRIOS.map(([, n, c]) => `<div class="set"><span><i class="pdot" style="background:${c}"></i> ${n}</span></div>`).join("")}
     ${setH("Einkaufs-Vorlagen")}${S.shopTpl.length ? S.shopTpl.map(t => `<div class="listrow"><span class="grow">${esc(t.n)}<small>${t.items.length} Artikel: ${esc(t.items.slice(0, 5).map(i => i.t).join(", "))}${t.items.length > 5 ? " …" : ""}</small></span><button class="rowdel" data-act="deltpl" data-id="${t.id}" aria-label="Vorlage löschen">✕</button></div>`).join("") : '<p class="hint" style="margin-top:0">Noch keine Vorlage. In der Einkaufsliste unten „Liste als Vorlage speichern“ tippen.</p>'}
-    ${setH("Waschmaschine und Spülmaschine")}${setSel("washMin", "„Waschmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"]])}${setSel("dishMin", "„Spülmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"], [210, "3,5 Stunden"], [240, "4 Stunden"]])}`;
+    ${setH("Waschmaschine und Spülmaschine")}${setSel("washMin", "„Waschmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"]])}${setSel("dishMin", "„Spülmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"], [210, "3,5 Stunden"], [240, "4 Stunden"]])}${typeof geraeteSet === "function" ? geraeteSet() : ""}`;
   },
   kalender() {
     return `${setH("Anzeigen")}${CALF.map(([k, l]) => setTgl("calFilter." + k, l, "im Kalender zeigen")).join("")}

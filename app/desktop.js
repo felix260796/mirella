@@ -879,7 +879,7 @@
   R.briefings = function () { return on ? briefHTML() : ORIG.briefings.apply(this, arguments); };
   if (ORIG.wetter) R.wetter = function () { return on ? wxHTML() : ORIG.wetter.apply(this, arguments); };
   R.einstellungen = function () { return on ? setHTML() : ORIG.einstellungen.apply(this, arguments); };
-  R.karten = function () { return on ? kartenHTML() : legacyHTML("Karten durchgehen", "", '<p class="hint">Das Durchgehen der Karten gibt es am iPhone (Kontakte) und am PC im breiten Fenster.</p>', "kd"); };
+  R.karten = function () { return on ? kartenHTML() : legacyHTML("Kontakte abgleichen", "", '<p class="hint">Kontakte abgleichen gibt es am iPhone (Kontakte) und am PC im breiten Fenster.</p>', "kd"); };
   if (ORIG.auswertungen) R.auswertungen = function () {
     if (!on) return ORIG.auswertungen.apply(this, arguments);
     if (typeof auswStats !== "function") return legacyHTML("Auswertungen", "Wie oft du wen erreichst, Geld und mehr", ORIG.auswertungen.apply(this, arguments), "aw");
@@ -910,60 +910,104 @@
   }
 
   /* ================================================================
-     KARTEN DURCHGEHEN (wie am iPhone, Fortschritt geteilt, siehe karten.js)
+     KONTAKTE ABGLEICHEN (iPhone-Telefonbuch, Geburtstags-Kalender und Mirella, Fortschritt geteilt, siehe karten.js)
+     v0.40.5: schnell (Treffer vorberechnet), Vergleich Feld für Feld mit Herkunft, alle Knöpfe immer da.
      ================================================================ */
-  let kdTab = "karten", kdPid = null, kdQ = "", kdM = null;
-  const kdRows = () => { const ql = q.trim().toLowerCase(); return KA.queue().map(c => Object.assign(c, { id: KA.cKey(c) })).filter(c => !ql || ((c.b ? c.title : fullName(c)) + " " + (c.tel || "") + " " + (c.org || "")).toLowerCase().includes(ql)); };
+  let kdTab = "karten", kdPid = null, kdQ = "", kdO = null, kdOFor = null, kdNm = null, kdCache = null;
+  const kdAll = () => KA.queue().map(c => Object.assign(c, { id: KA.cKey(c) }));
+  const kdRows = () => { const ql = q.trim().toLowerCase(), l = kdAll(); return !ql ? l : l.filter(c => ((c.b ? c.title : fullName(c)) + " " + (c.tel || "") + " " + (c.org || "")).toLowerCase().includes(ql)); };
   const kdName = c => c.b ? KA.bName(c) || c.title : fullName(c) || "(ohne Namen)";
+  const SRCN = { c: "iPhone-Telefonbuch", p: "Mirella", b: "Geburtstags-Kalender" };
+  const srcTag = (k, x) => `<span class="kdsrc kd-${k}">${esc(x || SRCN[k])}</span>`;
+  const SURE = ["Gleiche Nummer", "Gleiche E-Mail", "Gleicher Name", "Im Geburtstags-Kalender steht derselbe Name"];
+  const sure = w => SURE.includes(w);
   TB.k = {
     name: c => kdName(c),
     find: id => kdRows().find(c => c.id === id),
     cols: () => [
-      { k: "n", l: "Name", w: 220, v: c => `<b>${esc(kdName(c))}</b>${c.org && c.org !== fullName(c) ? ` <small class="mut">${esc(c.org)}</small>` : ""}` },
-      { k: "src", l: "Woher", w: 160, v: c => c.b ? "Geburtstags-Kalender" : "iPhone-Telefonbuch" },
-      { k: "tel", l: "Nummer", w: 160, v: c => esc(c.tel || "") + ((c.tels || []).length ? ` <small class="mut">+${c.tels.length}</small>` : "") },
-      { k: "bday", l: "Geburtstag", w: 110, v: c => esc(c.b ? KA.fmtMd(c.md) + (c.year || "") : KA.fmtB(c.bday || "")) },
-      { k: "hit", l: "Mögliche Treffer", w: 0, v: c => { const h = KA.cands(c, kdCache); return h.length ? `<span class="late">${pl(h.length, "Treffer", "Treffer")}</span> <small class="mut">${esc(h.slice(0, 2).map(x => x.e.name).join(", "))}</small>` : '<span class="mut">—</span>'; } }
+      { k: "n", l: "Name", w: 230, v: c => `<b>${esc(kdName(c))}</b>${c.org && c.org !== fullName(c) ? ` <small class="mut">${esc(c.org)}</small>` : ""}` },
+      { k: "src", l: "Kommt aus", w: 150, v: c => srcTag(c.b ? "b" : "c") },
+      { k: "hit", l: "Vorschlag", w: 0, v: c => { const h = KA.cands(c, kdCache); if (!h.length) return '<span class="mut">Neu, kein ähnlicher Kontakt</span>'; const x = h[0]; return `<b class="${sure(x.w) ? "kdok" : "late"}">${c.b || x.e.kind === "b" ? (sure(x.w) ? "Geburtstag übernehmen" : "Prüfen") : sure(x.w) ? "Zusammenführen" : "Prüfen"}</b> mit ${esc(x.e.name)} <small class="mut">(${esc(SRCN[x.e.kind])}${h.length > 1 ? `, ${h.length - 1} weitere` : ""})</small>`; } }
     ],
     order: () => kdRows().map(c => c.id)
   };
-  let kdCache = null;
-  const kdEnt = (id, list) => { if (id.startsWith("p:")) { const p = S.people.find(x => x.id === id.slice(2)); return p ? KA.ent(p, "p") : null; } const c = (list || KA.queue()).find(x => KA.cKey(x) === id); return c ? KA.ent(c, c.b ? "b" : "c") : null; };
-  const entSub = e => e.kind === "b" ? "Geburtstag im Kalender am " + KA.fmtMd(e.x.md) + (e.x.year || "") : [e.kind === "p" ? "schon in Mirella" : "weiterer Eintrag im Telefonbuch", e.x.tel, ...(e.x.tels || []).map(t => t.n), e.x.email, e.x.bday ? "Geburtstag " + KA.fmtB(e.x.bday) : ""].filter(Boolean).join(" · ");
-  function kdCardHTML(c) {
-    const rows = c.b ? [["Geburtstag", KA.fmtMd(c.md) + (c.year || "")], ["Eintrag im Kalender", c.title], ["Woher", "Nur im Geburtstags-Kalender, kein Eintrag im Telefonbuch"]]
-      : [c.org ? ["Firma", c.org] : null, c.tel ? [c.telL || "Nummer", c.tel] : null, ...(c.tels || []).map(t => [t.l || "Nummer", t.n]), ...[...new Set([c.email, ...(c.emails || [])].filter(Boolean))].map(m => ["E-Mail", m]), c.bday ? ["Geburtstag", KA.fmtB(c.bday) + (c.bsrc ? " (aus dem Kalender: „" + c.bsrc + "“)" : "")] : null, c.addr ? ["Adresse", c.addr] : null].filter(Boolean);
-    return `<table class="dtg mini dtkv"><tbody>${rows.length ? rows.map(([l, v]) => `<tr><td style="width:150px">${esc(l)}</td><td>${esc(v)}</td></tr>`).join("") : '<tr><td class="mut">Ohne Nummer, E-Mail und Geburtstag</td></tr>'}</tbody></table>`;
+  const kdEnt = (id, list) => { if (!id) return null; if (id.startsWith("p:")) { const p = S.people.find(x => x.id === id.slice(2)); return p ? KA.ent(p, "p") : null; } const c = (list || KA.queue()).find(x => KA.cKey(x) === id); return c ? KA.ent(c, c.b ? "b" : "c") : null; };
+  const entSub = e => e.kind === "b" ? "Geburtstag am " + KA.fmtMd(e.x.md) + (e.x.year || "") : [e.x.tel, ...(e.x.tels || []).map(t => t.n), e.x.email, e.x.bday ? "Geburtstag " + KA.fmtB(e.x.bday) : ""].filter(Boolean).join(" · ");
+  const uniq = (l, key) => [...new Map(l.filter(Boolean).map(v => [key(v) || v, v])).values()];
+  /* Felder eines Eintrags, gleich aufbereitet für alle drei Quellen */
+  function kdF(e) {
+    const x = e.x;
+    if (e.kind === "b") return { name: e.name || x.title, tels: [], mails: [], bday: KA.fmtMd(x.md) + (x.year || ""), bmd: x.md, org: "", addr: "", cal: x.title };
+    return { name: fullName(x) || "(ohne Namen)", tels: uniq([x.tel, ...(x.tels || []).map(t => t.n)], telKey), mails: uniq([x.email, ...(x.emails || [])].map(m => (m || "").toLowerCase()), m => m), bday: x.bday ? KA.fmtB(x.bday) : "", bmd: (x.bday || "").slice(5), org: x.org || "", addr: x.addr || "", cal: x.bsrc || "" };
+  }
+  /* So steht es nach dem Zusammenführen da (dieselben Regeln wie kdMerge / dtpmerge) */
+  function kdAfter(A, B, firstIsA, nameFromA) {
+    const f = firstIsA ? A : B, s = firstIsA ? B : A;
+    return { name: nameFromA ? A.name : B.name, tels: uniq([...f.tels, ...s.tels], telKey), mails: uniq([...f.mails, ...s.mails], m => m), bday: f.bday || s.bday, bmd: f.bmd || s.bmd, org: f.org || s.org, addr: f.addr || s.addr, cal: f.cal || s.cal };
+  }
+  function kdAfterB(t, b) { const keep = t.bday && !(t.bmd === b.bmd && b.bday.length > t.bday.length); return Object.assign({}, t, { bday: keep ? t.bday : b.bday, bmd: keep ? t.bmd : b.bmd, cal: b.cal }); }
+  /* Vergleich Feld für Feld: links, rechts, danach. Grün = gleich, gelb = verschieden, blau = kommt nur von dieser Seite */
+  function kdTable(A, B, D, hA, hB, radio) {
+    const R = [["Name", "name"], ["Nummer", "tels"], ["E-Mail", "mails"], ["Geburtstag", "bday"], ["Firma", "org"], ["Adresse", "addr"], ["Im Kalender", "cal"]];
+    const val = (f, k) => Array.isArray(f[k]) ? f[k] : f[k] ? [f[k]] : [];
+    const nk = k => k === "tels" ? (v => telKey(v) || v) : k === "bday" ? (v => v) : (v => normName(v));
+    const cell = (f, o, k) => { const vs = val(f, k), os = val(o, k); if (!vs.length) return '<span class="kdnone">—</span>'; const K = nk(k); return vs.map(v => { const same = k === "bday" ? f.bmd && f.bmd === o.bmd : os.some(w => K(w) === K(v)); return `<div class="${same ? "kdsame" : os.length && !Array.isArray(f[k]) ? "kddiff" : "kdonly"}">${esc(v)}</div>`; }).join(""); };
+    const rows = R.filter(([, k]) => val(A, k).length || val(B, k).length).map(([l, k]) => `<tr><th>${l}</th><td>${cell(A, B, k)}</td><td>${cell(B, A, k)}</td><td class="kdres">${k === "name" && radio ? radio : val(D, k).map(v => `<div>${esc(v)}</div>`).join("") || '<span class="kdnone">—</span>'}</td></tr>`).join("");
+    return `<table class="kdcmp"><thead><tr><th></th><th>${hA}</th><th>${hB}</th><th>Danach in Mirella</th></tr></thead><tbody>${rows}</tbody></table><p class="kdleg"><span class="kdsame">gleich</span> <span class="kddiff">verschieden</span> <span class="kdonly">nur auf einer Seite</span></p>`;
+  }
+  /* Aktueller Vergleich für die gewählte Karte */
+  function kdPair(c, list) {
+    if (kdOFor !== KA.cKey(c)) { kdOFor = KA.cKey(c); kdO = null; kdNm = null; }
+    const cs = KA.cands(c, list); let x = kdO ? cs.find(y => y.e.id === kdO) : cs[0];
+    if (!x && kdO) { const e = kdEnt(kdO, list); if (e) x = { e, w: "Von dir ausgewählt" }; else kdO = null; }
+    if (!x && cs.length) x = cs[0];
+    if (!x) return null;
+    const me = KA.ent(c, c.b ? "b" : "c"), o = x.e, bd = c.b || o.kind === "b";
+    const A = kdF(me), B = kdF(o), diff = !bd && normName(A.name) !== normName(B.name);
+    const nm = kdNm || (o.kind === "p" ? "o" : KA.nameToks(o.name).length < KA.nameToks(me.name).length ? "o" : "c");
+    const D = bd ? (c.b ? kdAfterB(B, A) : kdAfterB(A, B)) : kdAfter(A, B, o.kind !== "p" && nm === "c", nm === "c");
+    return { c, me, o, x, cs, bd, A, B, D, diff, nm };
+  }
+  function kdCompareHTML(k) {
+    const { c, o, x, cs, bd, A, B, D, diff, nm } = k;
+    const conflict = A.bmd && B.bmd && A.bmd !== B.bmd;
+    const rec = conflict ? ["warn", "Eher nicht zusammenführen: Die Geburtstage sind verschieden."] : x.w === "Von dir ausgewählt" ? ["maybe", "Von dir ausgewählt. Prüfe die Felder unten."] : sure(x.w) ? ["ok", "Empfehlung: " + (bd ? "Geburtstag übernehmen" : "zusammenführen") + ". " + x.w + "."] : ["maybe", "Unsicher: " + x.w + ". Bitte selbst entscheiden."];
+    const radio = diff ? [["c", A.name], ["o", B.name]].map(([v, n]) => `<label class="dtchk"><input type="radio" name="kdname" data-act="dtkmname" data-n="${v}"${nm === v ? " checked" : ""}> ${esc(n)}</label>`).join("<br>") : "";
+    const two = !bd && (o.kind === "c" || (o.kind === "p" && o.x.appleId && o.x.appleId !== c.appleId));
+    const foot = bd ? "Der Kalender bleibt, wie er ist. Der Geburtstag steht danach beim Kontakt." : two ? "Im iPhone-Telefonbuch bleibt danach ein Eintrag mit allen Nummern, der zweite wird dort gelöscht. Das macht dein iPhone, sobald du Mirella dort öffnest." : "Im iPhone-Telefonbuch wird nichts gelöscht. Der Eintrag gehört danach zum Kontakt in Mirella.";
+    const more = cs.length > 1 ? `<div class="kdmore"><span>Weitere ähnliche:</span>${cs.map(y => `<button class="pb sm${y.e.id === o.id ? " on" : ""}" data-act="dtkpick" data-k="${esc(y.e.id)}">${esc(y.e.name)} <small>${esc(SRCN[y.e.kind])}</small></button>`).join("")}</div>` : "";
+    return `<div class="kdrec kdrec-${rec[0]}">${esc(rec[1])}</div>${more}
+      ${kdTable(A, B, D, "Dieser Eintrag<br>" + srcTag(c.b ? "b" : "c"), "Ähnlicher Kontakt<br>" + srcTag(o.kind, o.kind === "c" ? "iPhone-Telefonbuch (2. Eintrag)" : ""), diff ? radio : "")}
+      <div class="dtbtnrow"><button class="pb pri" data-act="dtkmergego">${bd ? "Geburtstag übernehmen" : "Zusammenführen"} <kbd>Z</kbd></button><button class="pb" data-act="dtknotsame" data-k="${esc(o.id)}">Nicht dieselbe Person</button></div>
+      <p class="dtmut">${esc(foot)}</p>`;
+  }
+  function kdSoloHTML(c) {
+    const A = kdF(KA.ent(c, c.b ? "b" : "c")), R = [["Nummer", A.tels], ["E-Mail", A.mails], ["Geburtstag", A.bday ? [A.bday] : []], ["Firma", A.org ? [A.org] : []], ["Adresse", A.addr ? [A.addr] : []], ["Im Kalender", A.cal ? [A.cal] : []]].filter(r => r[1].length);
+    return `<table class="kdcmp solo"><tbody>${R.length ? R.map(([l, v]) => `<tr><th>${l}</th><td>${v.map(x => `<div>${esc(x)}</div>`).join("")}</td></tr>`).join("") : '<tr><td class="mut">Ohne Nummer, E-Mail und Geburtstag</td></tr>'}</tbody></table>`;
   }
   function kdHits(c, list) {
     const ql = normName(kdQ), qd = kdQ.replace(/\D/g, ""), me = KA.cKey(c);
     if (ql.length < 2 && qd.length < 3) return `<p class="dtmut">Mindestens zwei Buchstaben oder drei Ziffern. Gesucht wird in Mirella, im Telefonbuch und im Geburtstags-Kalender.</p>`;
     const all = S.people.filter(p => !p.arch).map(p => KA.ent(p, "p")).concat(list.filter(x => KA.cKey(x) !== me && !(c.b && x.b)).map(x => KA.ent(x, x.b ? "b" : "c")));
     const hits = all.filter(e => (ql.length >= 2 && (normName(e.name).includes(ql) || fuzzyHas(e.name + " " + (e.x.org || "") + " " + (e.kind === "b" ? e.x.title : ""), ql))) || (qd.length >= 3 && [e.x.tel, ...((e.x.tels || []).map(t => t.n))].some(n => (n || "").replace(/\D/g, "").includes(qd)))).slice(0, 30);
-    return hits.length ? `<table class="dtg mini"><thead><tr><th>Name</th><th>Was</th><th style="width:110px"></th></tr></thead><tbody>${hits.map(e => `<tr><td><b>${esc(e.name)}</b></td><td class="mut">${esc(entSub(e))}</td><td><button class="pb sm" data-act="dtkmerge" data-k="${esc(e.id)}">${e.kind === "b" || c.b ? "Geburtstag …" : "Verbinden …"}</button></td></tr>`).join("")}</tbody></table>` : '<p class="dtmut">Niemand gefunden.</p>';
+    return hits.length ? `<table class="dtg mini"><thead><tr><th>Name</th><th>Kommt aus</th><th>Was</th><th style="width:90px"></th></tr></thead><tbody>${hits.map(e => `<tr><td><b>${esc(e.name)}</b></td><td>${srcTag(e.kind)}</td><td class="mut">${esc(entSub(e))}</td><td><button class="pb sm" data-act="dtkpick" data-k="${esc(e.id)}">Vergleichen</button></td></tr>`).join("")}</tbody></table>` : '<p class="dtmut">Niemand gefunden.</p>';
   }
   function kdDetail(list) {
-    if (kdPid) {
-      const p = S.people.find(x => x.id === kdPid);
-      if (p) return `<div class="dtph">${avHTML(p)}<div><h2>${esc(fullName(p))} ist drin</h2><p>Jetzt kurz pflegen, dann ist der Kontakt fertig und kommt nicht wieder als Karte.${p.local ? " Ohne Nummer, deshalb steht er nur in Mirella." : ""}</p></div><span class="dtchg" id="dtchg"${fDirty ? "" : " hidden"}>● Geändert – Strg+S speichert</span></div>${pFormHTML(p).replace(/<button type="button" class="pb" data-act="dtplog">[\s\S]*?data-act="dtdel">Löschen …<\/button>/, "")}<div class="dtpad"><div class="dtbtnrow"><span class="dtgrow"></span><button class="pb pri" data-act="dtkdone">Fertig, nächste Karte</button></div></div>`;
-      kdPid = null;
-    }
     if (SEL.k.size > 1) {
-      const l = selOf("k"), ph = l.filter(c => !c.b);
-      return `<div class="dtph">${ic("people", 30)}<div><h2>${pl(l.length, "Karte", "Karten")} ausgewählt</h2><p>${esc(l.slice(0, 8).map(kdName).join(", "))}${l.length > 8 ? " …" : ""}</p></div></div><div class="dtpad"><div class="dtbtnrow col"><button class="pb" data-act="dtknicht">Alle nicht in Mirella …</button><button class="pb" data-act="dtklater">Alle später</button>${ph.length ? `<button class="pb" data-act="dtkdel">${ph.length === 1 ? "Ganz löschen …" : ph.length + " ganz löschen …"}</button>` : ""}<button class="pb" data-act="dtselnone">Auswahl aufheben</button></div><p class="dtmut">„Rein in Mirella“ und Verbinden gehen nur einzeln, damit nichts falsch zusammenkommt.</p></div>`;
+      const l = selOf("k");
+      return `<div class="dtph">${ic("people", 30)}<div><h2>${pl(l.length, "Kontakt", "Kontakte")} ausgewählt</h2><p>${esc(l.slice(0, 8).map(kdName).join(", "))}${l.length > 8 ? " …" : ""}</p></div></div><div class="dtpad"><div class="kdbar"><button class="pb" data-act="dtknicht">Alle nicht in Mirella …</button><button class="pb" data-act="dtkdel">Alle komplett löschen …</button><button class="pb" data-act="dtklater">Alle später</button><button class="pb" data-act="dtselnone">Auswahl aufheben</button></div><p class="dtmut">„Rein in Mirella“ und Zusammenführen gehen nur einzeln, damit nichts falsch zusammenkommt.</p></div>`;
     }
     const c = CUR.k && list.find(x => KA.cKey(x) === CUR.k);
-    if (!c) return noneHTML("people", "Keine Karte ausgewählt", "Links eine Karte anklicken. Mit Strg oder Umschalt mehrere wählen.");
-    const cands = KA.cands(c, list), lock = cands.length > 0;
-    return `<div class="dtph">${ic(c.b ? "gift" : "people", 30)}<div><h2>${esc(kdName(c))}</h2><p>${c.b ? "Nur im Geburtstags-Kalender" : "Aus dem iPhone-Telefonbuch, noch nicht in Mirella"}</p></div></div>
-      <div class="dtpad">${kdCardHTML(c)}
-      <div class="dtblock"><div class="dtblockh">1. Gehört das zu einem anderen Eintrag?</div>
-      ${cands.length ? `<p class="dtmut">Mirella hat ${cands.length === 1 ? "einen möglichen Treffer" : cands.length + " mögliche Treffer"} gefunden. Bitte bei jedem entscheiden.</p><table class="dtg mini"><thead><tr><th>Name</th><th>Was</th><th>Grund</th><th style="width:260px"></th></tr></thead><tbody>${cands.map(x => `<tr><td><b>${esc(x.e.name)}</b></td><td class="mut">${esc(entSub(x.e))}</td><td>${esc(x.w)}</td><td><div class="dtbtnrow tight"><button class="pb sm pri" data-act="dtkmerge" data-k="${esc(x.e.id)}">${x.e.kind === "b" || c.b ? "Geburtstag übernehmen …" : "Verbinden …"}</button><button class="pb sm" data-act="dtknotsame" data-k="${esc(x.e.id)}">Nicht dieselbe Person</button></div></td></tr>`).join("")}</tbody></table>` : '<p class="dtmut">Mirella hat keinen passenden Eintrag gefunden.</p>'}
-      <form class="dtadd" data-form="dtkq" onsubmit="return false"><input id="dtkq" placeholder="Selbst suchen und verbinden: Name oder Nummer" value="${esc(kdQ)}" autocomplete="off" aria-label="Selbst suchen und verbinden"></form><div id="dtkql">${kdQ ? kdHits(c, list) : ""}</div></div>
-      <div class="dtblock"><div class="dtblockh">2. Was soll mit ${c.b ? "diesem Geburtstag" : "diesem Eintrag"} passieren?</div>
-      ${lock ? '<p class="dtmut">„Rein in Mirella“ geht, sobald du oben bei jedem Treffer entschieden hast.</p>' : ""}
-      <div class="dtbtnrow"><button class="pb${lock ? "" : " pri"}" data-act="dtkrein"${lock ? " disabled" : ""}>Rein in Mirella${c.b ? " (ohne Nummer)" : ""}</button><button class="pb" data-act="dtknicht">Nicht in Mirella</button><button class="pb" data-act="dtklater">Später</button>${c.b ? "" : '<button class="pb" data-act="dtkdel">Ganz löschen …</button>'}</div>
-      <p class="dtmut">${c.b ? "„Nicht in Mirella“ lässt den Kalender, wie er ist." : "„Nicht in Mirella“ lässt den Eintrag im Telefonbuch und fragt nie wieder. Verbinden und Löschen im Telefonbuch macht dein iPhone, sobald du Mirella dort öffnest."}</p></div></div>`;
+    if (!c) return noneHTML("people", "Kein Kontakt ausgewählt", "Links einen Kontakt anklicken. Mit Strg oder Umschalt mehrere wählen.");
+    const k = kdPair(c, list), has = !!k;
+    const what = c.b ? "Nur im Geburtstags-Kalender, nicht im Telefonbuch" : "Im iPhone-Telefonbuch, noch nicht in Mirella";
+    return `<div class="dtph">${ic(c.b ? "gift" : "people", 30)}<div><h2>${esc(kdName(c))}</h2><p>${srcTag(c.b ? "b" : "c")} ${esc(what)}</p></div></div>
+      <div class="dtpad">
+      <div class="kdbar"><button class="pb${has ? "" : " pri"}" data-act="dtkrein" title="Wird ein Kontakt in Mirella">${has ? "Als eigenen Kontakt rein" : "Rein in Mirella"} <kbd>R</kbd></button><button class="pb" data-act="dtknicht" title="${c.b ? "Der Kalender bleibt, wie er ist" : "Bleibt im Telefonbuch"}, kommt nicht wieder">Nicht in Mirella <kbd>N</kbd></button><button class="pb kddel" data-act="dtkdel" title="${c.b ? "Auch aus dem iPhone-Kalender" : "Auch aus dem iPhone-Telefonbuch"}">Komplett löschen … <kbd>Entf</kbd></button><button class="pb" data-act="dtklater" title="Kommt am Ende nochmal">Später <kbd>S</kbd></button></div>
+      <p class="kdlegend"><b>Rein</b>: wird Kontakt in Mirella · <b>Nicht</b>: bleibt nur ${c.b ? "im Kalender" : "im Telefonbuch"}, fragt nie wieder · <b>Komplett löschen</b>: auch vom iPhone weg</p>
+      ${has ? `<div class="dtblock"><div class="dtblockh">Ähnlicher Kontakt gefunden</div>${kdCompareHTML(k)}</div>` : `<div class="dtblock"><div class="dtblockh">Kein ähnlicher Kontakt gefunden</div>${kdSoloHTML(c)}</div>`}
+      <details class="kdsearch"${kdQ ? " open" : ""}><summary>Anderen Kontakt suchen und vergleichen</summary><form class="dtadd" data-form="dtkq" onsubmit="return false"><input id="dtkq" placeholder="Name oder Nummer" value="${esc(kdQ)}" autocomplete="off" aria-label="Anderen Kontakt suchen"></form><div id="dtkql">${kdQ ? kdHits(c, list) : ""}</div></details>
+      </div>`;
   }
   /* Doppelte Kontakte in Mirella */
   function dupPairs() {
@@ -972,52 +1016,31 @@
     return pairs;
   }
   function dupHTML() {
-    const pairs = dupPairs(), info = p => [p.tel, p.email, p.bday ? "Geburtstag " + KA.fmtB(p.bday) : "", p.group].filter(Boolean).join(" · ");
-    return pairs.length ? `<table class="dtg"><thead><tr><th style="width:240px">Kontakt 1 (bleibt)</th><th style="width:240px">Kontakt 2</th><th style="width:200px">Grund</th><th></th></tr></thead><tbody>${pairs.map(([a, b, w]) => `<tr><td><button class="lnk" data-act="person" data-id="${a.id}"><b>${esc(fullName(a))}</b></button><br><small class="mut">${esc(info(a))}</small></td><td><button class="lnk" data-act="person" data-id="${b.id}"><b>${esc(fullName(b))}</b></button><br><small class="mut">${esc(info(b))}</small></td><td>${esc(w)}</td><td><div class="dtbtnrow tight"><button class="pb sm pri" data-act="dtpmerge" data-a="${a.id}" data-b="${b.id}">Zusammenführen …</button><button class="pb sm" data-act="dtpmerge" data-a="${b.id}" data-b="${a.id}">Andersherum …</button><button class="pb sm" data-act="dtpnotsame" data-a="${a.id}" data-b="${b.id}">Nicht dieselbe Person</button></div></td></tr>`).join("")}</tbody></table>` : `<div class="dtempty">Keine doppelten Kontakte in Mirella gefunden.</div>`;
+    const pairs = dupPairs();
+    if (!pairs.length) return `<div class="dtempty">Keine doppelten Kontakte in Mirella gefunden.</div>`;
+    return `<div class="dtpad kddups">${pairs.map(([a, b, w]) => { const A = kdF(KA.ent(a, "p")), B = kdF(KA.ent(b, "p")), D = kdAfter(A, B, true, true); return `<div class="kddup"><div class="kdrec kdrec-${sure(w) ? "ok" : "maybe"}">${esc(sure(w) ? "Empfehlung: zusammenführen. " + w + "." : "Unsicher: " + w + ". Bitte selbst entscheiden.")}</div>${kdTable(A, B, D, `<button class="lnk" data-act="person" data-id="${a.id}">Kontakt 1</button><br>${srcTag("p")}`, `<button class="lnk" data-act="person" data-id="${b.id}">Kontakt 2</button><br>${srcTag("p")}`, "")}<div class="dtbtnrow"><button class="pb pri" data-act="dtpmerge" data-a="${a.id}" data-b="${b.id}">Zusammenführen …</button><button class="pb" data-act="dtpmerge" data-a="${b.id}" data-b="${a.id}">Zusammenführen, Name von Kontakt 2 …</button><button class="pb" data-act="dtpnotsame" data-a="${a.id}" data-b="${b.id}">Nicht dieselbe Person</button></div></div>`; }).join("")}</div>`;
   }
   function kartenHTML() {
-    const list = KA.queue(); kdCache = list;
-    for (const id of [...SEL.k]) if (!list.some(c => KA.cKey(c) === id)) SEL.k.delete(id);
-    if (CUR.k && !list.some(c => KA.cKey(c) === CUR.k) && !kdPid) { CUR.k = null; }
-    if (!CUR.k && !kdPid && list.length && kdTab === "karten") { CUR.k = KA.cKey(list[0]); SEL.k.clear(); SEL.k.add(CUR.k); }
+    const list = kdAll(); kdCache = list;
+    for (const id of [...SEL.k]) if (!list.some(c => c.id === id)) SEL.k.delete(id);
+    if (CUR.k && !list.some(c => c.id === CUR.k)) CUR.k = null;
+    if (!CUR.k && list.length && kdTab === "karten") { CUR.k = list[0].id; SEL.k.clear(); SEL.k.add(CUR.k); }
     const wait = KA.waiting().length, box = S.kbox, pairs = kdTab === "dup" ? dupPairs().length : null;
-    const tabs = `<div class="dttabs" role="tablist"><button role="tab" data-act="dtktab" data-k="karten" aria-selected="${kdTab === "karten"}">Karten aus iPhone <small>(${list.length})</small></button><button role="tab" data-act="dtktab" data-k="dup" aria-selected="${kdTab === "dup"}">Doppelte in Mirella</button></div>`;
-    const sub = !box ? "noch keine Karten vom iPhone" : `${pl(list.length, "Karte", "Karten")} offen · Stand iPhone ${new Date(box.at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${wait ? ` · ${pl(wait, "Entscheidung wartet", "Entscheidungen warten")} aufs iPhone` : ""}`;
-    const head = `<div class="dthead"><b>Karten durchgehen</b><span>${esc(kdTab === "dup" ? pl(pairs, "mögliches Paar", "mögliche Paare") : sub)}</span><span class="dthint">Gleicher Fortschritt wie auf dem iPhone · Verbinden und Löschen nur per Klick, mit Rückfrage</span></div>${tabs}`;
+    const tabs = `<div class="dttabs" role="tablist"><button role="tab" data-act="dtktab" data-k="karten" aria-selected="${kdTab === "karten"}">Vom iPhone <small>(${list.length})</small></button><button role="tab" data-act="dtktab" data-k="dup" aria-selected="${kdTab === "dup"}">Doppelte in Mirella</button></div>`;
+    const sub = !box ? "noch nichts vom iPhone" : `${pl(list.length, "Kontakt", "Kontakte")} offen · Stand iPhone ${new Date(box.at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${wait ? ` · ${pl(wait, "Entscheidung wartet", "Entscheidungen warten")} aufs iPhone` : ""}`;
+    const head = `<div class="dthead"><b>Kontakte abgleichen</b><span>${esc(kdTab === "dup" ? pl(pairs, "mögliches Paar", "mögliche Paare") : sub)}</span><span class="dthint">Tasten: R rein · N nicht · Z zusammenführen · S später · Entf löschen</span></div>${tabs}`;
     if (kdTab === "dup") return `<div class="dtview">${head}<div class="dtbody"><section class="dtpane dtsingle" data-k="kdup">${dupHTML()}</section></div></div>`;
-    if (!box) return `<div class="dtview">${head}<div class="dtbody"><section class="dtpane dtsingle" data-k="kd">${noneHTML("phone", "Noch keine Karten vom iPhone", "Öffne Mirella einmal auf dem iPhone (ab Version 0.40.1). Dann liest es Telefonbuch und Geburtstags-Kalender und die offenen Karten erscheinen hier.")}</section></div></div>`;
-    const grid = gridHTML("k", list.map(c => Object.assign(c, { id: KA.cKey(c) })).filter(c => !q || ((c.b ? c.title : fullName(c)) + " " + (c.tel || "") + " " + (c.org || "")).toLowerCase().includes(q.trim().toLowerCase())), { empty: list.length ? "Nichts gefunden." : "Alles durchgegangen. Neue Einträge im Telefonbuch erscheinen hier, sobald das iPhone sie gelesen hat." });
-    return paneLayout(head, grid, kdDetail(list), "kd");
+    if (!box) return `<div class="dtview">${head}<div class="dtbody"><section class="dtpane dtsingle" data-k="kd">${noneHTML("phone", "Noch nichts vom iPhone", "Öffne Mirella einmal auf dem iPhone (ab Version 0.40.1). Dann liest es Telefonbuch und Geburtstags-Kalender, und die offenen Kontakte erscheinen hier.")}</section></div></div>`;
+    const grid = gridHTML("k", kdRows(), { empty: list.length ? "Nichts gefunden." : "Alles abgeglichen. Neue Einträge im Telefonbuch erscheinen hier, sobald das iPhone sie gelesen hat." });
+    return paneLayout(head, grid, kdDetail(list), "kd").replace('class="dtpane dtdetail"', 'class="dtpane dtdetail kdwide"');
   }
   /* Entscheidungen */
-  const kdCard = () => (kdCache || KA.queue()).find(c => KA.cKey(c) === CUR.k) || null;
+  const kdCard = () => (kdCache || kdAll()).find(c => KA.cKey(c) === CUR.k) || null;
   let kdSnap = [];
   const kdPre = () => { kdSnap = TB.k.order(); };
-  const kdNext = key => { const now = new Set(TB.k.order()), i = kdSnap.indexOf(key); let n = null; for (let j = i + 1; j < kdSnap.length && !n; j++) if (now.has(kdSnap[j]) && kdSnap[j] !== key) n = kdSnap[j]; for (let j = i - 1; j >= 0 && !n; j--) if (now.has(kdSnap[j]) && kdSnap[j] !== key) n = kdSnap[j]; CUR.k = n; SEL.k.clear(); if (n) SEL.k.add(n); kdQ = ""; };
+  const kdNext = key => { const now = new Set(TB.k.order()), i = kdSnap.indexOf(key); let n = null; for (let j = i + 1; j < kdSnap.length && !n; j++) if (now.has(kdSnap[j]) && kdSnap[j] !== key) n = kdSnap[j]; for (let j = i - 1; j >= 0 && !n; j--) if (now.has(kdSnap[j]) && kdSnap[j] !== key) n = kdSnap[j]; CUR.k = n; SEL.k.clear(); if (n) SEL.k.add(n); kdQ = ""; kdO = null; kdNm = null; };
   const bLinksS = () => (S.settings.bdayLinks = S.settings.bdayLinks || {});
   function kdDone(msg, key) { if (key) kdNext(key); lastMsg = msg; save(); render(true); origToast(msg + " · Strg+Z macht es rückgängig"); scrollSel(); }
-  function kdMergeSheet() {
-    const list = KA.queue(), c = list.find(x => KA.cKey(x) === kdM.c), o = kdM && kdEnt(kdM.o, list); if (!c || !o) { closeAll(); return; }
-    const me = KA.ent(c, c.b ? "b" : "c"), bd = c.b || o.kind === "b";
-    const lines = e => e.kind === "b" ? ["Geburtstag " + KA.fmtMd(e.x.md) + (e.x.year || ""), "aus deinem Geburtstags-Kalender"] : [e.x.org, ...[e.x.tel, ...(e.x.tels || []).map(t => t.n)].filter(Boolean), ...[...new Set([e.x.email, ...(e.x.emails || [])].filter(Boolean))], e.x.bday ? "Geburtstag " + KA.fmtB(e.x.bday) : "", e.kind === "p" ? "schon in Mirella" : "im iPhone-Telefonbuch"].filter(Boolean);
-    const box = e => `<td style="vertical-align:top;width:50%"><b>${esc(e.name)}</b>${lines(e).map(l => `<br><small class="mut">${esc(l)}</small>`).join("")}</td>`;
-    let mid = "", foot = "";
-    if (bd) {
-      const b = c.b ? me : o, t = c.b ? o : me;
-      mid = `<p>Der Geburtstag <b>${esc(KA.fmtMd(b.x.md) + (b.x.year || ""))}</b> wird bei <b>${esc(t.name)}</b> eingetragen${t.x.bday && t.x.bday.slice(5) !== b.x.md ? `. Achtung: Dort steht bisher ${esc(KA.fmtB(t.x.bday))}, das bleibt stehen` : ""}. Der Kalender-Eintrag bleibt, wie er ist, und kommt nicht mehr als eigene Karte.</p>`;
-    } else {
-      const diff = normName(me.name) !== normName(o.name);
-      if (diff) mid = `<p class="dtlabel">Welcher Name soll bleiben?</p><div class="dtbtnrow tight">${[["c", me.name], ["o", o.name]].map(([k, n]) => `<label class="dtchk"><input type="radio" name="kdname" data-act="dtkmname" data-n="${k}"${kdM.name === k ? " checked" : ""}> ${esc(n)}</label>`).join("")}</div>`;
-      const keepName = diff ? (kdM.name === "o" ? o.name : me.name) : me.name;
-      const tels = [...new Map([...(kdM.name === "o" ? [o, me] : [me, o])].flatMap(e => [e.x.tel, ...(e.x.tels || []).map(t => t.n)]).filter(Boolean).map(n => [telKey(n) || n, n])).values()];
-      const mails = [...new Set([me, o].flatMap(e => [e.x.email, ...(e.x.emails || [])]).filter(Boolean).map(m => m.toLowerCase()))];
-      const bdy = (kdM.name === "o" ? o.x.bday || me.x.bday : me.x.bday || o.x.bday) || "";
-      mid += `<p class="dtlabel">So steht es danach da</p><table class="dtg mini dtkv"><tbody><tr><td><b>${esc(keepName)}</b>${tels.map(n => `<br><small>${esc(n)}</small>`).join("")}${mails.map(m => `<br><small>${esc(m)}</small>`).join("")}${bdy ? `<br><small>Geburtstag ${esc(KA.fmtB(bdy))}</small>` : ""}</td></tr></tbody></table>`;
-      const two = o.kind === "c" || (o.kind === "p" && o.x.appleId && o.x.appleId !== c.appleId);
-      foot = `<p class="dtmut">${two ? "<b>Im iPhone-Telefonbuch</b> bleibt ein Eintrag mit allen Nummern, der zweite wird dort gelöscht. Das macht dein iPhone, sobald du Mirella dort öffnest." : "<b>Im iPhone-Telefonbuch</b> wird nichts gelöscht. Der Eintrag gehört danach zu dem Kontakt in Mirella."}</p>`;
-    }
-    openSheet(`<p class="stitle">${bd ? "Geburtstag übernehmen?" : "Diese beiden verbinden?"}</p><table class="dtg mini"><tbody><tr>${box(me)}${box(o)}</tr></tbody></table>${mid}${foot}<div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="dtkmergego">${bd ? "Ja, übernehmen" : "Ja, verbinden"}</button></div>`);
-  }
   function kdMerge(c, o, nameFrom) {
     const ck = KA.ckey(c), key = KA.cKey(c);
     if (c.b && o.kind === "b") return;
@@ -1034,12 +1057,12 @@
       if (!p.appleId) { p.appleId = c.appleId; delete p.local; }
       if (c.bk) bLinksS()[c.bk] = p.id;
       KA.addJob("link", { aid: c.appleId, ck, pid: p.id, key: c.bk || "", name: fullName(p) });
-      return kdDone("Verbunden mit " + fullName(p), key);
+      return kdDone("Zusammengeführt mit " + fullName(p), key);
     }
     const other = o.x, keep = nameFrom === "o" ? other : c, drop = keep === c ? other : c, nm = nameFrom === "o" ? other : c;
     KA.addJob("merge2", { keep: { aid: keep.appleId, ck: KA.ckey(keep) }, drop: { aid: drop.appleId, ck: KA.ckey(drop) }, dropData: JSON.parse(JSON.stringify(drop)), first: nm.first || "", last: nm.last || "", name: fullName(nm) });
     kdNext(key); CUR.k = "a:" + keep.appleId; SEL.k.clear(); SEL.k.add(CUR.k);
-    kdDone("Verbunden: " + fullName(nm));
+    kdDone("Zusammengeführt: " + fullName(nm));
   }
   function kdTake(c) {
     let p;
@@ -1061,23 +1084,37 @@
       KA.addJob("ign", { aid: c.appleId, ck, name: fullName(c) });
     }
   }
+  const kdNs = (me, o) => { const keys = KA.nsKeys(me, o), ns = (S.settings.notSame = S.settings.notSame || []); keys.forEach(k => { if (!ns.includes(k)) ns.push(k); }); KA.addJob("ns", { keys }); };
   Object.assign(ACT, {
     dtktab: el => { kdTab = el.dataset.k; render(true); },
-    dtkmerge: el => { const c = kdCard(), o = kdEnt(el.dataset.k || ""); if (!c || !o) return; const me = KA.ent(c, c.b ? "b" : "c"); kdM = { c: KA.cKey(c), o: o.id, name: c.b || o.kind === "b" ? "c" : o.kind === "p" ? "o" : KA.nameToks(o.name).length < KA.nameToks(me.name).length ? "o" : "c" }; kdMergeSheet(); },
-    dtkmname: el => { if (!kdM) return; kdM.name = el.dataset.n; kdMergeSheet(); },
-    dtkmergego: () => { kdPre(); const list = KA.queue(), c = kdM && list.find(x => KA.cKey(x) === kdM.c), o = kdM && kdEnt(kdM.o, list); if (!c || !o) { closeAll(); return; } const nm = kdM.name; kdM = null; closeAll(); kdQ = ""; kdMerge(c, o, nm); },
-    dtknotsame: el => { const c = kdCard(), o = kdEnt(el.dataset.k || ""); if (!c || !o) return; const keys = KA.nsKeys(KA.ent(c, c.b ? "b" : "c"), o), ns = (S.settings.notSame = S.settings.notSame || []); keys.forEach(k => { if (!ns.includes(k)) ns.push(k); }); KA.addJob("ns", { keys }); kdDone("Gemerkt: gehört nicht zusammen"); },
-    dtkrein: () => { kdPre(); const c = kdCard(); if (!c) return; if (KA.cands(c).length) { origToast("Erst bitte oben entscheiden: verbinden oder nicht dieselbe Person"); return; } const key = KA.cKey(c); const p = kdTake(c); kdNext(key); kdPid = p.id; fDirty = false; lastMsg = fullName(p) + " ist in Mirella"; save(); render(true); origToast(lastMsg); setTimeout(() => { const f = $("#pf-cyc"); if (f && !f.disabled) f.focus(); }, 30); },
-    dtkdone: () => { if (fDirty && !pFormSave()) return; kdPid = null; fDirty = false; render(true); scrollSel(); },
-    dtknicht: () => { kdPre(); const l = SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean); if (!l.length) return; if (l.length > 1 && !ask(`${l.length} Karten nicht in Mirella übernehmen? Sie bleiben im Telefonbuch und im Kalender und kommen nicht wieder.`)) return; kdNicht(l); const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; } kdDone(l.length === 1 ? (l[0].b ? "Kommt nicht nach Mirella. Der Kalender bleibt." : "Bleibt im Telefonbuch, kommt nicht nach Mirella") : pl(l.length, "Karte", "Karten") + " nicht übernommen", key); },
-    dtklater: () => { kdPre(); const l = SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean); if (!l.length) return; const t = Date.now(); l.forEach((c, i) => KA.addJob("later", { k: KA.cKey(c), at: t + i })); const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; } kdDone(l.length === 1 ? "Kommt am Ende nochmal" : pl(l.length, "Karte", "Karten") + " ans Ende gestellt", key); },
+    dtkpick: el => { kdO = el.dataset.k || null; kdNm = null; kdQ = ""; render(true); const d = $(".kdcmp"); if (d) d.scrollIntoView({ block: "nearest" }); },
+    dtkmerge: el => ACT.dtkpick(el),
+    dtkmname: el => { kdNm = el.dataset.n; render(true); },
+    dtkmergego: () => {
+      const c = kdCard(); if (!c) return; const k = kdPair(c, kdCache || kdAll()); if (!k) { origToast("Kein ähnlicher Kontakt zum Zusammenführen"); return; }
+      const D = k.D, info = [D.name, ...D.tels, ...D.mails, D.bday ? "Geburtstag " + D.bday : ""].filter(Boolean).join("\n");
+      if (!ask(k.bd ? `Geburtstag ${k.c.b ? k.A.bday : k.B.bday} bei ${k.c.b ? k.B.name : k.A.name} eintragen?\n\nDer Kalender bleibt, wie er ist.` : `„${k.A.name}“ (${k.c.b ? SRCN.b : SRCN.c}) und „${k.B.name}“ (${SRCN[k.o.kind]}) zusammenführen?\n\nDanach in Mirella:\n${info}`)) return;
+      kdPre(); kdQ = ""; kdMerge(c, k.o, k.nm);
+    },
+    dtknotsame: el => { const c = kdCard(), o = kdEnt(el.dataset.k || "", kdCache); if (!c || !o) return; kdNs(KA.ent(c, c.b ? "b" : "c"), o); kdO = null; kdNm = null; kdDone("Gemerkt: gehört nicht zusammen"); },
+    dtkrein: () => {
+      const c = kdCard(); if (!c) return; const cs = KA.cands(c, kdCache);
+      if (cs.length && !ask(`„${kdName(c)}“ als eigenen Kontakt in Mirella übernehmen?\n\nMirella merkt sich, dass ${cs.map(x => x.e.name).join(", ")} nicht dieselbe Person ist.`)) return;
+      kdPre(); const me = KA.ent(c, c.b ? "b" : "c"); cs.forEach(x => kdNs(me, x.e));
+      const key = KA.cKey(c), p = kdTake(c); kdDone(fullName(p) + " ist jetzt in Mirella", key);
+    },
+    dtkdone: () => { kdPid = null; render(true); },
+    dtknicht: () => { kdPre(); const l = SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean); if (!l.length) return; if (l.length > 1 && !ask(`${l.length} Kontakte nicht in Mirella übernehmen? Sie bleiben im Telefonbuch und im Kalender und kommen nicht wieder.`)) return; kdNicht(l); const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; } kdDone(l.length === 1 ? (l[0].b ? "Kommt nicht nach Mirella. Der Kalender bleibt." : "Bleibt im Telefonbuch, kommt nicht nach Mirella") : pl(l.length, "Kontakt", "Kontakte") + " nicht übernommen", key); },
+    dtklater: () => { kdPre(); const l = SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean); if (!l.length) return; const t = Date.now(); l.forEach((c, i) => KA.addJob("later", { k: KA.cKey(c), at: t + i })); const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; } kdDone(l.length === 1 ? "Kommt am Ende nochmal" : pl(l.length, "Kontakt", "Kontakte") + " ans Ende gestellt", key); },
     dtkdel: () => {
       kdPre();
-      const l = (SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean)).filter(c => !c.b); if (!l.length) return;
-      if (!ask(l.length === 1 ? `„${fullName(l[0])}“ ganz löschen?\n\nDer Eintrag verschwindet aus dem iPhone-Telefonbuch und über iCloud von deinen anderen Geräten. Das macht dein iPhone, sobald du Mirella dort öffnest.` : `${l.length} Einträge ganz löschen?\n\n${l.slice(0, 10).map(fullName).join(", ")}${l.length > 10 ? " …" : ""}\n\nSie verschwinden aus dem iPhone-Telefonbuch und über iCloud von deinen anderen Geräten. Das macht dein iPhone, sobald du Mirella dort öffnest.`)) return;
-      l.forEach(c => KA.addJob("del", { aid: c.appleId, ck: KA.ckey(c), name: fullName(c) }));
+      const l = SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean); if (!l.length) return;
+      const nb = l.filter(c => c.b).length, nc = l.length - nb;
+      const where = [nc ? "aus dem iPhone-Telefonbuch (und über iCloud von deinen anderen Geräten)" : "", nb ? "aus deinem iPhone-Kalender, für alle Jahre" : ""].filter(Boolean).join(" und ");
+      if (!ask(l.length === 1 ? `„${kdName(l[0])}“ komplett löschen?\n\nDer Eintrag verschwindet ${where}. Das macht dein iPhone, sobald du Mirella dort öffnest.` : `${l.length} Einträge komplett löschen?\n\n${l.slice(0, 10).map(kdName).join(", ")}${l.length > 10 ? " …" : ""}\n\nSie verschwinden ${where}. Das macht dein iPhone, sobald du Mirella dort öffnest.`)) return;
+      l.forEach(c => { if (c.b) { bLinksS()[c.key] = "x"; KA.addJob("bdel", { key: c.key, title: c.title, md: c.md }); } else KA.addJob("del", { aid: c.appleId, ck: KA.ckey(c), name: fullName(c) }); });
       const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; }
-      kdDone(l.length === 1 ? "Wird gelöscht, auch im Telefonbuch" : pl(l.length, "Eintrag", "Einträge") + " werden gelöscht, auch im Telefonbuch", key);
+      kdDone(l.length === 1 ? "Wird komplett gelöscht, auch auf dem iPhone" : pl(l.length, "Eintrag", "Einträge") + " werden komplett gelöscht, auch auf dem iPhone", key);
     },
     dtpmerge: el => {
       const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b) return;
@@ -1092,9 +1129,15 @@
       if (two) KA.addJob("pmerge", { keep: a.id, drop: b.id, dropAid: bAid, dck: bCk, name: fullName(a) });
       lastMsg = "Zusammengeführt: " + fullName(a); save(); render(true); origToast(lastMsg + " · Strg+Z macht es rückgängig");
     },
-    dtpnotsame: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b) return; const keys = KA.nsKeys(KA.ent(a, "p"), KA.ent(b, "p")), ns = (S.settings.notSame = S.settings.notSame || []); keys.forEach(k => { if (!ns.includes(k)) ns.push(k); }); KA.addJob("ns", { keys }); lastMsg = "Gemerkt: gehört nicht zusammen"; save(); render(true); origToast(lastMsg); }
+    dtpnotsame: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b) return; kdNs(KA.ent(a, "p"), KA.ent(b, "p")); lastMsg = "Gemerkt: gehört nicht zusammen"; save(); render(true); origToast(lastMsg); }
   });
-  document.addEventListener("input", e => { if (on && e.target.id === "dtkq") { kdQ = e.target.value; const c = kdCard(), l = $("#dtkql"); if (c && l) l.innerHTML = kdQ ? kdHits(c, kdCache || KA.queue()) : ""; } });
+  document.addEventListener("input", e => { if (on && e.target.id === "dtkq") { kdQ = e.target.value; const c = kdCard(), l = $("#dtkql"); if (c && l) l.innerHTML = kdQ ? kdHits(c, kdCache || kdAll()) : ""; } });
+  /* Tasten beim Abgleichen: R rein, N nicht, Z zusammenführen, S später (Entf löscht über die normale Tabelle) */
+  document.addEventListener("keydown", e => {
+    if (!on || view !== "karten" || kdTab !== "karten" || e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || $("#sheet").classList.contains("open") || document.querySelector(".dtpop,#dtpal")) return;
+    const f = { r: "dtkrein", n: "dtknicht", z: "dtkmergego", s: "dtklater" }[e.key.toLowerCase()]; if (!f || !kdCard()) return;
+    e.preventDefault(); e.stopImmediatePropagation(); ACT[f]();
+  }, true);
 
   /* ================================================================
      MENÜLEISTE, SYMBOLLEISTE, ORDNER-BAUM, STATUSLEISTE
@@ -1131,7 +1174,7 @@
     const kontakte = CF.map(([k, l, icn, t]) => it("p:" + k, l, ic(icn, 14), S.people.filter(t).length || "", inP && cf === k, 1)).join("")
       + node("gruppen", "p:all", "Gruppen", ic("folder", 14), "", false, 1, S.groups.map(g => it("p:g:" + g, g, ic("folder", 14), grpN(g) || "", inP && cf === "g:" + g, 2, "g:" + g, ` data-grp="${esc(g)}"`)).join("") + it("p:nogrp", "Ohne Gruppe", ic("none", 14), S.people.filter(p => !p.arch && !p.group).length || "", inP && cf === "nogrp", 2, "g:") + `<button class="dti add" data-act="dtnewgrp" style="--l:2"><span class="tw"></span><span class="ic">${ic("plus", 14)}</span><span class="l">Neue Gruppe …</span></button>`)
       + it("p:arch", "Archiv", ic("arch", 14), S.people.filter(p => p.arch).length || "", inP && cf === "arch", 1, "arch")
-      + it("kd", "Karten durchgehen", ic("check", 14), KA.queue().length || "", m === "kd" && kdTab === "karten", 1)
+      + it("kd", "Kontakte abgleichen", ic("check", 14), KA.queue().length || "", m === "kd" && kdTab === "karten", 1)
       + it("kdup", "Doppelte zusammenführen", ic("people", 14), "", m === "kd" && kdTab === "dup", 1);
     const aufgaben = AREAS.map(A => { const n = S.todos.filter(t => t.area === A.id && !t.done && t.list === "todo").length; return it("t:a:" + A.id, A.n, `<i class="dtdot sq" style="--c:${A.c}"></i>`, n || "", m === "t" && tf === "a:" + A.id, 1, "a:" + A.id); }).join("");
     const bereiche = AREAS.map(A => { const here = m === "b" && area === A.id, open = fold("b_" + A.id) ? false : here || !!P.fold["o_" + A.id]; return node("b_" + A.id, "b:" + A.id, A.n, `<span class="aic" style="--ac:${A.c}">${IC[A.ic] || ""}</span>`, "", here && !open, 1, subsOf(A.id).map(([k, l]) => it("b:" + A.id + ":" + k, l, "", subCount(A.id, k) || "", here && bsub() === k, 2)).join(""), open); }).join("");
@@ -1162,10 +1205,10 @@
     } else if (m === "kd") {
       const kc = kdTab === "karten" && !kdPid && SEL.k.size ? selOf("k") : [], one = kc.length === 1 ? kc[0] : null;
       if (kdTab === "karten") {
-        G.push({ l: "Karte", big: [b("newp", "Rein in Mirella", "dtkrein", {}, !one || KA.cands(one).length > 0, "Übernehmen und gleich pflegen")], small: [b("none", "Nicht in Mirella", "dtknicht", {}, !kc.length), b("next", "Später", "dtklater", {}, !kc.length), b("del", "Ganz löschen …", "dtkdel", {}, !kc.some(c => !c.b), "Auch im iPhone-Telefonbuch (Entf)")] });
-        if (kdPid) G.push({ l: "Pflege", big: [b("check", "Fertig, nächste Karte", "dtkdone")], small: [b("save", "Speichern", "dtpsave", {}, !fDirty, "Speichern (Strg+S)")] });
+        const hit = !!one && KA.cands(one, kdCache).length > 0;
+        G.push({ l: "Kontakt", big: [b("newp", "Rein in Mirella", "dtkrein", {}, !one, "Wird Kontakt in Mirella (R)")].concat(hit ? [b("people", "Zusammen­führen", "dtkmergego", {}, false, "Mit dem ähnlichen Kontakt (Z)")] : []), small: [b("none", "Nicht in Mirella", "dtknicht", {}, !kc.length, "Bleibt nur im Telefonbuch (N)"), b("next", "Später", "dtklater", {}, !kc.length, "Später (S)"), b("del", "Komplett löschen …", "dtkdel", {}, !kc.length, "Auch auf dem iPhone (Entf)")] });
       }
-      G.push({ l: "Durchgehen", small: [Object.assign(b("list", "Karten aus iPhone", "dtktab", { k: "karten" }), { on: kdTab === "karten" }), Object.assign(b("people", "Doppelte in Mirella", "dtktab", { k: "dup" }), { on: kdTab === "dup" }), b("sync", "Jetzt abgleichen", "dtsync")] });
+      G.push({ l: "Abgleichen", small: [Object.assign(b("list", "Vom iPhone", "dtktab", { k: "karten" }), { on: kdTab === "karten" }), Object.assign(b("people", "Doppelte in Mirella", "dtktab", { k: "dup" }), { on: kdTab === "dup" }), b("sync", "Jetzt abgleichen", "dtsync")] });
     } else if (m === "t") {
       G.push({ l: "Neu", big: [b("newt", "Neue Aufgabe", "dtnewt", {}, false, "Neue Aufgabe mit allen Feldern")], small: [b("check", "Erledigt", "dttdone", {}, !tAny, "Erledigt (Leertaste)"), b("del", "Löschen", "dtdel", {}, !tAny, "Löschen (Entf)")] });
       G.push({ l: "Verschieben", small: [b("today", "Auf heute", "dttmove", { d: today() }, !tAny), b("next", "Auf morgen", "dttmove", { d: addDays(today(), 1) }, !tAny), b("cal", "Nächster Montag", "dttmove", { d: nextMonday() }, !tAny)] });
@@ -1281,7 +1324,7 @@
         ["Löschen …", "Entf", () => delP(selOf("p")), inP && ps.length > 0],
         "-",
         ["Gruppe umbenennen …", "", () => renameGroup(cf.slice(2)), cf.startsWith("g:")],
-        ["Karten durchgehen (iPhone-Kontakte, Geburtstage)", "", () => go("kd")],
+        ["Kontakte abgleichen (iPhone-Telefonbuch, Geburtstage)", "", () => go("kd")],
         ["Doppelte Kontakte zusammenführen", "", () => go("kdup")]
       ]],
       ["Aufgabe", [
@@ -1407,7 +1450,7 @@
     if (tb === "s") return [...edit, ["Im Wagen / wieder offen", "Leertaste", () => selOf("s").forEach(x => toggleTodo(x.id))], ["Löschen …", "Entf", () => ACT.dtdel()]];
     if (tb === "i") return [...edit, ["Formular öffnen", "Enter", () => { const f = $(".dtiform input,.dtiform select"); if (f) f.focus(); }], ["PDF hinzufügen …", "", () => ACT.pdffor({ dataset: { id } })], ["Bild / Scan …", "", () => ACT.docfor({ dataset: { id } })], "-", ["Löschen …", "Entf", () => ACT.dtdel()]];
     if (tb === "d") { const d = TB.d.find(id); return [...edit, ["Öffnen", "Enter", () => viewPhoto(d.photo)], ["Bearbeiten …", "", () => ACT.editdoc({ dataset: { id } })], "-", ["Löschen …", "Entf", () => ACT.dtdel()]]; }
-    if (tb === "k") { const l = selOf("k"), one = l.length === 1 ? l[0] : null; return [["Rein in Mirella", "", () => ACT.dtkrein(), !!one && !KA.cands(one).length], ["Nicht in Mirella", "", () => ACT.dtknicht()], ["Später", "", () => ACT.dtklater()], "-", ["Ganz löschen …", "Entf", () => ACT.dtkdel(), l.some(c => !c.b)]]; }
+    if (tb === "k") { const l = selOf("k"), one = l.length === 1 ? l[0] : null; return [["Rein in Mirella", "R", () => ACT.dtkrein(), !!one], ["Zusammenführen …", "Z", () => ACT.dtkmergego(), !!one && KA.cands(one, kdCache).length > 0], ["Nicht in Mirella", "N", () => ACT.dtknicht()], ["Später", "S", () => ACT.dtklater()], "-", ["Komplett löschen …", "Entf", () => ACT.dtkdel()]]; }
     if (tb === "r") { const b = TB.r.find(id); return [["Öffnen", "Enter", () => openBrief(id)], ...(b && !b.remote ? ["-", ["Löschen …", "Entf", () => ACT.dtdel()]] : [])]; }
     return [...edit, ["Löschen …", "Entf", () => ACT.dtdel()]];
   }

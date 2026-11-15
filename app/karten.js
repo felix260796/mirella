@@ -66,7 +66,7 @@ const KA = (() => {
     for (const j of jobs()) {
       if (j.op === "ns") for (const k of j.keys || []) if (!ns.includes(k)) { ns.push(k); ch = true; }
       if (j.op === "ign") for (const k of [j.aid, j.ck]) if (k && !ign.includes(k)) { ign.push(k); ch = true; }
-      if (j.op === "bx" && !links[j.key]) { links[j.key] = "x"; ch = true; }
+      if ((j.op === "bx" || j.op === "bdel") && !links[j.key]) { links[j.key] = "x"; ch = true; }
       if ((j.op === "blink" || j.op === "take" || j.op === "link") && j.key && !links[j.key] && !gone.has(j.pid) && S.people.some(p => p.id === j.pid)) { links[j.key] = j.pid; ch = true; }
     }
     return ch;
@@ -77,14 +77,26 @@ const KA = (() => {
     for (const j of jobs()) {
       if (["del", "take", "link", "ign"].includes(j.op) && j.aid) h.add("a:" + j.aid);
       if (j.op === "merge2" && j.drop) h.add("a:" + j.drop.aid);
-      if (["bcard", "blink", "bx"].includes(j.op) && j.key) h.add("b:" + j.key);
+      if (["bcard", "blink", "bx", "bdel"].includes(j.op) && j.key) h.add("b:" + j.key);
     }
     return h;
   }
   /* Offene Karten aus dem iPhone-Stand, mit allem, was am PC schon entschieden ist */
+  /* Schnell: Warteschlange und Treffer werden nur neu gerechnet, wenn sich etwas geändert hat */
+  let qSig = "", qVal = [], cSig = "", cIdx = null, cMemo = new Map();
+  function sig() {
+    const st = S.settings || {}, box = S.kbox || {};
+    let h = 0; for (const p of S.people) { const t = p.id + (p.first || "") + (p.last || "") + (p.nick || "") + (p.tel || "") + (p.email || "") + (p.bday || "") + (p.appleId || "") + (p.arch ? 1 : 0) + (p.tels || []).length; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; }
+    return [h, box.at, (box.cards || []).length, (box.bdays || []).length, jobs().length, (S.kjDone || []).length, S.people.length, S.people.filter(p => p.appleId).length, S.people.filter(p => p.arch).length, (st.appleIgnored || []).length, (st.notSame || []).length, Object.keys(st.bdayLinks || {}).length].join("|");
+  }
   function queue() {
     const box = S.kbox; if (!box) return [];
-    applyS();
+    const sg = sig(); if (sg === qSig) return qVal;
+    if (applyS()) { /* Nachgetragenes ändert die Kennung */ }
+    qVal = queueRaw(); qSig = sig(); return qVal;
+  }
+  function queueRaw() {
+    const box = S.kbox;
     const ign = new Set(S.settings.appleIgnored || []), links = S.settings.bdayLinks || {}, have = new Set(S.people.map(p => p.appleId).filter(Boolean)), hid = hiddenKeys();
     const later = {}; for (const j of jobs()) if (j.op === "later") later[j.k] = Math.max(later[j.k] || 0, j.at);
     const cards = (box.cards || []).filter(c => !ign.has(c.appleId) && !ign.has(ckey(c)) && !have.has(c.appleId) && !hid.has("a:" + c.appleId)).map(c => JSON.parse(JSON.stringify(c)));
@@ -98,19 +110,32 @@ const KA = (() => {
     return cards.concat(bdays).sort((x, y) => (later[cKey(x)] || 0) - (later[cKey(y)] || 0) || nm(x).localeCompare(nm(y)));
   }
   /* Mögliche Treffer für eine Karte (wie am iPhone): sichere zuerst, ein schwacher nur, wenn er eindeutig ist */
+  /* Vorauswahl: nur Einträge mit gleicher Nummer, E-Mail oder ähnlichem Namensanfang/-ende werden genau verglichen */
+  const bKeys = e => [...e.tels.map(t => "t:" + t), ...e.mails.map(m => "m:" + m), ...e.toks.filter(t => t.length > 1).flatMap(t => ["a:" + t.slice(0, 3), "z:" + t.slice(-3)])];
+  function index(q) {
+    const s = sig(); if (cIdx && cSig === s) return cIdx;
+    const all = S.people.filter(p => !p.arch).map(p => ent(p, "p")).concat(q.map(c => ent(c, c.b ? "b" : "c")));
+    const m = new Map(); for (const e of all) for (const k of new Set(bKeys(e))) { let l = m.get(k); if (!l) m.set(k, l = []); l.push(e); }
+    cIdx = { all, m }; cSig = s; cMemo = new Map(); return cIdx;
+  }
+  function near(e, idx) { const out = new Set(); for (const k of new Set(bKeys(e))) for (const x of idx.m.get(k) || []) out.add(x); return [...out]; }
+  /* Mögliche Treffer für eine Karte (wie am iPhone): sichere zuerst, ein schwacher nur, wenn er eindeutig ist */
   function cands(card, q) {
     q = q || queue();
+    const idx = index(q), ck = cKey(card); if (cMemo.has(ck)) return cMemo.get(ck);
     const me = ent(card, card.b ? "b" : "c"), ns = new Set(S.settings.notSame || []), out = [];
-    const others = S.people.filter(p => !p.arch).map(p => ent(p, "p")).concat(q.filter(c => cKey(c) !== cKey(card)).map(c => ent(c, c.b ? "b" : "c")));
+    const others = near(me, idx).filter(e => e.id !== me.id);
     for (const e of others) { const w = matchWhy(me, e); if (w && !nsHas(ns, me, e)) out.push({ e, w }); }
     const strong = out.filter(x => !x.w.startsWith("~")), weak = out.filter(x => x.w.startsWith("~"));
-    if (strong.length || weak.length !== 1) return strong;
-    const w = weak[0], bEnt = me.kind === "b" ? me : w.e, oEnt = me.kind === "b" ? w.e : me;
-    const all = others.concat([me]).filter(e => e.kind !== "b" && e.id !== oEnt.id);
-    if (all.some(e => matchWhy(bEnt, e))) return strong;
-    return [{ e: w.e, w: w.w.slice(1) }];
+    let res = strong;
+    if (!strong.length && weak.length === 1) {
+      const w = weak[0], bEnt = me.kind === "b" ? me : w.e, oEnt = me.kind === "b" ? w.e : me;
+      const all = near(bEnt, idx).filter(e => e.kind !== "b" && e.id !== oEnt.id);
+      if (!all.some(e => matchWhy(bEnt, e))) res = [{ e: w.e, w: w.w.slice(1) }];
+    }
+    cMemo.set(ck, res); return res;
   }
   /* Telefonbuch-Teil eines Auftrags noch offen? (wartet aufs iPhone) */
-  const waiting = () => { const d = doneSet(); return jobs().filter(j => !d.has(j.id) && ["take", "link", "merge2", "del", "bcard", "pmerge"].includes(j.op)); };
+  const waiting = () => { const d = doneSet(); return jobs().filter(j => !d.has(j.id) && ["take", "link", "merge2", "del", "bcard", "pmerge", "bdel"].includes(j.op)); };
   return { BSTOP, ckey, bName, nameToks, fmtMd, fmtB, cKey, ent, tokMatch, matchWhy, nsKeys, nsHas, bApply, extraLabel, jobs, doneSet, addJob, applyS, hiddenKeys, queue, cands, waiting };
 })();

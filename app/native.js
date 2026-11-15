@@ -1148,6 +1148,112 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
   ACT.nunignore = () => { if (!ask("Alle aussortierten Kontakte wieder als Vorschlag auf „Heute“ zeigen?")) return; S.settings.appleIgnored = []; N.lastContacts = 0; nSave(); save(); tick(); toast("Sie erscheinen gleich wieder als Vorschlag"); };
   ACT.nfreigaben = () => { N.setup = false; nSave(); wizard(); };
 
+  /* ---------- Karten auch am PC (v0.40.1) ----------
+     Das iPhone legt die offenen Karten als S.kbox in den Abgleich (nur lesen, ohne Rohdaten).
+     Am PC getroffene Entscheidungen stehen als Aufträge in S.kjobs (siehe karten.js). Was das Telefonbuch betrifft,
+     führt dieses Gerät hier aus und trägt die Kennung in S.kjDone ein. Gefragt wurde dabei schon am PC. */
+  const kjTries = {};
+  const kjAid = (aid, ck) => { if (aid && liveIds.has(aid)) return aid; const c = (N.cards || []).find(x => x.appleId === aid || (ck && ckey(x) === ck)); return c ? c.appleId : ""; };
+  async function kJobsRun() {
+    if (typeof KA === "undefined") return 0;
+    if (KA.applyS()) save();
+    const done = KA.doneSet(), todo = KA.jobs().filter(j => !done.has(j.id));
+    if (!todo.length) return 0;
+    let n = 0, phone = 0;
+    const fin = j => { (S.kjDone = S.kjDone || []).push(j.id); n++; };
+    for (const j of todo) {
+      try {
+        if (j.op === "later") { if (j.k) (N.later = N.later || {})[j.k] = j.at; fin(j); continue; }
+        if (["ns", "ign", "bx", "blink"].includes(j.op)) { if (j.op === "ign" && j.aid) { const a = kjAid(j.aid, j.ck); if (a) { for (const [k, v] of Object.entries(bPend())) if (v === a) { bLinks()[k] = "x"; delete bPend()[k]; } dropCard(a); } } fin(j); continue; }
+        if (j.op === "take") {
+          const p = S.people.find(x => x.id === j.pid), a = kjAid(j.aid, j.ck);
+          if (p && a) { N.aid[p.id] = a; if (!p.appleId) p.appleId = a; for (const [k, v] of Object.entries(bPend())) if (v === a) { bLinks()[k] = p.id; delete bPend()[k]; } dropCard(a); }
+          fin(j); continue;
+        }
+        if (j.op === "bcard") {
+          const a = kjAid(j.aid, j.ck), c = (N.cards || []).find(x => x.appleId === a);
+          if (c && !c.bsrc) { bApply(j.b, c); c.bsrc = j.b.title; bPend()[j.key] = a; }
+          fin(j); continue;
+        }
+        if (!MC) { fin(j); continue; }
+        if (j.op === "link") {
+          const p = S.people.find(x => x.id === j.pid), a = kjAid(j.aid, j.ck);
+          if (p && a) {
+            const la = liveAid(p), two = la && la !== a;
+            if (two) { await MC.merge({ keep: la, drop: a }); phone++; } else { N.aid[p.id] = a; if (!p.appleId) p.appleId = a; delete p.local; }
+            try { if (MC.upsert) await MC.upsert({ id: two ? la : a, given: p.first || "", family: p.last || "" }); } catch (e) { console.warn("Name", e); }
+            for (const [k, v] of Object.entries(bPend())) if (v === a) { bLinks()[k] = p.id; delete bPend()[k]; }
+            delete N.cs[p.id]; dropCard(a);
+          }
+          fin(j); continue;
+        }
+        if (j.op === "merge2") {
+          const ka = kjAid(j.keep.aid, j.keep.ck), da = kjAid(j.drop.aid, j.drop.ck);
+          if (ka && da && ka !== da) {
+            await MC.merge({ keep: ka, drop: da }); phone++;
+            const live = (N.cards || []).find(x => x.appleId === ka), drop = (N.cards || []).find(x => x.appleId === da) || j.dropData;
+            if (live && drop) { mergeInto(live, drop, extraLabel(drop, live)); live.emails = [...new Set([...(live.emails || []), ...(drop.emails || [])])]; if (j.first != null) { live.first = j.first; live.last = j.last; } }
+            if (j.first != null && MC.upsert) { try { await MC.upsert({ id: ka, given: j.first || "", family: j.last || "" }); } catch (e) { console.warn("Name", e); } }
+            for (const [k, v] of Object.entries(bPend())) if (v === da) bPend()[k] = ka;
+            dropCard(da);
+          }
+          fin(j); continue;
+        }
+        if (j.op === "del") {
+          const a = kjAid(j.aid, j.ck);
+          if (a) { await MC.remove({ id: a }); phone++; for (const [k, v] of Object.entries(bPend())) if (v === a) delete bPend()[k]; dropCard(a); }
+          fin(j); continue;
+        }
+        if (j.op === "pmerge") {
+          const keep = S.people.find(x => x.id === j.keep), ka = keep ? liveAid(keep) : "", da = (N.aid[j.drop] && liveIds.has(N.aid[j.drop]) ? N.aid[j.drop] : "") || kjAid(j.dropAid, j.dck);
+          if (ka && da && ka !== da) { await MC.merge({ keep: ka, drop: da }); phone++; dropCard(da); delete N.cs[keep.id]; }
+          fin(j); continue;
+        }
+        fin(j);
+      } catch (e) {
+        console.warn("PC-Auftrag", j.op, e);
+        kjTries[j.id] = (kjTries[j.id] || 0) + 1;
+        if (kjTries[j.id] >= 3) { fin(j); alert("Eine Entscheidung vom PC ging im iPhone-Telefonbuch nicht (" + (j.name || j.op) + "). Bitte dort einmal nachsehen.\n" + (e && e.message || e)); }
+      }
+    }
+    if (n) { nSave(); save(); }
+    if (phone) toast(phone === 1 ? "Eine Entscheidung vom PC ist jetzt auch im Telefonbuch" : phone + " Entscheidungen vom PC sind jetzt auch im Telefonbuch");
+    return phone;
+  }
+  /* Offene Karten für den PC bereitstellen */
+  function kPublish() {
+    if (!N.contactsDone) return;
+    const pk = {}; for (const [k, v] of Object.entries(bPend())) pk[v] = k;
+    const q = kQueue();
+    const cards = q.filter(c => !c.b).map(c => ({ appleId: c.appleId, first: c.first || "", last: c.last || "", tel: c.tel || "", telL: c.telL || "", tels: c.tels || [], email: c.email || "", emails: c.emails || [], org: c.org || "", bday: c.bday || "", addr: c.addr || "", bsrc: c.bsrc || "", bk: pk[c.appleId] || "" }));
+    const bdays = q.filter(c => c.b).map(c => ({ key: c.key, title: c.title, md: c.md, year: c.year || 0, tok: c.tok || [] }));
+    const nb = (N.bdays || []).length, body = JSON.stringify({ cards, bdays, nb });
+    if (S.kbox && JSON.stringify({ cards: S.kbox.cards, bdays: S.kbox.bdays, nb: S.kbox.nb }) === body) return;
+    S.kbox = { at: Date.now(), cards, bdays, nb }; save();
+  }
+  let kpcBusy = false, kpcT = null;
+  async function kPcRun() {
+    if (!N.setup || kpcBusy) return;
+    if (contactsBusy) { clearTimeout(kpcT); kpcT = setTimeout(kPcRun, 3000); return; }
+    kpcBusy = true;
+    try {
+      const d = KA.doneSet(), open = KA.jobs().some(j => !d.has(j.id));
+      const fresh = open || !liveIds.size;
+      if (fresh) await contactsSync(false);
+      if (open && (await kJobsRun())) await contactsSync(false);
+      if (fresh) await calendarBirthdays();
+      kPublish();
+      if (open && (view === "kdurch" || view === "menschen")) render(true);
+    } catch (e) { console.warn("Karten PC", e); }
+    kpcBusy = false;
+  }
+  setTimeout(kPcRun, 4000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { clearTimeout(kpcT); kpcT = setTimeout(kPcRun, 4000); } });
+  if (typeof syApply === "function") { const kOrigApply = syApply; syApply = function () { const r = kOrigApply.apply(this, arguments); clearTimeout(kpcT); kpcT = setTimeout(kPcRun, 1500); return r; }; }
+  /* Entscheidungen am iPhone auch dem PC zeigen */
+  const kOrigRender2 = render;
+  render = function () { const r = kOrigRender2.apply(this, arguments); if (view === "kdurch" || view === "aufraeumen") { clearTimeout(kpcT); kpcT = setTimeout(kPcRun, 2500); } return r; };
+
   /* ---------- Start ---------- */
   const tick = async () => {
     if (!N.setup) return;

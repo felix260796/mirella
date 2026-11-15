@@ -1765,12 +1765,13 @@
 
   /* ---------- Ein / Aus je nach Fenstergröße ---------- */
   function apply() {
-    const want = !!(MQ && MQ.matches);
-    if (want === on) return;
+    const want = !!(MQ && MQ.matches) && !NATIVE;
+    if (want === on) { root.classList.toggle("dtready", on); return; }
     on = want; root.classList.toggle("dt", on);
     if (on) { closeAll(); base = snap(); }
     else { unshell(); const sc = $("#screen"); delete sc.dataset.view; sc.classList.remove("dtpanes", "dtold"); }
     if (typeof S !== "undefined" && S) render(true);
+    root.classList.toggle("dtready", on); if (!on) root.classList.remove("dtboot");
   }
   window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (on) shell(); });
   window.addEventListener("appinstalled", () => { installEvt = null; if (on) shell(); });

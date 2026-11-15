@@ -430,3 +430,7 @@ html.dt .sheet .tgl.big small{font-size:11px}
 html.dt .dtaw{table-layout:auto;width:100%}
 html.dt .dtaw td{white-space:normal;vertical-align:top;overflow:visible;text-overflow:clip}
 html.dt .dtaw td:last-child{max-width:55%}
+/* Start am Computer: neutraler Ladebildschirm statt kurz der iPhone-Ansicht */
+html.dtboot:not(.dtready) #phone,html.dtboot:not(.dtready) .fab,html.dtboot:not(.dtready) .tabbar{visibility:hidden}
+html.dtboot:not(.dtready) body{background:#f3f3f3}
+html.dtboot:not(.dtready) body::after{content:"Mirella wird geladen …";position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);font:13px "Segoe UI",system-ui,sans-serif;color:#555}

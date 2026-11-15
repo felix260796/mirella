@@ -4,6 +4,10 @@
 function losHinweise() {
   const nowM = new Date(), hmNow = L.pad(nowM.getHours()) + ":" + L.pad(nowM.getMinutes()), t = today(), items = [];
   const add = (ic, html) => items.push(`<div class="losrow"><span class="losic">${ic}</span><div>${html}</div></div>`);
+  // Noch erledigen: Aufgaben mit Uhrzeit, deren Zeit schon vorbei ist (z. B. Waschmaschine/Spülmaschine ausräumen), ganz oben
+  const ueber = S.todos.filter(x => x.list === "todo" && !x.done && x.date && x.time && (x.date < t || (x.date === t && x.time < hmNow)))
+    .sort((a, b) => (/maschine ausräumen/i.test(b.t) ? 1 : 0) - (/maschine ausräumen/i.test(a.t) ? 1 : 0) || ((a.date + a.time) < (b.date + b.time) ? -1 : 1));
+  if (ueber.length) add("❗", `<b>Noch erledigen</b>${ueber.slice(0, 5).map(x => `<small>${esc(x.t)}</small>`).join("")}${ueber.length > 5 ? `<small>und ${ueber.length - 5} weitere</small>` : ""}`);
   // Wetter
   try {
     if (typeof WX !== "undefined" && WX && WX.cur) {

@@ -93,7 +93,7 @@ function blank() {
       cats: [], wxName: "", wxLat: null, wxLon: null, showBrief: 1, showWx: 1,
       nerv: { anrufe: 1, aufgaben: 1, geburtstage: 1, fristen: 1, supplements: 1 }, nervEvery: 30, nervSound: 1,
       calFilter: { geb: 1, erin: 1, todo: 1, anruf: 1, treff: 1 }, calStart: "monat",
-      income: 0, budgets: {}, contractLead: 30, huLead: 28, pcEvery: 0, pcLast: "", washMin: 120, suppMorning: "07:30", suppNoon: "12:30", suppEvening: "21:00",
+      income: 0, budgets: {}, contractLead: 30, huLead: 28, pcEvery: 0, pcLast: "", washMin: 90, dishMin: 150, suppMorning: "07:30", suppNoon: "12:30", suppEvening: "21:00",
       homeAddr: "", homeLat: null, homeLon: null, prepMin: 30, bufMin: 10, alarmCount: 3, alarmGap: 5, gmapsKey: ""
     },
     briefings: [],
@@ -640,7 +640,7 @@ const SETS = {
     ${setH("Prioritäten")}<p class="hint" style="margin-top:0">Jede Aufgabe kann eine Stufe bekommen. Hoch steht immer oben und erscheint auf „Heute“, auch ohne Datum.</p>
     ${PRIOS.map(([, n, c]) => `<div class="set"><span><i class="pdot" style="background:${c}"></i> ${n}</span></div>`).join("")}
     ${setH("Einkaufs-Vorlagen")}${S.shopTpl.length ? S.shopTpl.map(t => `<div class="listrow"><span class="grow">${esc(t.n)}<small>${t.items.length} Artikel: ${esc(t.items.slice(0, 5).map(i => i.t).join(", "))}${t.items.length > 5 ? " …" : ""}</small></span><button class="rowdel" data-act="deltpl" data-id="${t.id}" aria-label="Vorlage löschen">✕</button></div>`).join("") : '<p class="hint" style="margin-top:0">Noch keine Vorlage. In der Einkaufsliste unten „Liste als Vorlage speichern“ tippen.</p>'}
-    ${setH("Waschmaschine")}${setSel("washMin", "„Waschmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"]])}`;
+    ${setH("Waschmaschine und Spülmaschine")}${setSel("washMin", "„Waschmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"]])}${setSel("dishMin", "„Spülmaschine läuft“", "dann erinnere ich dich nach", [[60, "1 Stunde"], [90, "1,5 Stunden"], [120, "2 Stunden"], [150, "2,5 Stunden"], [180, "3 Stunden"], [210, "3,5 Stunden"], [240, "4 Stunden"]])}`;
   },
   kalender() {
     return `${setH("Anzeigen")}${CALF.map(([k, l]) => setTgl("calFilter." + k, l, "im Kalender zeigen")).join("")}

@@ -105,7 +105,7 @@
      Tabellen: Auswahl (Strg / Umschalt), Sortieren, Zellen ändern
      p Kontakte, t Aufgaben, s Einkauf, i Einträge eines Bereichs, e Ausgaben, g Sparziele, d Dokumente, n Notizen, r Briefings
      ================================================================ */
-  const SEL = { p: new Set(), t: new Set(), s: new Set(), i: new Set(), e: new Set(), g: new Set(), d: new Set(), n: new Set(), r: new Set() };
+  const SEL = { k: new Set(), p: new Set(), t: new Set(), s: new Set(), i: new Set(), e: new Set(), g: new Set(), d: new Set(), n: new Set(), r: new Set() };
   const ANCH = {}, CUR = {}, ACOL = {};
   let ED = null; // gerade geänderte Zelle { tb, id, k }
   const TB = {};
@@ -120,7 +120,7 @@
     else if (e && e.shiftKey && ANCH[tb] && list.includes(ANCH[tb])) { const a = list.indexOf(ANCH[tb]), b = list.indexOf(id); S0.clear(); list.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => S0.add(x)); }
     else { S0.clear(); S0.add(id); ANCH[tb] = id; }
     setCur(tb, S0.has(id) ? id : (S0.size ? [...S0][S0.size - 1] : null));
-    if (tb === "p") pNew = false; if (tb === "i") iNew = null;
+    if (tb === "p") pNew = false; if (tb === "i") iNew = null; if (tb === "k") { kdPid = null; kdQ = ""; }
     if (tb === "r") { const b = S.briefings.find(x => x.id === id); if (b && !b.read && S0.size === 1) { b.read = true; origSaveDt(); base = snap(); } }
     render(true); scrollSel();
   }
@@ -129,6 +129,7 @@
     if (view === "menschen" || view === "akte") return "p";
     if (view === "todos") return todoList === "einkauf" ? "s" : "t";
     if (view === "briefings") return "r";
+    if (view === "karten") return kdTab === "karten" && !kdPid ? "k" : null;
     if (view === "bereich") { const s = bsub(); return s === "exp" ? "e" : s === "goals" ? "g" : s === "notes" ? "n" : s === "docs" ? "d" : s.startsWith("k:") ? "i" : null; }
     return null;
   }
@@ -878,6 +879,7 @@
   R.briefings = function () { return on ? briefHTML() : ORIG.briefings.apply(this, arguments); };
   if (ORIG.wetter) R.wetter = function () { return on ? wxHTML() : ORIG.wetter.apply(this, arguments); };
   R.einstellungen = function () { return on ? setHTML() : ORIG.einstellungen.apply(this, arguments); };
+  R.karten = function () { return on ? kartenHTML() : legacyHTML("Karten durchgehen", "", '<p class="hint">Das Durchgehen der Karten gibt es am iPhone (Kontakte) und am PC im breiten Fenster.</p>', "kd"); };
   if (ORIG.auswertungen) R.auswertungen = function () {
     if (!on) return ORIG.auswertungen.apply(this, arguments);
     if (typeof auswStats !== "function") return legacyHTML("Auswertungen", "Wie oft du wen erreichst, Geld und mehr", ORIG.auswertungen.apply(this, arguments), "aw");
@@ -908,9 +910,196 @@
   }
 
   /* ================================================================
+     KARTEN DURCHGEHEN (wie am iPhone, Fortschritt geteilt, siehe karten.js)
+     ================================================================ */
+  let kdTab = "karten", kdPid = null, kdQ = "", kdM = null;
+  const kdRows = () => { const ql = q.trim().toLowerCase(); return KA.queue().map(c => Object.assign(c, { id: KA.cKey(c) })).filter(c => !ql || ((c.b ? c.title : fullName(c)) + " " + (c.tel || "") + " " + (c.org || "")).toLowerCase().includes(ql)); };
+  const kdName = c => c.b ? KA.bName(c) || c.title : fullName(c) || "(ohne Namen)";
+  TB.k = {
+    name: c => kdName(c),
+    find: id => kdRows().find(c => c.id === id),
+    cols: () => [
+      { k: "n", l: "Name", w: 220, v: c => `<b>${esc(kdName(c))}</b>${c.org && c.org !== fullName(c) ? ` <small class="mut">${esc(c.org)}</small>` : ""}` },
+      { k: "src", l: "Woher", w: 160, v: c => c.b ? "Geburtstags-Kalender" : "iPhone-Telefonbuch" },
+      { k: "tel", l: "Nummer", w: 160, v: c => esc(c.tel || "") + ((c.tels || []).length ? ` <small class="mut">+${c.tels.length}</small>` : "") },
+      { k: "bday", l: "Geburtstag", w: 110, v: c => esc(c.b ? KA.fmtMd(c.md) + (c.year || "") : KA.fmtB(c.bday || "")) },
+      { k: "hit", l: "Mögliche Treffer", w: 0, v: c => { const h = KA.cands(c, kdCache); return h.length ? `<span class="late">${pl(h.length, "Treffer", "Treffer")}</span> <small class="mut">${esc(h.slice(0, 2).map(x => x.e.name).join(", "))}</small>` : '<span class="mut">—</span>'; } }
+    ],
+    order: () => kdRows().map(c => c.id)
+  };
+  let kdCache = null;
+  const kdEnt = (id, list) => { if (id.startsWith("p:")) { const p = S.people.find(x => x.id === id.slice(2)); return p ? KA.ent(p, "p") : null; } const c = (list || KA.queue()).find(x => KA.cKey(x) === id); return c ? KA.ent(c, c.b ? "b" : "c") : null; };
+  const entSub = e => e.kind === "b" ? "Geburtstag im Kalender am " + KA.fmtMd(e.x.md) + (e.x.year || "") : [e.kind === "p" ? "schon in Mirella" : "weiterer Eintrag im Telefonbuch", e.x.tel, ...(e.x.tels || []).map(t => t.n), e.x.email, e.x.bday ? "Geburtstag " + KA.fmtB(e.x.bday) : ""].filter(Boolean).join(" · ");
+  function kdCardHTML(c) {
+    const rows = c.b ? [["Geburtstag", KA.fmtMd(c.md) + (c.year || "")], ["Eintrag im Kalender", c.title], ["Woher", "Nur im Geburtstags-Kalender, kein Eintrag im Telefonbuch"]]
+      : [c.org ? ["Firma", c.org] : null, c.tel ? [c.telL || "Nummer", c.tel] : null, ...(c.tels || []).map(t => [t.l || "Nummer", t.n]), ...[...new Set([c.email, ...(c.emails || [])].filter(Boolean))].map(m => ["E-Mail", m]), c.bday ? ["Geburtstag", KA.fmtB(c.bday) + (c.bsrc ? " (aus dem Kalender: „" + c.bsrc + "“)" : "")] : null, c.addr ? ["Adresse", c.addr] : null].filter(Boolean);
+    return `<table class="dtg mini dtkv"><tbody>${rows.length ? rows.map(([l, v]) => `<tr><td style="width:150px">${esc(l)}</td><td>${esc(v)}</td></tr>`).join("") : '<tr><td class="mut">Ohne Nummer, E-Mail und Geburtstag</td></tr>'}</tbody></table>`;
+  }
+  function kdHits(c, list) {
+    const ql = normName(kdQ), qd = kdQ.replace(/\D/g, ""), me = KA.cKey(c);
+    if (ql.length < 2 && qd.length < 3) return `<p class="dtmut">Mindestens zwei Buchstaben oder drei Ziffern. Gesucht wird in Mirella, im Telefonbuch und im Geburtstags-Kalender.</p>`;
+    const all = S.people.filter(p => !p.arch).map(p => KA.ent(p, "p")).concat(list.filter(x => KA.cKey(x) !== me && !(c.b && x.b)).map(x => KA.ent(x, x.b ? "b" : "c")));
+    const hits = all.filter(e => (ql.length >= 2 && (normName(e.name).includes(ql) || fuzzyHas(e.name + " " + (e.x.org || "") + " " + (e.kind === "b" ? e.x.title : ""), ql))) || (qd.length >= 3 && [e.x.tel, ...((e.x.tels || []).map(t => t.n))].some(n => (n || "").replace(/\D/g, "").includes(qd)))).slice(0, 30);
+    return hits.length ? `<table class="dtg mini"><thead><tr><th>Name</th><th>Was</th><th style="width:110px"></th></tr></thead><tbody>${hits.map(e => `<tr><td><b>${esc(e.name)}</b></td><td class="mut">${esc(entSub(e))}</td><td><button class="pb sm" data-act="dtkmerge" data-k="${esc(e.id)}">${e.kind === "b" || c.b ? "Geburtstag …" : "Verbinden …"}</button></td></tr>`).join("")}</tbody></table>` : '<p class="dtmut">Niemand gefunden.</p>';
+  }
+  function kdDetail(list) {
+    if (kdPid) {
+      const p = S.people.find(x => x.id === kdPid);
+      if (p) return `<div class="dtph">${avHTML(p)}<div><h2>${esc(fullName(p))} ist drin</h2><p>Jetzt kurz pflegen, dann ist der Kontakt fertig und kommt nicht wieder als Karte.${p.local ? " Ohne Nummer, deshalb steht er nur in Mirella." : ""}</p></div><span class="dtchg" id="dtchg"${fDirty ? "" : " hidden"}>● Geändert – Strg+S speichert</span></div>${pFormHTML(p).replace(/<button type="button" class="pb" data-act="dtplog">[\s\S]*?data-act="dtdel">Löschen …<\/button>/, "")}<div class="dtpad"><div class="dtbtnrow"><span class="dtgrow"></span><button class="pb pri" data-act="dtkdone">Fertig, nächste Karte</button></div></div>`;
+      kdPid = null;
+    }
+    if (SEL.k.size > 1) {
+      const l = selOf("k"), ph = l.filter(c => !c.b);
+      return `<div class="dtph">${ic("people", 30)}<div><h2>${pl(l.length, "Karte", "Karten")} ausgewählt</h2><p>${esc(l.slice(0, 8).map(kdName).join(", "))}${l.length > 8 ? " …" : ""}</p></div></div><div class="dtpad"><div class="dtbtnrow col"><button class="pb" data-act="dtknicht">Alle nicht in Mirella …</button><button class="pb" data-act="dtklater">Alle später</button>${ph.length ? `<button class="pb" data-act="dtkdel">${ph.length === 1 ? "Ganz löschen …" : ph.length + " ganz löschen …"}</button>` : ""}<button class="pb" data-act="dtselnone">Auswahl aufheben</button></div><p class="dtmut">„Rein in Mirella“ und Verbinden gehen nur einzeln, damit nichts falsch zusammenkommt.</p></div>`;
+    }
+    const c = CUR.k && list.find(x => KA.cKey(x) === CUR.k);
+    if (!c) return noneHTML("people", "Keine Karte ausgewählt", "Links eine Karte anklicken. Mit Strg oder Umschalt mehrere wählen.");
+    const cands = KA.cands(c, list), lock = cands.length > 0;
+    return `<div class="dtph">${ic(c.b ? "gift" : "people", 30)}<div><h2>${esc(kdName(c))}</h2><p>${c.b ? "Nur im Geburtstags-Kalender" : "Aus dem iPhone-Telefonbuch, noch nicht in Mirella"}</p></div></div>
+      <div class="dtpad">${kdCardHTML(c)}
+      <div class="dtblock"><div class="dtblockh">1. Gehört das zu einem anderen Eintrag?</div>
+      ${cands.length ? `<p class="dtmut">Mirella hat ${cands.length === 1 ? "einen möglichen Treffer" : cands.length + " mögliche Treffer"} gefunden. Bitte bei jedem entscheiden.</p><table class="dtg mini"><thead><tr><th>Name</th><th>Was</th><th>Grund</th><th style="width:260px"></th></tr></thead><tbody>${cands.map(x => `<tr><td><b>${esc(x.e.name)}</b></td><td class="mut">${esc(entSub(x.e))}</td><td>${esc(x.w)}</td><td><div class="dtbtnrow tight"><button class="pb sm pri" data-act="dtkmerge" data-k="${esc(x.e.id)}">${x.e.kind === "b" || c.b ? "Geburtstag übernehmen …" : "Verbinden …"}</button><button class="pb sm" data-act="dtknotsame" data-k="${esc(x.e.id)}">Nicht dieselbe Person</button></div></td></tr>`).join("")}</tbody></table>` : '<p class="dtmut">Mirella hat keinen passenden Eintrag gefunden.</p>'}
+      <form class="dtadd" data-form="dtkq" onsubmit="return false"><input id="dtkq" placeholder="Selbst suchen und verbinden: Name oder Nummer" value="${esc(kdQ)}" autocomplete="off" aria-label="Selbst suchen und verbinden"></form><div id="dtkql">${kdQ ? kdHits(c, list) : ""}</div></div>
+      <div class="dtblock"><div class="dtblockh">2. Was soll mit ${c.b ? "diesem Geburtstag" : "diesem Eintrag"} passieren?</div>
+      ${lock ? '<p class="dtmut">„Rein in Mirella“ geht, sobald du oben bei jedem Treffer entschieden hast.</p>' : ""}
+      <div class="dtbtnrow"><button class="pb${lock ? "" : " pri"}" data-act="dtkrein"${lock ? " disabled" : ""}>Rein in Mirella${c.b ? " (ohne Nummer)" : ""}</button><button class="pb" data-act="dtknicht">Nicht in Mirella</button><button class="pb" data-act="dtklater">Später</button>${c.b ? "" : '<button class="pb" data-act="dtkdel">Ganz löschen …</button>'}</div>
+      <p class="dtmut">${c.b ? "„Nicht in Mirella“ lässt den Kalender, wie er ist." : "„Nicht in Mirella“ lässt den Eintrag im Telefonbuch und fragt nie wieder. Verbinden und Löschen im Telefonbuch macht dein iPhone, sobald du Mirella dort öffnest."}</p></div></div>`;
+  }
+  /* Doppelte Kontakte in Mirella */
+  function dupPairs() {
+    const pairs = [], seen = new Set(), ns = new Set(S.settings.notSame || []);
+    for (const p of S.people) { if (seen.has(p.id) || p.arch) continue; for (const d of findDups(p, p.id)) { if (seen.has(d.id) || d.arch) continue; if (KA.nsHas(ns, KA.ent(p, "p"), KA.ent(d, "p"))) continue; pairs.push([p, d, KA.matchWhy(KA.ent(p, "p"), KA.ent(d, "p")) || "Ähnlich"]); } seen.add(p.id); }
+    return pairs;
+  }
+  function dupHTML() {
+    const pairs = dupPairs(), info = p => [p.tel, p.email, p.bday ? "Geburtstag " + KA.fmtB(p.bday) : "", p.group].filter(Boolean).join(" · ");
+    return pairs.length ? `<table class="dtg"><thead><tr><th style="width:240px">Kontakt 1 (bleibt)</th><th style="width:240px">Kontakt 2</th><th style="width:200px">Grund</th><th></th></tr></thead><tbody>${pairs.map(([a, b, w]) => `<tr><td><button class="lnk" data-act="person" data-id="${a.id}"><b>${esc(fullName(a))}</b></button><br><small class="mut">${esc(info(a))}</small></td><td><button class="lnk" data-act="person" data-id="${b.id}"><b>${esc(fullName(b))}</b></button><br><small class="mut">${esc(info(b))}</small></td><td>${esc(w)}</td><td><div class="dtbtnrow tight"><button class="pb sm pri" data-act="dtpmerge" data-a="${a.id}" data-b="${b.id}">Zusammenführen …</button><button class="pb sm" data-act="dtpmerge" data-a="${b.id}" data-b="${a.id}">Andersherum …</button><button class="pb sm" data-act="dtpnotsame" data-a="${a.id}" data-b="${b.id}">Nicht dieselbe Person</button></div></td></tr>`).join("")}</tbody></table>` : `<div class="dtempty">Keine doppelten Kontakte in Mirella gefunden.</div>`;
+  }
+  function kartenHTML() {
+    const list = KA.queue(); kdCache = list;
+    for (const id of [...SEL.k]) if (!list.some(c => KA.cKey(c) === id)) SEL.k.delete(id);
+    if (CUR.k && !list.some(c => KA.cKey(c) === CUR.k) && !kdPid) { CUR.k = null; }
+    if (!CUR.k && !kdPid && list.length && kdTab === "karten") { CUR.k = KA.cKey(list[0]); SEL.k.clear(); SEL.k.add(CUR.k); }
+    const wait = KA.waiting().length, box = S.kbox, pairs = kdTab === "dup" ? dupPairs().length : null;
+    const tabs = `<div class="dttabs" role="tablist"><button role="tab" data-act="dtktab" data-k="karten" aria-selected="${kdTab === "karten"}">Karten aus iPhone <small>(${list.length})</small></button><button role="tab" data-act="dtktab" data-k="dup" aria-selected="${kdTab === "dup"}">Doppelte in Mirella</button></div>`;
+    const sub = !box ? "noch keine Karten vom iPhone" : `${pl(list.length, "Karte", "Karten")} offen · Stand iPhone ${new Date(box.at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${wait ? ` · ${pl(wait, "Entscheidung wartet", "Entscheidungen warten")} aufs iPhone` : ""}`;
+    const head = `<div class="dthead"><b>Karten durchgehen</b><span>${esc(kdTab === "dup" ? pl(pairs, "mögliches Paar", "mögliche Paare") : sub)}</span><span class="dthint">Gleicher Fortschritt wie auf dem iPhone · Verbinden und Löschen nur per Klick, mit Rückfrage</span></div>${tabs}`;
+    if (kdTab === "dup") return `<div class="dtview">${head}<div class="dtbody"><section class="dtpane dtsingle" data-k="kdup">${dupHTML()}</section></div></div>`;
+    if (!box) return `<div class="dtview">${head}<div class="dtbody"><section class="dtpane dtsingle" data-k="kd">${noneHTML("phone", "Noch keine Karten vom iPhone", "Öffne Mirella einmal auf dem iPhone (ab Version 0.40.1). Dann liest es Telefonbuch und Geburtstags-Kalender und die offenen Karten erscheinen hier.")}</section></div></div>`;
+    const grid = gridHTML("k", list.map(c => Object.assign(c, { id: KA.cKey(c) })).filter(c => !q || ((c.b ? c.title : fullName(c)) + " " + (c.tel || "") + " " + (c.org || "")).toLowerCase().includes(q.trim().toLowerCase())), { empty: list.length ? "Nichts gefunden." : "Alles durchgegangen. Neue Einträge im Telefonbuch erscheinen hier, sobald das iPhone sie gelesen hat." });
+    return paneLayout(head, grid, kdDetail(list), "kd");
+  }
+  /* Entscheidungen */
+  const kdCard = () => (kdCache || KA.queue()).find(c => KA.cKey(c) === CUR.k) || null;
+  let kdSnap = [];
+  const kdPre = () => { kdSnap = TB.k.order(); };
+  const kdNext = key => { const now = new Set(TB.k.order()), i = kdSnap.indexOf(key); let n = null; for (let j = i + 1; j < kdSnap.length && !n; j++) if (now.has(kdSnap[j]) && kdSnap[j] !== key) n = kdSnap[j]; for (let j = i - 1; j >= 0 && !n; j--) if (now.has(kdSnap[j]) && kdSnap[j] !== key) n = kdSnap[j]; CUR.k = n; SEL.k.clear(); if (n) SEL.k.add(n); kdQ = ""; };
+  const bLinksS = () => (S.settings.bdayLinks = S.settings.bdayLinks || {});
+  function kdDone(msg, key) { if (key) kdNext(key); lastMsg = msg; save(); render(true); origToast(msg + " · Strg+Z macht es rückgängig"); scrollSel(); }
+  function kdMergeSheet() {
+    const list = KA.queue(), c = list.find(x => KA.cKey(x) === kdM.c), o = kdM && kdEnt(kdM.o, list); if (!c || !o) { closeAll(); return; }
+    const me = KA.ent(c, c.b ? "b" : "c"), bd = c.b || o.kind === "b";
+    const lines = e => e.kind === "b" ? ["Geburtstag " + KA.fmtMd(e.x.md) + (e.x.year || ""), "aus deinem Geburtstags-Kalender"] : [e.x.org, ...[e.x.tel, ...(e.x.tels || []).map(t => t.n)].filter(Boolean), ...[...new Set([e.x.email, ...(e.x.emails || [])].filter(Boolean))], e.x.bday ? "Geburtstag " + KA.fmtB(e.x.bday) : "", e.kind === "p" ? "schon in Mirella" : "im iPhone-Telefonbuch"].filter(Boolean);
+    const box = e => `<td style="vertical-align:top;width:50%"><b>${esc(e.name)}</b>${lines(e).map(l => `<br><small class="mut">${esc(l)}</small>`).join("")}</td>`;
+    let mid = "", foot = "";
+    if (bd) {
+      const b = c.b ? me : o, t = c.b ? o : me;
+      mid = `<p>Der Geburtstag <b>${esc(KA.fmtMd(b.x.md) + (b.x.year || ""))}</b> wird bei <b>${esc(t.name)}</b> eingetragen${t.x.bday && t.x.bday.slice(5) !== b.x.md ? `. Achtung: Dort steht bisher ${esc(KA.fmtB(t.x.bday))}, das bleibt stehen` : ""}. Der Kalender-Eintrag bleibt, wie er ist, und kommt nicht mehr als eigene Karte.</p>`;
+    } else {
+      const diff = normName(me.name) !== normName(o.name);
+      if (diff) mid = `<p class="dtlabel">Welcher Name soll bleiben?</p><div class="dtbtnrow tight">${[["c", me.name], ["o", o.name]].map(([k, n]) => `<label class="dtchk"><input type="radio" name="kdname" data-act="dtkmname" data-n="${k}"${kdM.name === k ? " checked" : ""}> ${esc(n)}</label>`).join("")}</div>`;
+      const keepName = diff ? (kdM.name === "o" ? o.name : me.name) : me.name;
+      const tels = [...new Map([...(kdM.name === "o" ? [o, me] : [me, o])].flatMap(e => [e.x.tel, ...(e.x.tels || []).map(t => t.n)]).filter(Boolean).map(n => [telKey(n) || n, n])).values()];
+      const mails = [...new Set([me, o].flatMap(e => [e.x.email, ...(e.x.emails || [])]).filter(Boolean).map(m => m.toLowerCase()))];
+      const bdy = (kdM.name === "o" ? o.x.bday || me.x.bday : me.x.bday || o.x.bday) || "";
+      mid += `<p class="dtlabel">So steht es danach da</p><table class="dtg mini dtkv"><tbody><tr><td><b>${esc(keepName)}</b>${tels.map(n => `<br><small>${esc(n)}</small>`).join("")}${mails.map(m => `<br><small>${esc(m)}</small>`).join("")}${bdy ? `<br><small>Geburtstag ${esc(KA.fmtB(bdy))}</small>` : ""}</td></tr></tbody></table>`;
+      const two = o.kind === "c" || (o.kind === "p" && o.x.appleId && o.x.appleId !== c.appleId);
+      foot = `<p class="dtmut">${two ? "<b>Im iPhone-Telefonbuch</b> bleibt ein Eintrag mit allen Nummern, der zweite wird dort gelöscht. Das macht dein iPhone, sobald du Mirella dort öffnest." : "<b>Im iPhone-Telefonbuch</b> wird nichts gelöscht. Der Eintrag gehört danach zu dem Kontakt in Mirella."}</p>`;
+    }
+    openSheet(`<p class="stitle">${bd ? "Geburtstag übernehmen?" : "Diese beiden verbinden?"}</p><table class="dtg mini"><tbody><tr>${box(me)}${box(o)}</tr></tbody></table>${mid}${foot}<div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="dtkmergego">${bd ? "Ja, übernehmen" : "Ja, verbinden"}</button></div>`);
+  }
+  function kdMerge(c, o, nameFrom) {
+    const ck = KA.ckey(c), key = KA.cKey(c);
+    if (c.b && o.kind === "b") return;
+    if (c.b) {
+      if (o.kind === "p") { const p = o.x; bLinksS()[c.key] = p.id; KA.bApply(c, p); KA.addJob("blink", { key: c.key, pid: p.id }); return kdDone("Der Geburtstag steht jetzt bei " + fullName(p), key); }
+      KA.addJob("bcard", { key: c.key, aid: o.x.appleId, ck: KA.ckey(o.x), b: { title: c.title, md: c.md, year: c.year || 0 }, name: o.name });
+      kdNext(key); CUR.k = "a:" + o.x.appleId; SEL.k.clear(); SEL.k.add(CUR.k); return kdDone("Geburtstag übernommen. Der Kalender bleibt, wie er ist.");
+    }
+    if (o.kind === "b") { KA.addJob("bcard", { key: o.x.key, aid: c.appleId, ck, b: { title: o.x.title, md: o.x.md, year: o.x.year || 0 }, name: fullName(c) }); return kdDone("Geburtstag übernommen. Der Kalender bleibt, wie er ist."); }
+    if (o.kind === "p") {
+      const p = o.x, cn = { first: c.first, last: c.last };
+      mergeInto(p, c, KA.extraLabel(c, p));
+      if (nameFrom === "c" && (cn.first || cn.last)) { p.first = cn.first; p.last = cn.last; }
+      if (!p.appleId) { p.appleId = c.appleId; delete p.local; }
+      if (c.bk) bLinksS()[c.bk] = p.id;
+      KA.addJob("link", { aid: c.appleId, ck, pid: p.id, key: c.bk || "", name: fullName(p) });
+      return kdDone("Verbunden mit " + fullName(p), key);
+    }
+    const other = o.x, keep = nameFrom === "o" ? other : c, drop = keep === c ? other : c, nm = nameFrom === "o" ? other : c;
+    KA.addJob("merge2", { keep: { aid: keep.appleId, ck: KA.ckey(keep) }, drop: { aid: drop.appleId, ck: KA.ckey(drop) }, dropData: JSON.parse(JSON.stringify(drop)), first: nm.first || "", last: nm.last || "", name: fullName(nm) });
+    kdNext(key); CUR.k = "a:" + keep.appleId; SEL.k.clear(); SEL.k.add(CUR.k);
+    kdDone("Verbunden: " + fullName(nm));
+  }
+  function kdTake(c) {
+    let p;
+    const base = { id: uid(), created: today(), calls: [], notes: [], ask: [], gifts: [], cyc: "nie", group: "", gift: false, nick: "", rev: today() };
+    if (c.b) { const nm = (KA.bName(c) || c.title).split(" "); p = Object.assign(base, { first: nm.shift() || c.title, last: nm.join(" "), tel: "", email: "", bday: (c.year || 1604) + "-" + c.md, addr: "", local: true }); bLinksS()[c.key] = p.id; KA.addJob("blink", { key: c.key, pid: p.id }); }
+    else {
+      p = Object.assign(base, { appleId: c.appleId, first: c.first, last: c.last, tel: c.tel, telL: c.telL || "", tels: c.tels || [], email: c.email, emails: [...new Set((c.emails || []).filter(m => m && m.toLowerCase() !== (c.email || "").toLowerCase()))], bday: c.bday, addr: c.addr });
+      if (c.bk) bLinksS()[c.bk] = p.id;
+      KA.addJob("take", { aid: c.appleId, ck: KA.ckey(c), pid: p.id, key: c.bk || "", name: fullName(p) });
+    }
+    S.people.push(p); return p;
+  }
+  function kdNicht(cs) {
+    for (const c of cs) {
+      if (c.b) { bLinksS()[c.key] = "x"; KA.addJob("bx", { key: c.key }); continue; }
+      const ck = KA.ckey(c), ign = (S.settings.appleIgnored = S.settings.appleIgnored || []);
+      for (const k of [c.appleId, ck]) if (!ign.includes(k)) ign.push(k);
+      if (c.bk) { bLinksS()[c.bk] = "x"; KA.addJob("bx", { key: c.bk }); }
+      KA.addJob("ign", { aid: c.appleId, ck, name: fullName(c) });
+    }
+  }
+  Object.assign(ACT, {
+    dtktab: el => { kdTab = el.dataset.k; render(true); },
+    dtkmerge: el => { const c = kdCard(), o = kdEnt(el.dataset.k || ""); if (!c || !o) return; const me = KA.ent(c, c.b ? "b" : "c"); kdM = { c: KA.cKey(c), o: o.id, name: c.b || o.kind === "b" ? "c" : o.kind === "p" ? "o" : KA.nameToks(o.name).length < KA.nameToks(me.name).length ? "o" : "c" }; kdMergeSheet(); },
+    dtkmname: el => { if (!kdM) return; kdM.name = el.dataset.n; kdMergeSheet(); },
+    dtkmergego: () => { kdPre(); const list = KA.queue(), c = kdM && list.find(x => KA.cKey(x) === kdM.c), o = kdM && kdEnt(kdM.o, list); if (!c || !o) { closeAll(); return; } const nm = kdM.name; kdM = null; closeAll(); kdQ = ""; kdMerge(c, o, nm); },
+    dtknotsame: el => { const c = kdCard(), o = kdEnt(el.dataset.k || ""); if (!c || !o) return; const keys = KA.nsKeys(KA.ent(c, c.b ? "b" : "c"), o), ns = (S.settings.notSame = S.settings.notSame || []); keys.forEach(k => { if (!ns.includes(k)) ns.push(k); }); KA.addJob("ns", { keys }); kdDone("Gemerkt: gehört nicht zusammen"); },
+    dtkrein: () => { kdPre(); const c = kdCard(); if (!c) return; if (KA.cands(c).length) { origToast("Erst bitte oben entscheiden: verbinden oder nicht dieselbe Person"); return; } const key = KA.cKey(c); const p = kdTake(c); kdNext(key); kdPid = p.id; fDirty = false; lastMsg = fullName(p) + " ist in Mirella"; save(); render(true); origToast(lastMsg); setTimeout(() => { const f = $("#pf-cyc"); if (f && !f.disabled) f.focus(); }, 30); },
+    dtkdone: () => { if (fDirty && !pFormSave()) return; kdPid = null; fDirty = false; render(true); scrollSel(); },
+    dtknicht: () => { kdPre(); const l = SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean); if (!l.length) return; if (l.length > 1 && !ask(`${l.length} Karten nicht in Mirella übernehmen? Sie bleiben im Telefonbuch und im Kalender und kommen nicht wieder.`)) return; kdNicht(l); const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; } kdDone(l.length === 1 ? (l[0].b ? "Kommt nicht nach Mirella. Der Kalender bleibt." : "Bleibt im Telefonbuch, kommt nicht nach Mirella") : pl(l.length, "Karte", "Karten") + " nicht übernommen", key); },
+    dtklater: () => { kdPre(); const l = SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean); if (!l.length) return; const t = Date.now(); l.forEach((c, i) => KA.addJob("later", { k: KA.cKey(c), at: t + i })); const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; } kdDone(l.length === 1 ? "Kommt am Ende nochmal" : pl(l.length, "Karte", "Karten") + " ans Ende gestellt", key); },
+    dtkdel: () => {
+      kdPre();
+      const l = (SEL.k.size > 1 ? selOf("k") : [kdCard()].filter(Boolean)).filter(c => !c.b); if (!l.length) return;
+      if (!ask(l.length === 1 ? `„${fullName(l[0])}“ ganz löschen?\n\nDer Eintrag verschwindet aus dem iPhone-Telefonbuch und über iCloud von deinen anderen Geräten. Das macht dein iPhone, sobald du Mirella dort öffnest.` : `${l.length} Einträge ganz löschen?\n\n${l.slice(0, 10).map(fullName).join(", ")}${l.length > 10 ? " …" : ""}\n\nSie verschwinden aus dem iPhone-Telefonbuch und über iCloud von deinen anderen Geräten. Das macht dein iPhone, sobald du Mirella dort öffnest.`)) return;
+      l.forEach(c => KA.addJob("del", { aid: c.appleId, ck: KA.ckey(c), name: fullName(c) }));
+      const key = l.length === 1 ? KA.cKey(l[0]) : null; if (!key) { SEL.k.clear(); CUR.k = null; }
+      kdDone(l.length === 1 ? "Wird gelöscht, auch im Telefonbuch" : pl(l.length, "Eintrag", "Einträge") + " werden gelöscht, auch im Telefonbuch", key);
+    },
+    dtpmerge: el => {
+      const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b) return;
+      const two = a.appleId && b.appleId && a.appleId !== b.appleId;
+      if (!ask(`${fullName(b)} in ${fullName(a)} zusammenführen?\n\nEs bleibt ${fullName(a)} mit allen Nummern, Notizen und Anrufen. Der zweite Eintrag wird gelöscht.${two ? "\n\nAuch im iPhone-Telefonbuch bleibt dann nur ein Eintrag. Das macht dein iPhone, sobald du Mirella dort öffnest." : ""}`)) return;
+      const bAid = b.appleId, bCk = KA.ckey(b);
+      mergeInto(a, b);
+      for (const k of ["calls", "notes", "ask", "gifts"]) { const ids = new Set((a[k] || []).map(x => x.id)); for (const x of b[k] || []) if (!x.id || !ids.has(x.id)) (a[k] = a[k] || []).push(x); }
+      const links = bLinksS(); for (const k of Object.keys(links)) if (links[k] === b.id) links[k] = a.id;
+      S.todos.forEach(t => { if (t.pid === b.id) t.pid = a.id; }); S.docs.forEach(d => { if (d.ref === b.id) d.ref = a.id; });
+      dropPerson(b);
+      if (two) KA.addJob("pmerge", { keep: a.id, drop: b.id, dropAid: bAid, dck: bCk, name: fullName(a) });
+      lastMsg = "Zusammengeführt: " + fullName(a); save(); render(true); origToast(lastMsg + " · Strg+Z macht es rückgängig");
+    },
+    dtpnotsame: el => { const a = S.people.find(x => x.id === el.dataset.a), b = S.people.find(x => x.id === el.dataset.b); if (!a || !b) return; const keys = KA.nsKeys(KA.ent(a, "p"), KA.ent(b, "p")), ns = (S.settings.notSame = S.settings.notSame || []); keys.forEach(k => { if (!ns.includes(k)) ns.push(k); }); KA.addJob("ns", { keys }); lastMsg = "Gemerkt: gehört nicht zusammen"; save(); render(true); origToast(lastMsg); }
+  });
+  document.addEventListener("input", e => { if (on && e.target.id === "dtkq") { kdQ = e.target.value; const c = kdCard(), l = $("#dtkql"); if (c && l) l.innerHTML = kdQ ? kdHits(c, kdCache || KA.queue()) : ""; } });
+
+  /* ================================================================
      MENÜLEISTE, SYMBOLLEISTE, ORDNER-BAUM, STATUSLEISTE
      ================================================================ */
-  const mod = () => view === "akte" || view === "menschen" ? "p" : view === "todos" ? (todoList === "einkauf" ? "s" : "t") : view === "kalender" ? "k" : view === "heute" ? "h" : view === "bereich" ? "b" : view === "briefings" ? "r" : view === "wetter" ? "w" : view === "einstellungen" ? "set" : "x";
+  const mod = () => view === "karten" ? "kd" : view === "akte" || view === "menschen" ? "p" : view === "todos" ? (todoList === "einkauf" ? "s" : "t") : view === "kalender" ? "k" : view === "heute" ? "h" : view === "bereich" ? "b" : view === "briefings" ? "r" : view === "wetter" ? "w" : view === "einstellungen" ? "set" : "x";
   function go(n) {
     if (!leaveForms()) return;
     if (shopMode) { shopMode = false; wakeLock(false); }
@@ -924,6 +1113,7 @@
     else if (n === "brief") view = "briefings";
     else if (n === "w") { try { wxFrom = "drawer"; } catch (_) { } view = "wetter"; }
     else if (n === "ausw") view = "auswertungen";
+    else if (n === "kd" || n === "kdup") { kdTab = n === "kd" ? "karten" : "dup"; kdPid = null; view = "karten"; }
     else if (n === "set") view = "einstellungen";
     render();
     const sc = $("#screen"); if (sc) sc.scrollTop = 0;
@@ -940,7 +1130,9 @@
     const inP = m === "p";
     const kontakte = CF.map(([k, l, icn, t]) => it("p:" + k, l, ic(icn, 14), S.people.filter(t).length || "", inP && cf === k, 1)).join("")
       + node("gruppen", "p:all", "Gruppen", ic("folder", 14), "", false, 1, S.groups.map(g => it("p:g:" + g, g, ic("folder", 14), grpN(g) || "", inP && cf === "g:" + g, 2, "g:" + g, ` data-grp="${esc(g)}"`)).join("") + it("p:nogrp", "Ohne Gruppe", ic("none", 14), S.people.filter(p => !p.arch && !p.group).length || "", inP && cf === "nogrp", 2, "g:") + `<button class="dti add" data-act="dtnewgrp" style="--l:2"><span class="tw"></span><span class="ic">${ic("plus", 14)}</span><span class="l">Neue Gruppe …</span></button>`)
-      + it("p:arch", "Archiv", ic("arch", 14), S.people.filter(p => p.arch).length || "", inP && cf === "arch", 1, "arch");
+      + it("p:arch", "Archiv", ic("arch", 14), S.people.filter(p => p.arch).length || "", inP && cf === "arch", 1, "arch")
+      + it("kd", "Karten durchgehen", ic("check", 14), KA.queue().length || "", m === "kd" && kdTab === "karten", 1)
+      + it("kdup", "Doppelte zusammenführen", ic("people", 14), "", m === "kd" && kdTab === "dup", 1);
     const aufgaben = AREAS.map(A => { const n = S.todos.filter(t => t.area === A.id && !t.done && t.list === "todo").length; return it("t:a:" + A.id, A.n, `<i class="dtdot sq" style="--c:${A.c}"></i>`, n || "", m === "t" && tf === "a:" + A.id, 1, "a:" + A.id); }).join("");
     const bereiche = AREAS.map(A => { const here = m === "b" && area === A.id, open = fold("b_" + A.id) ? false : here || !!P.fold["o_" + A.id]; return node("b_" + A.id, "b:" + A.id, A.n, `<span class="aic" style="--ac:${A.c}">${IC[A.ic] || ""}</span>`, "", here && !open, 1, subsOf(A.id).map(([k, l]) => it("b:" + A.id + ":" + k, l, "", subCount(A.id, k) || "", here && bsub() === k, 2)).join(""), open); }).join("");
     return `<div class="dttree" role="tree">
@@ -967,6 +1159,13 @@
       G.push({ l: "Kontakt aufnehmen", big: [b("phone", "Anrufen", "dtpcall", {}, !(pOne && pOne.tel))], small: [b("check", "Anruf eintragen", "dtplog", {}, !pOne), b("wa", "WhatsApp", "dtpwa", {}, !(pOne && pOne.tel)), b("mail", "E-Mail", "dtpmail", {}, !(pOne && pOne.email))] });
       G.push({ l: "Ordnen", small: [b("folder", "Gruppe ▾", "dtpgrpmenu", {}, !pAny), b("cycle", "Rhythmus ▾", "dtpcycmenu", {}, !pAny), b("arch", cf === "arch" ? "Zurückholen" : "Archivieren", "dtparch", {}, !pAny)] });
       G.push({ l: "Daten", small: [b("imp", "vCard importieren …", "importvcf"), b("exp", "Als Excel-Tabelle speichern", "dtcsv"), b("print", "Drucken …", "dtprint")] });
+    } else if (m === "kd") {
+      const kc = kdTab === "karten" && !kdPid && SEL.k.size ? selOf("k") : [], one = kc.length === 1 ? kc[0] : null;
+      if (kdTab === "karten") {
+        G.push({ l: "Karte", big: [b("newp", "Rein in Mirella", "dtkrein", {}, !one || KA.cands(one).length > 0, "Übernehmen und gleich pflegen")], small: [b("none", "Nicht in Mirella", "dtknicht", {}, !kc.length), b("next", "Später", "dtklater", {}, !kc.length), b("del", "Ganz löschen …", "dtkdel", {}, !kc.some(c => !c.b), "Auch im iPhone-Telefonbuch (Entf)")] });
+        if (kdPid) G.push({ l: "Pflege", big: [b("check", "Fertig, nächste Karte", "dtkdone")], small: [b("save", "Speichern", "dtpsave", {}, !fDirty, "Speichern (Strg+S)")] });
+      }
+      G.push({ l: "Durchgehen", small: [Object.assign(b("list", "Karten aus iPhone", "dtktab", { k: "karten" }), { on: kdTab === "karten" }), Object.assign(b("people", "Doppelte in Mirella", "dtktab", { k: "dup" }), { on: kdTab === "dup" }), b("sync", "Jetzt abgleichen", "dtsync")] });
     } else if (m === "t") {
       G.push({ l: "Neu", big: [b("newt", "Neue Aufgabe", "dtnewt", {}, false, "Neue Aufgabe mit allen Feldern")], small: [b("check", "Erledigt", "dttdone", {}, !tAny, "Erledigt (Leertaste)"), b("del", "Löschen", "dtdel", {}, !tAny, "Löschen (Entf)")] });
       G.push({ l: "Verschieben", small: [b("today", "Auf heute", "dttmove", { d: today() }, !tAny), b("next", "Auf morgen", "dttmove", { d: addDays(today(), 1) }, !tAny), b("cal", "Nächster Montag", "dttmove", { d: nextMonday() }, !tAny)] });
@@ -1082,7 +1281,8 @@
         ["Löschen …", "Entf", () => delP(selOf("p")), inP && ps.length > 0],
         "-",
         ["Gruppe umbenennen …", "", () => renameGroup(cf.slice(2)), cf.startsWith("g:")],
-        ["Doppelte Kontakte suchen …", "", () => ACT.dupscan && ACT.dupscan(), !!ACT.dupscan]
+        ["Karten durchgehen (iPhone-Kontakte, Geburtstage)", "", () => go("kd")],
+        ["Doppelte Kontakte zusammenführen", "", () => go("kdup")]
       ]],
       ["Aufgabe", [
         ["Neue Aufgabe", "", () => ACT.dtnewt()],
@@ -1207,6 +1407,7 @@
     if (tb === "s") return [...edit, ["Im Wagen / wieder offen", "Leertaste", () => selOf("s").forEach(x => toggleTodo(x.id))], ["Löschen …", "Entf", () => ACT.dtdel()]];
     if (tb === "i") return [...edit, ["Formular öffnen", "Enter", () => { const f = $(".dtiform input,.dtiform select"); if (f) f.focus(); }], ["PDF hinzufügen …", "", () => ACT.pdffor({ dataset: { id } })], ["Bild / Scan …", "", () => ACT.docfor({ dataset: { id } })], "-", ["Löschen …", "Entf", () => ACT.dtdel()]];
     if (tb === "d") { const d = TB.d.find(id); return [...edit, ["Öffnen", "Enter", () => viewPhoto(d.photo)], ["Bearbeiten …", "", () => ACT.editdoc({ dataset: { id } })], "-", ["Löschen …", "Entf", () => ACT.dtdel()]]; }
+    if (tb === "k") { const l = selOf("k"), one = l.length === 1 ? l[0] : null; return [["Rein in Mirella", "", () => ACT.dtkrein(), !!one && !KA.cands(one).length], ["Nicht in Mirella", "", () => ACT.dtknicht()], ["Später", "", () => ACT.dtklater()], "-", ["Ganz löschen …", "Entf", () => ACT.dtkdel(), l.some(c => !c.b)]]; }
     if (tb === "r") { const b = TB.r.find(id); return [["Öffnen", "Enter", () => openBrief(id)], ...(b && !b.remote ? ["-", ["Löschen …", "Entf", () => ACT.dtdel()]] : [])]; }
     return [...edit, ["Löschen …", "Entf", () => ACT.dtdel()]];
   }
@@ -1389,6 +1590,7 @@
     dtdel: () => {
       const tb = curTb(); if (!tb) return; const l = selOf(tb); if (!l.length) return;
       if (tb === "p") return delP(l);
+      if (tb === "k") return ACT.dtkdel();
       if (tb === "t" || tb === "s") return delT(l);
       if (tb === "i") { if (!ask(l.length === 1 ? `„${kindTitle(l[0].kind, l[0])}“ löschen? Die offenen Erinnerungen dazu gehen mit.` : `${l.length} Einträge löschen? Die offenen Erinnerungen dazu gehen mit.`)) return; const ids = new Set(l.map(x => x.id)); S.items = S.items.filter(x => !ids.has(x.id)); S.todos = S.todos.filter(t => !(ids.has(t.ref) && !t.done)); SEL.i.clear(); iDirty = false; }
       else if (tb === "e") { if (!ask(l.length === 1 ? `Ausgabe ${l[0].shop || l[0].cat} (${eur(l[0].amount)}) löschen?` : `${l.length} Ausgaben löschen?`)) return; const ids = new Set(l.map(x => x.id)); S.expenses = S.expenses.filter(x => !ids.has(x.id)); SEL.e.clear(); }

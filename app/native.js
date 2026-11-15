@@ -1330,11 +1330,11 @@ Aufgabe 2, Zusammengehöriges. Nenne in "gruppen" Listen von Nummern, die sehr w
       try {
         const r = await SY.takeIntent(); let t = (r && r.text || "").trim(); if (!t || !N.setup) return;
         // NFC-Aufkleber (nfc.js): Marken §NFC:art§ bzw. §NFC:wasch:Sekunden§ herausnehmen
-        const nfc = []; t = t.replace(/§NFC:([a-z]+)(?::(\d+))?§/g, (_, k, ts) => { nfc.push([k, ts]); return ""; });
+        const nfc = []; t = t.replace(/§NFC:([a-z]+)(?::(\d+))?(?::([^§]*))?§/g, (_, k, ts, n) => { nfc.push([k, ts, n]); return ""; });
         const go = t.includes("§LOS§"); t = t.split("§LOS§").join("").replace(/^[\s.]+|[\s.]+$/g, "").replace(/\.\s*\./g, ".");
         if (nfc.length && typeof mirellaNfc === "function") {
-          const still = nfc.filter(([k]) => k === "wasch" || k === "spuel" || k === "sport" || k === "supp"), open = nfc.filter(x => !still.includes(x)).pop();
-          still.forEach(([k, ts]) => mirellaNfc(k, ts));
+          const still = nfc.filter(([k]) => k === "wasch" || k === "spuel" || k === "geraet" || k === "sport" || k === "supp"), open = nfc.filter(x => !still.includes(x)).pop();
+          still.forEach(([k, ts, n]) => mirellaNfc(k, ts, n));
           if (go || open) { if (t) N.losRest = t; nSave(); if (go) { closeAll(); losHinweise(); } else { closeAll(); mirellaNfc(open[0], open[1]); } return; }
           if (!t) return;
         }

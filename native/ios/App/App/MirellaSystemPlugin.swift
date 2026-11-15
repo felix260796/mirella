@@ -277,6 +277,12 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
         // Mirella legt die Waschmaschinen-Aufgabe jetzt selbst an (mit Nerv-Modus): die Hintergrund-Mitteilung braucht es nicht mehr
         if t.contains("§NFC:wasch") { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [MirellaNfc.waschId]) }
         if t.contains("§NFC:spuel") { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [MirellaNfc.spuelId]) }
+        if t.contains("§NFC:geraet") {
+            UNUserNotificationCenter.current().getPendingNotificationRequests { reqs in
+                let ids = reqs.map { $0.identifier }.filter { $0.hasPrefix(MirellaNfc.geraetPrefix) }
+                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+            }
+        }
         call.resolve(["text": t])
     }
 
@@ -284,6 +290,7 @@ public class MirellaSystemPlugin: CAPPlugin, CAPBridgedPlugin, CXCallObserverDel
     @objc func setPrefs(_ call: CAPPluginCall) {
         if let m = call.getInt("washMin"), m > 0 { UserDefaults.standard.set(m, forKey: MirellaNfc.waschKey) }
         if let m = call.getInt("dishMin"), m > 0 { UserDefaults.standard.set(m, forKey: MirellaNfc.spuelKey) }
+        if let g = call.getString("geraete") { UserDefaults.standard.set(g, forKey: MirellaNfc.geraeteKey) }
         call.resolve()
     }
 }
@@ -447,6 +454,17 @@ enum MirellaNfc {
     static let waschKey = "mirella.washMin"
     static let spuelId = "mirella.spuel"
     static let spuelKey = "mirella.dishMin"
+    static let geraetPrefix = "mirella.geraet."
+    static let geraeteKey = "mirella.geraete"
+
+    /// Dauer eines eigenen Geräts in Minuten (aus Mirella › Zuhause › Weitere Geräte), sonst 60
+    static func geraetMin(_ name: String) -> Int {
+        let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let json = UserDefaults.standard.string(forKey: geraeteKey), let data = json.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return 60 }
+        if let n = dict[key] as? NSNumber, n.intValue > 0 { return n.intValue }
+        return 60
+    }
 
     /// Wann das Gerät fertig ist. Fällt das in die Nacht (22 bis 7 Uhr, z. B. mit Startzeitvorwahl), erinnert Mirella morgens um 7.
     static func fertig(_ min: Int, from start: Date = Date()) -> Date {
@@ -459,8 +477,8 @@ enum MirellaNfc {
     }
 
     /// Mitteilung planen und Mirella beim nächsten Öffnen die Aufgabe anlegen lassen. Gibt die Antwort für Siri zurück.
-    @MainActor static func geraet(id: String, key: String, standard: Int, marke: String, titel: String) async -> String {
-        let stored = UserDefaults.standard.integer(forKey: key)
+    @MainActor static func geraet(id: String, key: String, standard: Int, marke: String, titel: String, name: String = "") async -> String {
+        let stored = key.isEmpty ? 0 : UserDefaults.standard.integer(forKey: key)
         let min = stored > 0 ? stored : standard
         let start = Date(), um = fertig(min, from: start)
         let content = UNMutableNotificationContent()
@@ -469,7 +487,7 @@ enum MirellaNfc {
         content.sound = .default
         let trig = UNTimeIntervalNotificationTrigger(timeInterval: max(60, um.timeIntervalSince(start)), repeats: false)
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: trig))
-        MirellaIntentBox.put("§NFC:\(marke):\(Int(start.timeIntervalSince1970))§")
+        MirellaIntentBox.put("§NFC:\(marke):\(Int(start.timeIntervalSince1970))\(name.isEmpty ? "" : ":" + name)§")
         let f = DateFormatter(); f.dateFormat = "H:mm"
         let morgen = !Calendar.current.isDate(um, inSameDayAs: start)
         return "Alles klar. Ich erinnere dich \(morgen ? "morgen " : "")um \(f.string(from: um)) Uhr ans Ausräumen."
@@ -487,6 +505,24 @@ struct WaschmaschineIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let text = await MirellaNfc.geraet(id: MirellaNfc.waschId, key: MirellaNfc.waschKey, standard: 90, marke: "wasch", titel: "Waschmaschine ist fertig")
+        return .result(dialog: "\(text)")
+    }
+}
+
+/// Gerät läuft (Trockner usw.): Name wird im Kurzbefehl einmal eingetragen, Dauer kommt aus Mirella.
+@available(iOS 16.0, *)
+struct GeraetIntent: AppIntent {
+    static let title: LocalizedStringResource = "Gerät läuft"
+    static let description = IntentDescription("Erinnert dich ans Ausräumen eines eigenen Geräts, z. B. Trockner. Geräte und Dauer legst du in Mirella unter Zuhause an.")
+    static let openAppWhenRun: Bool = false
+
+    @Parameter(title: "Gerät", requestValueDialog: "Welches Gerät?")
+    var name: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let n = String(name.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "§", with: "").prefix(40))
+        let text = await MirellaNfc.geraet(id: MirellaNfc.geraetPrefix + n.lowercased(), key: "", standard: MirellaNfc.geraetMin(n), marke: "geraet", titel: "\(n) ist fertig", name: n)
         return .result(dialog: "\(text)")
     }
 }

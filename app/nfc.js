@@ -10,7 +10,7 @@
   const row = (ic, html) => `<div class="losrow"><span class="losic">${ic}</span><div>${html}</div></div>`;
   const evOn = d => (typeof mirellaEventsOn === "function" ? mirellaEventsOn(d) : []);
 
-  const ROUTINE = /supplement|kreatin|vitamin|omega|magnesium|(wasch|spül)maschine ausräumen/i;
+  const ROUTINE = /supplement|kreatin|vitamin|omega|magnesium|(wasch|spül)maschine ausräumen|\bausräumen$/i;
   /* Termine eines Tages: iPhone-Kalender und Aufgaben mit Uhrzeit, nach Zeit sortiert */
   function termine(d, ab) {
     const ev = evOn(d).map(e => ({ time: e.time || "", t: e.t, ort: e.loc || "" }));
@@ -47,14 +47,24 @@
   }
   /* Einmalig (Wunsch Felix 15.11.): Waschmaschine 1,5 Stunden, Spülmaschine 2,5 Stunden */
   function dauerEinmal() {
-    if (!S.settings || +S.settings.geraetDauer >= 1) return;
-    S.settings.washMin = 90; S.settings.dishMin = 150; S.settings.geraetDauer = 1; save();
+    if (!S.settings) return;
+    const v = +S.settings.geraetDauer || 0;
+    if (v < 1) { S.settings.washMin = 90; S.settings.dishMin = 150; }
+    // Wunsch Felix 15.11.: Trockner 1 Std. 10 Min., weitere Geräte legt er selbst an
+    if (v < 2) { S.settings.geraete = S.settings.geraete || []; if (!S.settings.geraete.some(g => /^trockner$/i.test(g.n))) S.settings.geraete.push({ id: uid(), n: "Trockner", min: 70 }); }
+    if (v < 2) { S.settings.geraetDauer = 2; save(); }
   }
-  function geraet(k, ts) {
+  /* Eigene Geräte (Trockner usw.): Name und Dauer, Kurzbefehl-Aktion „Gerät läuft“ mit diesem Namen */
+  const eigene = () => (S.settings && S.settings.geraete) || [];
+  const findG = n => eigene().find(g => g.n.trim().toLowerCase() === String(n || "").trim().toLowerCase());
+  const dauerTxt = m => { const h = Math.floor(m / 60), r = m % 60; return (h ? h + (h === 1 ? " Stunde" : " Stunden") : "") + (h && r ? " " : "") + (r ? r + " Min." : ""); };
+  function geraet(k, ts, gname) {
     dauerEinmal();
-    const [name, key, std] = GERAET[k];
+    let name, min;
+    if (GERAET[k]) { const [n, key, std] = GERAET[k]; name = n; min = +S.settings[key] || std; }
+    else { const g = findG(gname); name = g ? g.n : String(gname || "Gerät").trim().slice(0, 40); min = g ? +g.min || 60 : 60; }
     const start = ts ? new Date(+ts * 1000) : new Date();
-    const d = fertig(start, +S.settings[key] || std);
+    const d = fertig(start, min);
     const date = iso(d), time = hm(d), t = name + " ausräumen";
     if (!S.todos.some(x => !x.done && x.t === t && x.date === date && x.time === time)) {
       S.todos.push({ id: uid(), t, list: "todo", done: false, created: today(), date, time, trig: "zeit", rep: "nie", area: "haus", nerv: true, prio: 2 });
@@ -63,6 +73,25 @@
     toast(`${name}: Ich erinnere dich ${date !== iso(start) ? "morgen " : ""}um ${time}`);
   }
   window.mirellaGeraet = geraet;
+  window.mirellaGeraetName = txt => { const m = String(txt || "").match(/^\s*(?:der |die |das )?(.+?)\s+(läuft|ist an|gestartet|angemacht|an)\s*\.?$/i); return m && findG(m[1]) ? findG(m[1]).n : ""; };
+  /* Einstellungen: Liste der eigenen Geräte */
+  window.geraeteSet = () => { dauerEinmal(); return `${setH("Weitere Geräte")}${eigene().map(g => `<div class="listrow"><span class="grow">${esc(g.n)}<small>„${esc(g.n)} läuft“, Erinnerung nach ${esc(dauerTxt(+g.min || 60))}</small></span><button class="mini" data-act="geraetedit" data-id="${g.id}">Ändern</button><button class="rowdel" data-act="geraetdel" data-id="${g.id}" aria-label="${esc(g.n)} löschen">✕</button></div>`).join("")}<button class="btn" data-act="geraetedit" style="width:100%;margin-top:8px">+ Gerät hinzufügen</button>
+    <p class="hint">Für den NFC-Aufkleber in Kurzbefehle die Aktion <b>„Gerät läuft“</b> wählen und den Namen genau so eintragen.</p>`; };
+  ACT.geraetedit = el => {
+    const g = el && el.dataset && el.dataset.id ? eigene().find(x => x.id === el.dataset.id) : null, m = g ? +g.min || 60 : 60;
+    openSheet(`<p class="stitle">${g ? "Gerät ändern" : "Neues Gerät"}</p><div class="fld"><label for="ge-n">Name</label><input id="ge-n" value="${esc(g ? g.n : "")}" placeholder="z. B. Trockner" autocomplete="off"></div>
+      <div class="row2"><div class="fld"><label for="ge-h">Stunden</label><input id="ge-h" type="number" inputmode="numeric" min="0" max="12" value="${Math.floor(m / 60)}"></div><div class="fld"><label for="ge-m">Minuten</label><input id="ge-m" type="number" inputmode="numeric" min="0" max="59" step="5" value="${m % 60}"></div></div>
+      <div class="row2"><button class="btn" data-act="cancel">Abbrechen</button><button class="btn pri" data-act="geraetsave" data-id="${g ? g.id : ""}">Speichern</button></div>`);
+  };
+  ACT.geraetsave = el => {
+    const n = $("#ge-n").value.trim().slice(0, 40), min = (+$("#ge-h").value || 0) * 60 + (+$("#ge-m").value || 0);
+    if (!n) { toast("Bitte einen Namen eingeben"); return; } if (min < 5) { toast("Bitte eine Dauer eingeben"); return; }
+    const other = findG(n); if (other && other.id !== el.dataset.id) { toast("Das Gerät gibt es schon"); return; }
+    S.settings.geraete = eigene(); const g = S.settings.geraete.find(x => x.id === el.dataset.id);
+    if (g) { g.n = n; g.min = min; } else S.settings.geraete.push({ id: uid(), n, min });
+    save(); closeSheet(); render(true); window.mirellaNfcPrefs(); toast("Gespeichert");
+  };
+  ACT.geraetdel = el => { const g = eigene().find(x => x.id === el.dataset.id); if (!g || !ask(g.n + " löschen?")) return; S.settings.geraete = eigene().filter(x => x !== g); save(); render(true); window.mirellaNfcPrefs(); };
 
   /* Supplements: alles abhaken, was jetzt fällig ist (bis 90 Minuten im Voraus) */
   function supp() {
@@ -151,15 +180,16 @@
 
   function post() { closeAll(); photoStart(null, null); if (ACT.scanmulti) ACT.scanmulti(); }
 
-  const RUN = { wasch: ts => geraet("wasch", ts), spuel: ts => geraet("spuel", ts), supp, nacht, brief, auto, anrufe, sport, post };
-  window.mirellaNfc = (k, ts) => { const f = RUN[k]; if (f) try { f(ts); } catch (e) { console.warn("NFC", k, e); } };
-  window.mirellaNfcPrefs = () => { try { dauerEinmal(); const SY = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MirellaSystem; if (SY && SY.setPrefs) SY.setPrefs({ washMin: +S.settings.washMin || 90, dishMin: +S.settings.dishMin || 150 }).catch(() => { }); } catch (_) { } };
+  const RUN = { wasch: ts => geraet("wasch", ts), spuel: ts => geraet("spuel", ts), geraet: (ts, n) => geraet("geraet", ts, n), supp, nacht, brief, auto, anrufe, sport, post };
+  window.mirellaNfc = (k, ts, n) => { const f = RUN[k]; if (f) try { f(ts, n); } catch (e) { console.warn("NFC", k, e); } };
+  window.mirellaNfcPrefs = () => { try { dauerEinmal(); const SY = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.MirellaSystem; if (SY && SY.setPrefs) SY.setPrefs({ washMin: +S.settings.washMin || 90, dishMin: +S.settings.dishMin || 150, geraete: JSON.stringify(Object.fromEntries(eigene().map(g => [g.n.trim().toLowerCase(), +g.min || 60]))) }).catch(() => { }); } catch (_) { } };
 
   /* ---------- Einstellungen: Anleitung für alle Aufkleber ---------- */
   const AUF = [
     ["Haustür", "Ich gehe los", "Wetter, Termine, Einkaufsliste und offene Aufgaben, bevor du gehst"],
     ["Waschmaschine", "Waschmaschine läuft", "Mirella bleibt zu, das iPhone erinnert dich ans Ausräumen (Dauer unter Zuhause). Wäre sie nachts fertig, erinnert Mirella morgens um 7"],
     ["Spülmaschine", "Spülmaschine läuft", "wie die Waschmaschine, eigene Dauer unter Zuhause"],
+    ["Trockner und weitere Geräte", "Gerät läuft", "Namen eintragen, z. B. Trockner. Geräte und Dauer legst du selbst unter Zuhause › Weitere Geräte an"],
     ["Supplement-Dose", "Supplements genommen", "hakt die gerade fälligen Supplements ab, damit hört das Erinnern auf"],
     ["Nachttisch", "Gute Nacht", "Wecker für morgen, erster Termin, Aufgaben für morgen"],
     ["Kaffeemaschine", "Tages-Briefing öffnen", "öffnet direkt das neueste Briefing"],

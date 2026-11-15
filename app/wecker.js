@@ -364,6 +364,8 @@ voiceReview = function () {
   if (txt && /^(wie|wo|was|warum|kann ich|hilfe)\b/i.test(txt) && typeof askMirella === "function") { recStop(); askMirella(txt); return; }
   const gm = txt && txt.match(/(wasch|spül)maschine\s+(läuft|ist an|gestartet|angemacht|an\b)/i);
   if (gm && typeof mirellaGeraet === "function") { recStop(); closeSheet(); mirellaGeraet(/^w/i.test(gm[1]) ? "wasch" : "spuel"); render(true); return; }
+  const gn = txt && typeof mirellaGeraetName === "function" && mirellaGeraetName(txt);
+  if (gn) { recStop(); closeSheet(); mirellaGeraet("geraet", 0, gn); render(true); return; }
   origVoiceReview();
 };
 

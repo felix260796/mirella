@@ -1,6 +1,13 @@
 {
- "updated": "2026-11-15T06:46:22Z",
+ "updated": "2026-11-16T06:45:27Z",
  "items": [
+  {
+   "id": "1a1e31a51e040b41",
+   "d": "2026-11-16",
+   "kind": "morgen",
+   "title": "Briefing 16. November",
+   "pdf": "briefings/Briefing_2026-11-16_morgen.pdf"
+  },
   {
    "id": "1a1ddf4c33982023",
    "d": "2026-11-15",
@@ -56,12 +63,6 @@
    "time": "06:19",
    "kind": "morgen",
    "pdf": "briefings/2026-11-09.pdf"
-  },
-  {
-   "id": "1a1ba72a762471b1",
-   "d": "2026-11-08",
-   "time": "10:17",
-   "kind": "wochenende"
   }
  ]
 }

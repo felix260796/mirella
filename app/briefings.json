@@ -1,6 +1,13 @@
 {
- "updated": "2026-11-21T06:44:58Z",
+ "updated": "2026-11-22T06:44:54Z",
  "items": [
+  {
+   "id": "1a201fff34906782",
+   "d": "2026-11-22",
+   "kind": "wochenende",
+   "title": "Briefing 22. November",
+   "pdf": "briefings/Briefing_2026-11-22_wochenende.pdf"
+  },
   {
    "id": "1a1fcd99ee2eb2be",
    "d": "2026-11-21",
@@ -49,13 +56,6 @@
    "kind": "wochenende",
    "title": "Briefing 15. November",
    "pdf": "briefings/Briefing_2026-11-15_wochenende.pdf"
-  },
-  {
-   "id": "1a1d8d0ef91cdec8",
-   "d": "2026-11-14",
-   "kind": "wochenende",
-   "title": "Briefing 14. November",
-   "pdf": "briefings/Briefing_2026-11-14_wochenende.pdf"
   }
  ]
 }

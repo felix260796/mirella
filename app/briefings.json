@@ -1,6 +1,13 @@
 {
- "updated": "2026-11-24T06:45:05Z",
+ "updated": "2026-11-25T06:46:34Z",
  "items": [
+  {
+   "id": "1a211748eebf9093",
+   "d": "2026-11-25",
+   "kind": "morgen",
+   "title": "Briefing 25. November",
+   "pdf": "briefings/Briefing_2026-11-25_morgen.pdf"
+  },
   {
    "id": "1a20c4cd0f0e34aa",
    "d": "2026-11-24",
@@ -49,13 +56,6 @@
    "kind": "morgen",
    "title": "Briefing 18. November",
    "pdf": "briefings/Briefing_2026-11-18_morgen.pdf"
-  },
-  {
-   "id": "1a1e84030e4c80a5",
-   "d": "2026-11-17",
-   "kind": "morgen",
-   "title": "Briefing 17. November",
-   "pdf": "briefings/Briefing_2026-11-17_morgen.pdf"
   }
  ]
 }
